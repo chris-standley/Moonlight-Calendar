@@ -6,6 +6,7 @@ import {
   Person, PersonIn, Recipe, Reward, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
+import { demoMedia } from "./demoMedia";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 
 interface Completion { chore_id: string; date: string; at: string }
@@ -216,9 +217,11 @@ export function demoApi(): Api {
     return e.calendar_id ?? null;
   };
 
+  // The demo kitchen screen has a (pretend) Music Assistant speaker; other screens have none until set in Settings.
+  const mediaPlayers = () => ({ hallway: "", kitchen: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
-    return { ...rest, pin_set: !!pin };
+    return { ...rest, media_players: mediaPlayers(), pin_set: !!pin };
   };
 
   return {
@@ -227,8 +230,14 @@ export function demoApi(): Api {
     settings: async () => settingsOut(),
     async updateSettings({ pin, ...patch }) {
       checkPin(pin);
-      Object.assign(st.settings, patch);
-      emit("settings");
+      const { media_players, ...rest } = patch;
+      Object.assign(st.settings, rest);
+      if (media_players) {
+        if (Object.entries(media_players).some(([k, v]) => !["hallway", "kitchen", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
+          throw new ApiError(400, "media_players must map hallway/kitchen/phone to a media_player entity id or empty");
+        st.settings.media_players = { ...st.settings.media_players, ...media_players };
+      }
+      emit("settings", "media");
       return settingsOut();
     },
     verifyPin: async (pin) => pin === st.settings.pin,
@@ -375,6 +384,7 @@ export function demoApi(): Api {
     },
     weather: async () => demoWeather(),
     ...demoExtras(checkPin, emit), // screens + photos, kept in memory
+    ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {
       checkPin(a.pin);

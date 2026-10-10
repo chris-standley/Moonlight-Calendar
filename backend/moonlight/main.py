@@ -12,9 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db
+from . import __version__, auth, caldav_sync, db, media
 from .common import hub, log
 from .routes import accounts, calendar, chores, displays, lists, meals, photos
+from .routes import media as media_routes
 from .routes import summary as summary_routes
 from .auth import AuthMiddleware
 from .seed import default_seed_path, seed_file
@@ -82,6 +83,22 @@ def create_app(
     for module in (calendar, chores, lists, meals, displays, photos, accounts):
         app.include_router(module.router)
     app.include_router(summary_routes.router)
+    app.include_router(media_routes.router)
+
+    # Follow the configured media players over Home Assistant's WebSocket (only when HA is reachable at all).
+    async def start_media():
+        svc = media.service()
+        if svc is not None:
+            svc.set_watched(media.watched_entities())
+            svc.start()
+
+    async def stop_media():
+        svc = media.service()
+        if svc is not None:
+            await svc.stop()
+
+    app.router.on_startup.append(start_media)
+    app.router.on_shutdown.append(stop_media)
 
     if sync:
         async def start_sync():
@@ -149,6 +166,8 @@ def __getattr__(name: str):
     if name == "app":
         if _app is None:
             logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+            # httpx logs every request URL at INFO; album art URLs carry Home Assistant's proxy token.
+            logging.getLogger("httpx").setLevel(logging.WARNING)
             _app = create_app(sync=_env_flag("MOONLIGHT_SYNC", "1"))
         return _app
     raise AttributeError(name)

@@ -19,7 +19,7 @@ Version 0.2: demo family data; iCloud calendar sync (Settings > Calendars).
 1. Settings > Add-ons > Add-on Store > ⋮ > Repositories, add `https://github.com/chris-standley/Moonlight-Calendar`.
 2. **Moonlight** > Install (⋮ > Check for updates if it is not listed yet), set the options, Start, Show in sidebar.
 3. Options: `demo` (seed the demo family into an empty database, default on), `weather_entity` (e.g. `weather.home`),
-   `require_pairing` (default on). The household timezone defaults to Home Assistant's.
+   `media_player_entity` (the kitchen speaker, e.g. `media_player.kitchen` from Music Assistant), `require_pairing` (default on). The household timezone defaults to Home Assistant's.
 4. Pair wall screens on port 8099 (below) and connect iCloud in Settings > Calendars.
 
 The add-on page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
@@ -79,6 +79,11 @@ CalDAV server works too (`kind: "caldav"` via the API). The sync tests run a loc
 ## Home Assistant
 
 - Weather: set the add-on option `weather_entity` (e.g. `weather.home`) to show that entity's forecast; empty = demo forecast.
+- Music: the kitchen screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
+  bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Set
+  the add-on option `media_player_entity` or pick a speaker per screen in Settings > Music. Works with any HA
+  `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
+  show a small player in the top bar only if given a speaker.
 - Entities and services: install the `moonlight` integration through HACS, see `custom_components/moonlight/README.md`.
 
 ## Your family

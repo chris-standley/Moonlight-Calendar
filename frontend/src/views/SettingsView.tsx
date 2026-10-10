@@ -5,6 +5,7 @@ import { Segmented } from "../components/ui";
 import { ScreensaverPanel, ScreensPanel } from "./DisplaysSettings";
 import { CalendarsPanel } from "./CalendarsSettings";
 import { FamilyPanel } from "./FamilySettings";
+import { MusicPanel } from "./MusicSettings";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
   const { api, people, settings, askPin, toast, layout } = useApp();
@@ -35,6 +36,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
         </section>
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />
+        <MusicPanel />
         {api.mode === "demo" && api.resetDemo && (
           <section className="panel">
             <h2 className="panel-title">Demo</h2>

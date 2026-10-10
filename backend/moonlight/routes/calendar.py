@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db
+from .. import caldav_sync, db, media
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api")
 def settings_out(c) -> dict:
     out = {k: db.get_setting(c, k, v) for k, v in db.default_settings().items()}
     out["pin_set"] = bool(db.get_setting(c, "pin_hash"))
+    out["media_players"] = media.players_setting(c)
     return out
 
 
@@ -56,6 +57,7 @@ async def patch_settings(body: dict = Body(...)):
                 raise bad("chore_approval must be a boolean")
             db.set_setting(c, "chore_approval", body["chore_approval"])
         photos.apply_settings(c, body)  # screensaver_album, screensaver_seconds, idle_minutes
+        media_changed = media.apply_settings(c, body)  # media_players
         tz_changed = False
         if "timezone" in body:
             try:
@@ -70,6 +72,9 @@ async def patch_settings(body: dict = Body(...)):
     if tz_changed:
         await asyncio.to_thread(caldav_sync.reparse_all)
         await hub.broadcast("events")
+    if media_changed:
+        media.settings_changed()
+        await hub.broadcast("media")
     await hub.broadcast("settings")
     return out
 

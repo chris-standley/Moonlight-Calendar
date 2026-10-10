@@ -14,6 +14,8 @@ export interface Settings {
   screensaver_seconds?: number;
   idle_minutes?: Partial<Record<"hallway" | "kitchen" | "phone", number>>;
   timezone?: string;
+  /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
+  media_players?: Partial<Record<"hallway" | "kitchen" | "phone", string>>;
 }
 
 export type Freq = "daily" | "weekly" | "monthly";
@@ -80,7 +82,34 @@ export interface Photo {
 }
 export interface UploadResult { uploaded: Photo[]; errors: { filename: string; detail: string }[] }
 
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts";
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media";
+
+/** GET /api/media/now-playing: the speaker set for this screen's layout (see API.md "Music"). */
+export interface NowPlaying {
+  layout: Layout;
+  configured: boolean;
+  entity: string | null;
+  name: string | null;
+  /** HA media_player state: playing, paused, idle, off, standby, buffering, unavailable... */
+  state: string;
+  /** Worth showing: playing/paused/buffering, or idle with a track still loaded. */
+  show: boolean;
+  title: string | null; artist: string | null; album: string | null;
+  /** Seconds; position was `position` at `position_updated_at` (HA's clock; compare with server_time). */
+  duration: number | null; position: number | null; position_updated_at: string | null;
+  volume: number | null; muted: boolean | null; shuffle: boolean | null; repeat: "off" | "all" | "one" | null;
+  source: string | null; app: string | null; music_assistant: boolean;
+  has_art: boolean;
+  /** Ready to use as <img src> (served by Moonlight; changes with the track). */
+  art_url: string | null;
+  supports: { play_pause: boolean; previous: boolean; next: boolean; volume: boolean; mute: boolean; shuffle: boolean; repeat: boolean; seek: boolean };
+  reachable: boolean;
+  error: string | null;
+  server_time: string;
+}
+export type MediaAction = "play_pause" | "play" | "pause" | "next" | "previous" | "volume_set" | "volume_mute" | "shuffle_set" | "repeat_set";
+export interface MediaPlayerOption { entity_id: string; name: string; state: string; music_assistant: boolean }
+export interface MediaFavourite { uri: string; name: string; media_type: string }
 
 // Calendar sync (iCloud / CalDAV). The password is write-only.
 export type AccountKind = "icloud" | "caldav";
@@ -163,5 +192,11 @@ export interface Api {
   syncAccount(id: string): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;
   updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">>): Promise<SyncCalendar>;
+  // Music (see API.md "Music"): the speaker set for a screen layout, through Home Assistant / Music Assistant.
+  nowPlaying(layout: Layout): Promise<NowPlaying>;
+  mediaCommand(layout: Layout, action: MediaAction, value?: number | boolean | string): Promise<NowPlaying>;
+  mediaPlayers(): Promise<MediaPlayerOption[]>;
+  mediaFavourites(layout: Layout): Promise<MediaFavourite[]>;
+  playFavourite(layout: Layout, uri: string): Promise<NowPlaying>;
   resetDemo?(): Promise<void>;
 }

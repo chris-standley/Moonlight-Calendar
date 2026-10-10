@@ -3,6 +3,7 @@ import { Photo } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { WeatherIcon } from "../components/icons";
+import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 
 // Fallback "photos": generated scenes, shown until the family uploads some (Photos view).
 const SCENES = [
@@ -42,6 +43,8 @@ export function Screensaver({ onWake, album }: { onWake: () => void; album?: str
   const [weather] = useData((api) => api.weather(), [], []);
   const nowS = isoDT(now);
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
+  const { np } = useMedia();
+  const music = !!np?.show && np.state === "playing";
   return (
     <div className="screensaver" onClick={onWake}>
       {photos && (photos.length ? <PhotoShow photos={photos} seconds={seconds} /> : <SceneShow seconds={seconds} />)}
@@ -52,7 +55,7 @@ export function Screensaver({ onWake, album }: { onWake: () => void; album?: str
         {weather && <div className="ss-wx"><WeatherIcon condition={weather.current.condition} size={36} /> {weather.current.temp}°</div>}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
-      <div className="ss-family">{settings?.family_name}</div>
+      {music ? <ScreensaverNowPlaying /> : <div className="ss-family">{settings?.family_name}</div>}
     </div>
   );
 }

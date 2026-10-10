@@ -2,7 +2,8 @@
 
 All JSON. Times are household-local, naive ISO strings (`2026-10-12T09:00`), dates are `YYYY-MM-DD`.
 Ids are strings. Every mutation broadcasts `{"type":"changed","topic":<topic>}` on the WebSocket `/api/ws`
-(topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`).
+(topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`, `media`).
+`media` is also sent whenever the configured speaker changes in Home Assistant (see Music).
 Errors: `{"detail": "..."}` with 400 (bad input / not enough points), 401 (screen not paired, see Screens),
 403 (wrong PIN), 404, 413 (upload too large).
 
@@ -11,12 +12,16 @@ implementation of the same contract, used for the published preview). Keep them 
 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
-  screensaver_album: id|null, screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone}}`
+  screensaver_album: id|null, screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone},
+  media_players: {hallway, kitchen, phone}}`
   `screensaver_album` null = all photos; `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
   (default `{hallway: 5, kitchen: 3, phone: 0}`).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
+  `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each layout shows; the kitchen defaults to
+  the add-on option `media_player_entity`, the others to none.
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone, screensaver_album,
-  screensaver_seconds, idle_minutes`, plus `pin` (required) -> settings. `idle_minutes` may be partial (`{kitchen: 10}`,
+  screensaver_seconds, idle_minutes, media_players`, plus `pin` (required) -> settings. `media_players` may be partial
+  (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
   merged) or one number (applies to hallway and kitchen).
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
 
@@ -135,6 +140,43 @@ Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
   With the add-on option `weather_entity` (env `MOONLIGHT_WEATHER_ENTITY`) set, read from that HA weather entity
   (state + `weather.get_forecasts` daily) via the Supervisor API, cached 10 minutes; if HA can't be reached the
   last good forecast is kept for up to an hour, then it falls back to the deterministic demo forecast (`source: "demo"`).
+
+## Music (now playing on a Home Assistant speaker)
+The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a
+Sonos speaker). Screens only name their `layout` (`hallway|kitchen|phone`, default `kitchen`); the backend maps it to
+the entity in `settings.media_players`, so a screen can't read or control any other entity. Without Home Assistant
+(`SUPERVISOR_TOKEN`, or `MOONLIGHT_HA_URL` + `MOONLIGHT_HA_TOKEN`) the commands return 409.
+- `GET /api/media/now-playing?layout=kitchen` -> NowPlaying:
+  `{layout, configured: bool, entity: str|null, name, state, show: bool, title, artist, album, duration, position,
+  position_updated_at, volume: 0..1|null, muted: bool|null, shuffle: bool|null, repeat: "off"|"all"|"one"|null,
+  source, app, music_assistant: bool, has_art: bool, art_url: str|null, supports: {play_pause, previous, next, volume,
+  mute, shuffle, repeat, seek}, reachable: bool, error: str|null, server_time}`.
+  `state` is HA's (`playing`, `paused`, `idle`, `off`, `standby`, `buffering`, `unavailable`, ...). `show` = worth
+  showing: playing/paused/buffering, or idle/on with a track loaded. `duration`/`position` are seconds; the position
+  was `position` at `position_updated_at` (HA's clock), so clients tick it locally using `server_time`.
+  `supports` comes from the entity's `supported_features`. `music_assistant` = the entity has Music Assistant's
+  `mass_player_type` attribute (or `app_id: music_assistant`). If HA is unreachable the last state is kept for 90 s,
+  then `state: "unavailable", reachable: false`.
+- `GET /api/media/art?layout=kitchen&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
+  `entity_picture_local`/`entity_picture` (a `/api/media_player_proxy/...` path, with its own HA token, or a public
+  URL fetched without any token) and caches the last 12 images. `v` is a hash of the picture URL; only the layout's
+  current (or recently cached) picture is served, and no HA token ever reaches the screen. Cache-Control: immutable.
+- `POST /api/media/command` `{layout, action, value?}` -> NowPlaying. Actions -> HA `media_player` services:
+  `play_pause` (media_play_pause), `play`, `pause`, `next` (media_next_track), `previous` (media_previous_track),
+  `volume_set` (value 0..1 -> volume_level), `volume_mute` (value bool -> is_volume_muted), `shuffle_set` (bool),
+  `repeat_set` (`off|all|one`). 400 bad action/value, 409 no speaker for that layout, 502 HA unreachable or refused.
+- `GET /api/media/players` -> `[{entity_id, name, state, music_assistant}]` every `media_player` in HA (Music
+  Assistant ones first), for the Settings picker. 502 if HA can't be reached.
+- `GET /api/media/favourites?layout=kitchen` -> `[{uri, name, media_type}]` Music Assistant favourite playlists (10)
+  and radio stations (6), via `music_assistant.get_library` (favorite: true) on the first loaded Music Assistant
+  config entry; cached 15 minutes. Empty for non-Music Assistant players or on any error.
+- `POST /api/media/play` `{layout, uri}` -> NowPlaying. Plays one of those favourites with
+  `music_assistant.play_media` (enqueue `replace`); 404 if `uri` isn't a current favourite.
+
+Live updates: the backend keeps one WebSocket to HA (`ws://supervisor/core/websocket`, or `MOONLIGHT_HA_WS_URL`)
+with `subscribe_trigger` (state trigger on the configured entities). Every change broadcasts the `media` topic.
+While that socket is down (HA restarting) it polls the entities' states every 5 s and retries with back-off
+(5, 10, 20, 30, 60 s).
 
 ## Summary (for the Home Assistant integration)
 - `GET /api/summary?date=YYYY-MM-DD&now=YYYY-MM-DDTHH:MM` (both optional; default today / now) ->

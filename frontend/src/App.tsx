@@ -16,6 +16,7 @@ import { Screensaver } from "./views/Screensaver";
 import { SettingsView } from "./views/SettingsView";
 import { PhotosView } from "./views/PhotosView";
 import { SyncBanner } from "./views/SyncBanner";
+import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
 
 type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists" | "settings" | "photos";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
@@ -96,6 +97,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   return (
     <AppProvider value={{ api, layout, people, settings, personById, askPin, toast, celebrate, go }}>
       <div className={`app layout-${layout}`} ref={root}>
+       <MediaProvider api={api} layout={layout}>
         <nav className="rail">
           <div className="rail-logo"><Logo size={layout === "hallway" ? 44 : 34} /></div>
           {nav.map((n) => (
@@ -109,7 +111,8 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
           </button>
         </nav>
         <main className="main">
-          <TopBar familyName={settings?.family_name ?? ""} />
+          {/* The kitchen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
+          <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "kitchen" && tab === "today")} />
           {ready && <SyncBanner onOpen={() => setTab("settings")} />}
           <div className="content">
             {ready && <>
@@ -128,12 +131,13 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
         <div className="toasts">{toasts.map((t) => <div key={t.id} className="toast">{t.msg}</div>)}</div>
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
         {saver && ready && <Screensaver album={saverAlbum} onWake={() => setSaver(false)} />}
+       </MediaProvider>
       </div>
     </AppProvider>
   );
 }
 
-function TopBar({ familyName }: { familyName: string }) {
+function TopBar({ familyName, music }: { familyName: string; music: boolean }) {
   const now = useNow(10_000);
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
   const { api } = useApp();
@@ -144,6 +148,7 @@ function TopBar({ familyName }: { familyName: string }) {
       <div className="tb-time">{time}</div>
       <div className="tb-date">{fmtFull(today())}</div>
       {wx && <div className="tb-wx"><WeatherIcon condition={wx.condition} size={34} /> {wx.temp}°</div>}
+      {music && <NowPlayingPill />}
       <div className="tb-family">{familyName}</div>
     </header>
   );
