@@ -2,7 +2,7 @@
 // Used by the published preview so the interface can be tried without the add-on.
 import seed from "../../../seed/demo.json";
 import {
-  Account, Api, ApiError, Balance, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
+  Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
   Person, PersonIn, Recipe, Reward, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
@@ -100,10 +100,46 @@ function buildSeed(): State {
     seededOn: t,
     settings: { ...S.settings },
     people: S.people.map((p: any) => ({ ...p, initials: initials(p.name) })),
-    events, chores, completions, ledger,
+    events: [...events, ...busyBlocks(WORK_CAL, mon)], chores, completions, ledger,
     rewards: S.rewards, lists, items, meals,
     recipes: S.recipes.map((r: any) => ({ url: null, ...r })),
+    // A published Outlook calendar ("Can view when I'm busy") for Alex: busy blocks only.
+    accounts: [{
+      id: "acct_work", kind: "ics", label: "Work", username: "", password: "",
+      server_url: "outlook.office365.com/…/calendar.ics", status: "ok", last_error: null, last_sync: nowDT(), calendar_count: 1,
+    }],
+    calendars: [{
+      id: WORK_CAL, account_id: "acct_work", name: "Work", color: "#4F7CEC", person_ids: ["p_alex"], visible: true,
+      read_only: true, busy_blocks: true, busy_blocks_auto: true, busy_blocks_set: false,
+    }],
   };
+}
+
+const WORK_CAL = "cal_work";
+/** Free/busy blocks as an Outlook "Can view when I'm busy" feed publishes them (titles are just the status). */
+function busyBlocks(calendarId: string, mon: string): CalEvent[] {
+  const B: [number, string, string, BusyStatus][] = [
+    [0, "10:30", "11:30", "busy"], [0, "14:00", "15:30", "busy"], [1, "09:00", "10:30", "busy"], [1, "13:00", "14:00", "tentative"],
+    [2, "11:00", "12:00", "busy"], [2, "12:30", "13:00", "free"], [2, "15:00", "17:00", "busy"], [3, "09:30", "11:00", "busy"],
+    [3, "13:30", "14:00", "tentative"], [4, "10:00", "12:00", "busy"], [7, "10:30", "11:30", "busy"], [7, "14:00", "16:00", "busy"],
+    [9, "09:00", "10:00", "busy"], [9, "13:00", "15:00", "tentative"], [10, "11:00", "12:30", "busy"], [11, "15:00", "16:00", "busy"],
+  ];
+  const title = (b: BusyStatus) => b[0].toUpperCase() + b.slice(1);
+  const out: CalEvent[] = B.map(([day, s, e, busy], i) => {
+    const d = addDays(mon, day);
+    return { id: `ev_work${i}`, title: title(busy), person_ids: [], start: `${d}T${s}`, end: `${d}T${e}`, all_day: false, location: "", notes: "", repeat: null, calendar_id: calendarId, busy };
+  });
+  out.push({ id: "ev_work_away", title: "Away", person_ids: [], start: `${addDays(mon, 15)}T00:00`, end: `${addDays(mon, 16)}T00:00`, all_day: true, location: "", notes: "", repeat: null, calendar_id: calendarId, busy: "away" });
+  return out;
+}
+
+/** Same idea as the backend: host plus the last path segment, never the secret parts. */
+function maskUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    return last ? `${u.hostname}/…/${last.length > 24 ? last.slice(0, 4) + "…" : last}` : u.hostname;
+  } catch { return "link"; }
 }
 
 function isDue(c: Chore, date: string): boolean {
@@ -206,9 +242,28 @@ export function demoApi(): Api {
   const calOf = (id: string | null | undefined) => (id ? cals().find((c) => c.id === id) : undefined);
   const decorate = (e: CalEvent): CalEvent => {
     const cal = calOf(e.calendar_id);
-    if (!cal) return { ...e, calendar_id: null, source: null, custom_repeat: false, color: null };
+    if (!cal) return { ...e, calendar_id: null, source: null, custom_repeat: false, color: null, read_only: false, busy: null };
     const acct = accts().find((a) => a.id === cal.account_id);
-    return { ...e, person_ids: e.person_ids.length ? e.person_ids : cal.person_ids, source: acct?.kind ?? "icloud", custom_repeat: false, color: cal.color };
+    return {
+      ...e, person_ids: e.person_ids.length ? e.person_ids : cal.person_ids, source: acct?.kind ?? "icloud", custom_repeat: false,
+      color: cal.color, read_only: cal.read_only, busy: cal.busy_blocks ? e.busy ?? "busy" : null,
+    };
+  };
+  const writable = (id: string) => {
+    const ev = find(st.events, id);
+    const cal = calOf(ev.calendar_id);
+    if (cal?.read_only) throw new ApiError(403, `“${ev.title}” is in a read-only calendar and can't be changed here.`);
+    return ev;
+  };
+  const feedUrl = (raw: string) => {
+    const url = raw.trim().replace(/^webcals?:\/\//i, "https://");
+    if (!/^https?:\/\/[^/\s]+/i.test(url)) throw new ApiError(400, "Paste a calendar link starting with https:// or webcal://");
+    return url;
+  };
+  const previewOf = (url: string) => {
+    if (/fail|error|html/i.test(url)) throw new ApiError(502, "That link didn't return a calendar (.ics) file. Check you copied the ICS link, not the HTML one.");
+    const busy = /outlook|office365|exchange/i.test(url);
+    return { event_count: busy ? 17 : 6, name: busy ? "Calendar" : "School term dates", busy_only: busy, masked_url: maskUrl(url) };
   };
   const defaultCalendar = (personIds: string[]) => pickCalendar(cals(), personIds);
   const targetCalendar = (e: { calendar_id?: string | null; person_ids: string[] }) => {
@@ -274,7 +329,7 @@ export function demoApi(): Api {
     },
     async events(start, end) {
       return st.events.filter((e) => !e.calendar_id || calOf(e.calendar_id)?.visible !== false)
-        .map(decorate).flatMap((e) => expand(e, start, end))
+        .map(decorate).filter((e) => e.busy !== "free").flatMap((e) => expand(e, start, end))
         .sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
     },
     async createEvent(e) {
@@ -282,11 +337,11 @@ export function demoApi(): Api {
       st.events.push(ev); emit("events"); return decorate(clone(ev));
     },
     async updateEvent(id, patch) {
-      const ev = find(st.events, id);
+      const ev = writable(id);
       if (patch.calendar_id !== undefined) patch = { ...patch, calendar_id: targetCalendar({ ...ev, ...patch }) };
       Object.assign(ev, patch); emit("events"); return decorate(clone(ev));
     },
-    async deleteEvent(id) { find(st.events, id); st.events = st.events.filter((e) => e.id !== id); emit("events"); },
+    async deleteEvent(id) { writable(id); st.events = st.events.filter((e) => e.id !== id); emit("events"); },
     allChores: async () => clone(st.chores),
     async chores(date) {
       return st.chores.filter((c) => isDue(c, date)).sort((a, b) => a.sort - b.sort).map((c): ChoreDay => {
@@ -391,7 +446,7 @@ export function demoApi(): Api {
       await wait(900); // "checking with iCloud"
       if (!a.username.trim() || !a.password.trim()) throw new ApiError(400, "Enter the Apple ID and app-specific password");
       if (accts().some((x) => x.username === a.username && x.kind === a.kind)) throw new ApiError(400, "That account is already connected");
-      const first = accts().length === 0;
+      const first = !accts().some((x) => x.kind !== "ics");
       const acct = {
         id: uid("acct"), kind: a.kind, label: a.label || a.username, username: a.username, password: a.password,
         server_url: a.kind === "icloud" ? "https://caldav.icloud.com/" : a.server_url ?? "",
@@ -412,6 +467,7 @@ export function demoApi(): Api {
       if (first && acct.status === "ok") {
         // Pretend the demo family's events came from iCloud: one adult's events into their calendar, the rest into Family.
         for (const e of st.events) {
+          if (e.calendar_id) continue; // already from a calendar link
           const own = e.person_ids.length === 1 ? newCals.find((c) => c.person_ids.length === 1 && c.person_ids[0] === e.person_ids[0]) : undefined;
           e.calendar_id = (own ?? newCals[0]).id;
         }
@@ -436,7 +492,9 @@ export function demoApi(): Api {
       checkPin(pin);
       find(accts(), id);
       const mine = new Set(cals().filter((c) => c.account_id === id).map((c) => c.id));
-      // A real removal forgets the cached iCloud events; the demo keeps them as local events instead.
+      // A real removal forgets the cached iCloud events; the demo keeps them as local events instead
+      // (except a calendar link's, which are dropped like the real thing).
+      if (find(accts(), id).kind === "ics") st.events = st.events.filter((e) => !e.calendar_id || !mine.has(e.calendar_id));
       for (const e of st.events) if (e.calendar_id && mine.has(e.calendar_id)) e.calendar_id = null;
       st.calendars = cals().filter((c) => !mine.has(c.id));
       st.accounts = accts().filter((a) => a.id !== id);
@@ -449,9 +507,57 @@ export function demoApi(): Api {
       emit("accounts");
       return acctOut(acct);
     },
+    async previewFeed(raw) {
+      const url = feedUrl(raw);
+      await wait(800); // "fetching the link"
+      return previewOf(url);
+    },
+    async addFeed(f) {
+      checkPin(f.pin);
+      const url = feedUrl(f.url);
+      await wait(800);
+      if (accts().some((a) => a.kind === "ics" && a.password === url)) throw new ApiError(400, "That calendar link is already added");
+      const p = previewOf(url);
+      const label = f.label?.trim() || p.name || "Calendar link";
+      const acct = { id: uid("acct"), kind: "ics" as const, label, username: "", password: url, server_url: p.masked_url, status: "ok" as const, last_error: null, last_sync: nowDT(), calendar_count: 1 };
+      const person = st.people.find((x) => x.id === f.person_ids[0]);
+      const cal: SyncCalendar = {
+        id: uid("cal"), account_id: acct.id, name: label, color: f.color ?? person?.color ?? "#8A94A6", person_ids: f.person_ids, visible: true,
+        read_only: true, busy_blocks: p.busy_only, busy_blocks_auto: p.busy_only, busy_blocks_set: false,
+      };
+      accts().push(acct); cals().push(cal);
+      const mon = weekStart(today(), "monday");
+      if (p.busy_only) st.events.push(...busyBlocks(cal.id, mon).map((e) => ({ ...e, id: uid("ev") })));
+      else ["Harvest festival", "Flu vaccinations", "Non-uniform day", "Book fair", "INSET day", "Christmas fair"].forEach((title, i) => {
+        const d = addDays(mon, 3 + i * 4);
+        st.events.push({ id: uid("ev"), title, person_ids: [], start: `${d}T00:00`, end: `${addDays(d, 1)}T00:00`, all_day: true, location: "", notes: "", repeat: null, calendar_id: cal.id });
+      });
+      emit("accounts", "events");
+      return acctOut(acct);
+    },
+    async updateFeed(id, patch) {
+      checkPin(patch.pin);
+      const acct = find(accts(), id);
+      if (patch.url !== undefined) {
+        const url = feedUrl(patch.url);
+        await wait(700);
+        Object.assign(acct, { password: url, server_url: previewOf(url).masked_url, status: "ok", last_error: null, last_sync: nowDT() });
+      }
+      if (patch.label?.trim()) {
+        acct.label = patch.label.trim();
+        for (const c of cals()) if (c.account_id === id) c.name = acct.label;
+      }
+      emit("accounts", "events");
+      return acctOut(acct);
+    },
     calendars: async () => clone(cals()),
     async updateCalendar(id, patch) {
       const cal = find(cals(), id);
+      if (patch.busy_blocks !== undefined) {
+        const auto = !!cal.busy_blocks_auto;
+        Object.assign(cal, { busy_blocks: patch.busy_blocks ?? auto, busy_blocks_set: patch.busy_blocks !== null });
+        delete patch.busy_blocks;
+      }
       Object.assign(cal, patch);
       emit("accounts", "events");
       return clone(cal);

@@ -3,15 +3,20 @@ import { ApiError, CalEvent, EventIn, Freq, Occurrence, pickCalendar } from "../
 import { addDays, dayCode, fmtFull, fmtTime } from "../dates";
 import { useApp, useData } from "../state";
 import { IconCloud } from "./CalendarsSettings";
+import { evTitle } from "./CalendarView";
 import { Avatar, PersonPicker, Segmented, Sheet } from "../components/ui";
 import { IconPin, IconRepeat, IconTrash } from "../components/icons";
 
+/** Summaries free/busy publishing uses instead of titles (same list as the backend's freebusy.py). */
+const PLACEHOLDER = /^(busy|tentative|free|away|oof|out of (the )?office|working elsewhere)$/i;
 const REPEAT_LABEL: Record<string, string> = { none: "Never", daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
 
 export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose: () => void; onEdit: () => void }) {
   const { api, people, askPin, toast } = useApp();
   const [cals] = useData((a) => a.calendars(), ["accounts"], []);
   const cal = occ.calendar_id ? cals?.find((c) => c.id === occ.calendar_id) : undefined;
+  const readOnly = !!(occ.read_only || cal?.read_only);
+  const title = evTitle(occ, people);
   const who = occ.person_ids.map((id) => people.find((p) => p.id === id)).filter(Boolean);
   const lastDay = occ.all_day ? addDays(occ.end.slice(0, 10), -1) : occ.end.slice(0, 10);
   async function del() {
@@ -27,10 +32,10 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
     }
   }
   return (
-    <Sheet title={occ.title} onClose={onClose} footer={<>
-      {!cal?.read_only && <button className="btn ghost danger" onClick={del}><IconTrash size={20} /> Delete</button>}
+    <Sheet title={title} onClose={onClose} footer={<>
+      {!readOnly && <button className="btn ghost danger" onClick={del}><IconTrash size={20} /> Delete</button>}
       <span style={{ flex: 1 }} />
-      {!cal?.read_only && <button className="btn" onClick={onEdit}>Edit</button>}
+      {!readOnly && <button className="btn" onClick={onEdit}>Edit</button>}
     </>}>
       <div className="detail">
         <div className="detail-when">
@@ -38,14 +43,17 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
           <span>{occ.all_day ? "All day" : `${fmtTime(occ.start)} – ${fmtTime(occ.end)}`}</span>
         </div>
         {occ.location && <div className="detail-row"><IconPin size={20} /> {occ.location}</div>}
-        {occ.custom_repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats (custom pattern set in {occ.source === "icloud" ? "iCloud" : "the calendar app"})</div>}
+        {occ.custom_repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats (custom pattern set in {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "the published calendar" : "the calendar app"})</div>}
         {occ.repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats {REPEAT_LABEL[occ.repeat.freq].toLowerCase()}{occ.repeat.byday?.length ? ` on ${occ.repeat.byday.map((d) => d[0] + d[1].toLowerCase()).join(", ")}` : ""}</div>}
         <div className="detail-people">
           {who.map((p) => <span key={p!.id} className="chip" style={{ background: p!.color + "22" }}><Avatar person={p!} size={1.6} /> {p!.name}</span>)}
         </div>
+        {occ.busy && (PLACEHOLDER.test(occ.title.trim())
+          ? <p className="muted connect-note">This calendar only shares when {who.length === 1 ? who[0]!.name + " is" : "they're"} busy, not what's on.</p>
+          : <div className="detail-row">{occ.title}</div>)}
         {occ.notes && <p className="detail-notes">{occ.notes}</p>}
         {occ.source && (
-          <div className="detail-source"><IconCloud size={18} /> {occ.source === "icloud" ? "iCloud" : "CalDAV"}{cal ? ` · ${cal.name}` : ""}{cal?.read_only ? " · read-only" : ""}</div>
+          <div className="detail-source"><IconCloud size={18} /> {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "Calendar link" : "CalDAV"}{cal ? ` · ${cal.name}` : ""}{readOnly ? " · read-only" : ""}</div>
         )}
       </div>
     </Sheet>

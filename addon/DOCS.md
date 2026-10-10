@@ -58,6 +58,12 @@ Settings > Calendars > Connect iCloud with an Apple ID and an app-specific passw
 (account.apple.com > Sign-In and Security > App-Specific Passwords), then choose which person each calendar
 belongs to. Moonlight syncs every 2 minutes and writes changes made on the screens back to iCloud.
 
+Settings > Calendars > Add calendar link shows a read-only published calendar (an ICS / webcal link), such
+as a work calendar, school term dates or bin days, refreshed every 15 minutes. For an Outlook / Microsoft 365
+work calendar: Outlook on the web > Settings > Calendar > Shared calendars > Publish a calendar, choose
+"Can view when I'm busy" and copy the ICS link; its events show as "busy" blocks. Some workplaces block
+publishing. Treat the link like a password.
+
 ## Photo screensaver
 
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter

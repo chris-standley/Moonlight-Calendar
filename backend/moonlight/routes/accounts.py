@@ -1,4 +1,5 @@
-"""Calendar accounts (iCloud / CalDAV), their calendars and sync status. See caldav_sync.py."""
+"""Calendar accounts (iCloud / CalDAV / published ICS links), their calendars and sync status.
+See caldav_sync.py and ics_feed.py."""
 from __future__ import annotations
 
 import asyncio
@@ -7,16 +8,16 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db
+from .. import caldav_sync, db, ics_feed
 from ..common import bad, body_dict, hub, not_found, opt_str, person_exists, req_str, require_pin
 
 router = APIRouter(prefix="/api")
 
-KINDS = ("icloud", "caldav")
+KINDS = ("icloud", "caldav", "ics")
 
 
 def account_out(c, r: dict) -> dict:
-    """Never includes the password."""
+    """Never includes the password (nor, for an ICS link, the full URL: server_url is masked)."""
     n = c.execute("SELECT COUNT(*) FROM calendars WHERE account_id = ?", (r["id"],)).fetchone()[0]
     return {
         "id": r["id"], "kind": r["kind"], "label": r["label"], "username": r["username"],
@@ -29,6 +30,8 @@ def calendar_out(r: dict) -> dict:
     return {
         "id": r["id"], "account_id": r["account_id"], "name": r["name"], "color": r["color"],
         "person_ids": json.loads(r["person_ids"]), "visible": bool(r["visible"]), "read_only": bool(r["read_only"]),
+        "busy_blocks": bool(r["busy_blocks"] if r.get("busy_blocks") is not None else r.get("busy_auto")),
+        "busy_blocks_auto": bool(r.get("busy_auto")), "busy_blocks_set": r.get("busy_blocks") is not None,
     }
 
 
@@ -50,12 +53,81 @@ def list_accounts():
         return [account_out(c, r) for r in db.rows(c, "SELECT * FROM accounts ORDER BY created_at, id")]
 
 
+def _feed_url(body: dict) -> str:
+    try:
+        return ics_feed.normalize_url(req_str(body, "url"))
+    except ValueError as e:
+        raise bad(str(e))
+
+
+async def _preview(url: str) -> dict:
+    try:
+        return await asyncio.to_thread(ics_feed.preview, url)
+    except ValueError as e:
+        raise bad(str(e))
+    except caldav_sync.SyncError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+def _person_ids(c, body: dict) -> list[str]:
+    ids = body.get("person_ids", [])
+    if not isinstance(ids, list) or not all(isinstance(i, str) and person_exists(c, i) for i in ids):
+        raise bad("person_ids must be a list of person ids")
+    return list(dict.fromkeys(ids))
+
+
+def _color(body: dict, default: str) -> str:
+    if body.get("color") in (None, ""):
+        return default
+    color = req_str(body, "color")
+    if not (len(color) == 7 and color.startswith("#")):
+        raise bad("color must look like #RRGGBB")
+    return color.upper()
+
+
+@router.post("/accounts/feed-preview")
+async def feed_preview(body: dict = Body(...)):
+    """Test a calendar link: how many events (inside the kept window) it has. Nothing is saved."""
+    p = await _preview(_feed_url(body_dict(body)))
+    return {k: p[k] for k in ("event_count", "name", "busy_only", "masked_url")}
+
+
+async def _create_feed(body: dict) -> dict:
+    url = _feed_url(body)
+    with db.connect() as c:
+        require_pin(c, body.get("pin"))
+        person_ids = _person_ids(c, body)
+        if db.row(c, "SELECT id FROM accounts WHERE kind = 'ics' AND password = ?", (url,)):
+            raise bad("That calendar link is already added")
+        first = db.row(c, "SELECT color FROM people WHERE id = ?", (person_ids[0],)) if person_ids else None
+    color = _color(body, first["color"].upper() if first else "#8A94A6")
+    p = await _preview(url)
+    label = opt_str(body, "label").strip() or p["name"] or "Calendar link"
+    with db.connect() as c:
+        aid = db.new_id("acct")
+        c.execute("INSERT INTO accounts(id, kind, label, username, password, server_url, status, created_at) "
+                  "VALUES(?, 'ics', ?, '', ?, ?, 'ok', ?)", (aid, label, url, p["masked_url"], db.now_iso()))
+        cid = db.new_id("cal")
+        c.execute("INSERT INTO calendars(id, account_id, url, name, color, person_ids, visible, read_only, busy_auto) "
+                  "VALUES(?,?,?,?,?,?,1,1,?)", (cid, aid, ics_feed.FEED_CALENDAR_URL, label, color,
+                                                json.dumps(person_ids), int(p["busy_only"])))
+    await asyncio.to_thread(ics_feed.store, cid, p["fetched"])
+    with db.connect() as c:
+        c.execute("UPDATE accounts SET last_sync = ? WHERE id = ?", (db.now_iso(), aid))
+        out = account_out(c, db.row(c, "SELECT * FROM accounts WHERE id = ?", (aid,)))
+    caldav_sync.mark_synced(aid)
+    await hub.broadcast("accounts", "events")
+    return out
+
+
 @router.post("/accounts")
 async def create_account(body: dict = Body(...)):
     body = body_dict(body)
     kind = body.get("kind", "icloud")
     if kind not in KINDS:
-        raise bad("kind must be icloud or caldav")
+        raise bad("kind must be icloud, caldav or ics")
+    if kind == "ics":
+        return await _create_feed(body)
     username = req_str(body, "username")
     password = req_str(body, "password", allow_empty=False)
     if kind == "icloud":
@@ -85,14 +157,25 @@ async def create_account(body: dict = Body(...)):
 
 @router.patch("/accounts/{account_id}")
 async def update_account(account_id: str, body: dict = Body(...)):
-    """Rename, or reconnect with new credentials (verified before they are saved)."""
+    """Rename, or reconnect with new credentials / a new calendar link (verified before they are saved)."""
     body = body_dict(body)
     with db.connect() as c:
         require_pin(c, body.get("pin"))
         r = db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,))
         if not r:
             raise not_found("Account not found")
-    if "password" in body or "username" in body:
+    if r["kind"] == "ics" and "url" in body:
+        url = _feed_url(body)
+        p = await _preview(url)
+        with db.connect() as c:
+            c.execute("UPDATE accounts SET password=?, server_url=?, status='ok', last_error=NULL, last_sync=? "
+                      "WHERE id=?", (url, p["masked_url"], db.now_iso(), account_id))
+            cal = ics_feed.feed_calendar(c, account_id)
+            c.execute("UPDATE calendars SET ctag = NULL WHERE id = ?", (cal["id"],))
+        await asyncio.to_thread(ics_feed.store, cal["id"], p["fetched"])
+        caldav_sync.mark_synced(account_id)
+        await hub.broadcast("events")
+    elif r["kind"] != "ics" and ("password" in body or "username" in body):
         username = req_str(body, "username") if "username" in body else r["username"]
         password = req_str(body, "password") if "password" in body else r["password"]
         home, found = await _verify(r["server_url"], username, password, r["kind"])
@@ -104,6 +187,8 @@ async def update_account(account_id: str, body: dict = Body(...)):
     with db.connect() as c:
         if "label" in body:
             c.execute("UPDATE accounts SET label = ? WHERE id = ?", (req_str(body, "label"), account_id))
+            if r["kind"] == "ics":  # a link's single calendar carries its name
+                c.execute("UPDATE calendars SET name = ? WHERE account_id = ?", (req_str(body, "label"), account_id))
         out = account_out(c, db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,)))
     await hub.broadcast("accounts")
     return out
@@ -126,11 +211,11 @@ async def delete_account(account_id: str, body: dict | None = Body(None)):
 
 
 @router.post("/accounts/{account_id}/sync")
-async def sync_account(account_id: str):
+async def sync_account(account_id: str, body: dict | None = Body(None)):
     with db.connect() as c:
         if not db.row(c, "SELECT id FROM accounts WHERE id = ?", (account_id,)):
             raise not_found("Account not found")
-    await caldav_sync.sync_now(account_id)
+    await caldav_sync.sync_now(account_id, force=bool(body_dict(body).get("force")))
     with db.connect() as c:
         return account_out(c, db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,)))
 
@@ -163,8 +248,12 @@ async def update_calendar(calendar_id: str, body: dict = Body(...)):
             if not (len(color) == 7 and color.startswith("#")):
                 raise bad("color must look like #RRGGBB")
             r["color"] = color
-        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ? WHERE id = ?",
-                  (r["person_ids"], r["visible"], r["color"], calendar_id))
+        if "busy_blocks" in body:  # true / false, or null to follow the automatic guess
+            if body["busy_blocks"] is not None and not isinstance(body["busy_blocks"], bool):
+                raise bad("busy_blocks must be true, false or null")
+            r["busy_blocks"] = None if body["busy_blocks"] is None else int(body["busy_blocks"])
+        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ? WHERE id = ?",
+                  (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"), calendar_id))
     await hub.broadcast("accounts", "events")
     return calendar_out(r)
 
