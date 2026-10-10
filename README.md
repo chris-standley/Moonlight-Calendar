@@ -13,6 +13,7 @@ screensaver from Immich; speaker controls and album art through Music Assistant.
 | `addon/` | Home Assistant add-on (config.yaml, multi-stage Dockerfile built from the repo root, DOCS.md). It is listed in [home-assistant-apps](https://github.com/chris-standley/home-assistant-apps) |
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
 | `tests/` | Tests for the integration (`python3 -m pytest tests`; `tests/ha/` needs pytest-homeassistant-custom-component) |
+| `appletv/` | Native Apple TV app (SwiftUI, tvOS 18). Open `appletv/Moonlight.xcodeproj` in Xcode 16+. See its [README](appletv/README.md) |
 | `screenshots/` | Every view at hallway (2560x1440), kitchen (1920x1200 at 2x zoom) and phone sizes |
 
 ## Install on Home Assistant
@@ -47,6 +48,7 @@ needs the whole repo.
 - Hallway: `http://<ha-host>:8099/display/hallway` (27in, 2560x1440, browser zoom 1, root font 20px). Opens on the week calendar.
 - Kitchen: `http://<ha-host>:8099/display/kitchen` (Touch Display 2, 1920x1200, run TouchKio at 2x zoom = 960x600 CSS px). Opens on Today.
 - Phone: `/display/phone`, or the HA sidebar via ingress.
+- Apple TV: the native app in [`appletv/`](appletv/README.md) finds Moonlight on the network and pairs with a code like the other screens.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.
 
 ## Preview build

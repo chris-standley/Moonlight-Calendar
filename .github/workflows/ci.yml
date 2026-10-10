@@ -34,3 +34,18 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build:demo
+
+  appletv:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: appletv
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build for the Apple TV simulator (unsigned)
+        run: |
+          xcodebuild -version
+          xcodebuild -project Moonlight.xcodeproj -scheme Moonlight -configuration Debug \
+            -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E "error:|warning:|BUILD" || true
+          grep -q "BUILD SUCCEEDED" build.log
