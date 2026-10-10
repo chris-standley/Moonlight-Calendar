@@ -22,7 +22,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     MOONLIGHT_DB=/data/moonlight.db \
-    MOONLIGHT_DATA=/data \
     MOONLIGHT_SEED=/app/seed/demo.json \
     MOONLIGHT_STATIC=/app/frontend/dist \
     MOONLIGHT_PORT=8099
@@ -34,12 +33,7 @@ WORKDIR /app/backend
 
 COPY backend/requirements.txt /app/backend/requirements.txt
 # Every dependency ships musllinux wheels for amd64 and aarch64, so no compiler is needed.
-# pillow-heif (iPhone HEIC uploads) is optional: if no wheel exists for this platform, HEIC is rejected with a message.
-RUN grep -v '^pillow-heif' requirements.txt > /tmp/req.txt \
-    && pip3 install --no-cache-dir --prefer-binary -r /tmp/req.txt \
-    && (pip3 install --no-cache-dir --only-binary=:all: "$(grep '^pillow-heif' requirements.txt)" \
-        || echo "pillow-heif unavailable: HEIC uploads disabled") \
-    && rm /tmp/req.txt
+RUN pip3 install --no-cache-dir --prefer-binary -r requirements.txt
 
 COPY backend/moonlight /app/backend/moonlight
 COPY seed /app/seed

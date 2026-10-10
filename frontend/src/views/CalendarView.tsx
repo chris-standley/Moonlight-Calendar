@@ -24,12 +24,31 @@ function daysOf(o: Occurrence): string[] {
 
 function eventStyle(o: Occurrence, people: Person[]): CSSProperties {
   const colors = o.person_ids.map((id) => people.find((p) => p.id === id)?.color).filter(Boolean) as string[];
-  const c = colors[0] ?? o.color ?? "#8A94A6";
-  const stripe = colors.length > 1
+  // Busy blocks take the calendar's colour (its swatch in Settings), falling back to the person's.
+  const c = (o.busy ? o.color : null) ?? colors[0] ?? o.color ?? "#8A94A6";
+  const stripe = colors.length > 1 && !o.busy
     ? `linear-gradient(${colors.map((col, i) => `${col} ${(i * 100) / colors.length}% ${((i + 1) * 100) / colors.length}%`).join(",")})`
     : c;
-  return { "--ec": c, "--ebg": tint(c, 0.16), "--stripe": stripe } as CSSProperties;
+  const style = { "--ec": c, "--ebg": tint(c, 0.16), "--stripe": stripe } as Record<string, string>;
+  if (o.busy) {
+    style["--ebg"] = tint(c, 0.07);
+    style["--hatch"] = tint(c, o.busy === "tentative" ? 0.1 : 0.18);
+  }
+  return style as CSSProperties;
 }
+
+const BUSY_LABEL: Record<string, string> = { busy: "busy", tentative: "tentative", away: "away", elsewhere: "working elsewhere", free: "free" };
+
+/** Title to show: free/busy blocks read "Chris – busy" (the feed's own "Busy" says nothing useful). */
+export function evTitle(o: Occurrence, people: Person[]): string {
+  if (!o.busy) return o.title;
+  const names = o.person_ids.map((id) => people.find((p) => p.id === id)?.name).filter(Boolean);
+  const label = BUSY_LABEL[o.busy] ?? "busy";
+  return names.length ? `${names.join(" & ")} – ${label}` : label[0].toUpperCase() + label.slice(1);
+}
+
+/** Extra class names for busy blocks: hatched; tentative ones lighter. */
+export const busyCls = (o: Occurrence) => (o.busy ? ` busy b-${o.busy}` : "");
 
 function Who({ o, people, size = 1.25 }: { o: Occurrence; people: Person[]; size?: number }) {
   if (o.person_ids.length < 2) return null;
@@ -155,14 +174,14 @@ function WeekView({ start, events, meals, weather, people, onOpen, onAdd }: {
             <DayHeader date={d} weather={weather} />
             <div className="week-events" onClick={(e) => { if (e.target === e.currentTarget) onAdd(d); }}>
               {allDay.map((o) => (
-                <button key={o.occurrence_id} className="ev allday" style={eventStyle(o, people)} onClick={() => onOpen(o)}>
-                  <span className="ev-title">{o.title}</span><Who o={o} people={people} size={1.1} />
+                <button key={o.occurrence_id} className={"ev allday" + busyCls(o)} style={eventStyle(o, people)} onClick={() => onOpen(o)}>
+                  <span className="ev-title">{evTitle(o, people)}</span><Who o={o} people={people} size={1.1} />
                 </button>
               ))}
               {timed.map((o) => (
-                <button key={o.occurrence_id} className={"ev card" + (o.end < nowStr ? " done" : "")} style={eventStyle(o, people)} onClick={() => onOpen(o)}>
+                <button key={o.occurrence_id} className={"ev card" + (o.end < nowStr ? " done" : "") + busyCls(o)} style={eventStyle(o, people)} onClick={() => onOpen(o)}>
                   <span className="ev-time">{fmtTime(o.start)}{o.start.slice(0, 10) === d ? ` – ${fmtTime(o.end)}` : ""}</span>
-                  <span className="ev-title">{o.title}</span>
+                  <span className="ev-title">{evTitle(o, people)}</span>
                   <Who o={o} people={people} />
                 </button>
               ))}
@@ -240,7 +259,7 @@ function DayView({ date, events, people, allPeople, weather, onOpen, onAdd }: {
           {cols.map((c) => (
             <div key={c.id} className="dv-cell">
               {allDay.filter(c.has).map((o) => (
-                <button key={o.occurrence_id} className="ev allday" style={eventStyle(o, allPeople)} onClick={() => onOpen(o)}><span className="ev-title">{o.title}</span></button>
+                <button key={o.occurrence_id} className={"ev allday" + busyCls(o)} style={eventStyle(o, allPeople)} onClick={() => onOpen(o)}><span className="ev-title">{evTitle(o, allPeople)}</span></button>
               ))}
             </div>
           ))}
@@ -262,12 +281,12 @@ function DayView({ date, events, people, allPeople, weather, onOpen, onAdd }: {
               }}>
                 {hours.map((h) => <div key={h} className="dv-line" style={{ top: `calc(${h - firstHour} * var(--hour))` }} />)}
                 {placed.map(({ o, top, height, lane, lanes }) => (
-                  <button key={o.occurrence_id} className="ev block" style={{
+                  <button key={o.occurrence_id} className={"ev block" + busyCls(o)} style={{
                     ...eventStyle(o, allPeople),
                     top: `calc(${top / 60} * var(--hour))`, height: `calc(${height / 60} * var(--hour) - 3px)`,
                     left: `${(lane / lanes) * 100}%`, width: `calc(${100 / lanes}% - 4px)`,
                   }} onClick={() => onOpen(o)}>
-                    <span className="ev-title">{o.title}</span>
+                    <span className="ev-title">{evTitle(o, allPeople)}</span>
                     {height >= 40 && <span className="ev-time">{fmtTime(o.start)} – {fmtTime(o.end)}</span>}
                     {height >= 70 && o.location && <span className="ev-loc">{o.location}</span>}
                   </button>
@@ -301,9 +320,9 @@ function MonthView({ anchor, start, events, people, onPick }: {
           <button key={d} className={"month-cell" + (d.slice(0, 7) !== month ? " other" : "") + (d === today() ? " today" : "")} onClick={() => onPick(d)}>
             <span className="mc-num">{dayNum(d)}</span>
             {evs.slice(0, max).map((o) => (
-              <span key={o.occurrence_id} className={"mc-ev" + (o.all_day ? " allday" : "")} style={eventStyle(o, people)}>
+              <span key={o.occurrence_id} className={"mc-ev" + (o.all_day ? " allday" : "") + busyCls(o)} style={eventStyle(o, people)}>
                 {!o.all_day && <i />}
-                {!o.all_day && <b>{fmtTime(o.start)}</b>} {o.title}
+                {!o.all_day && <b>{fmtTime(o.start)}</b>} {evTitle(o, people)}
               </span>
             ))}
             {evs.length > max && <span className="mc-more">+{evs.length - max} more</span>}
@@ -337,11 +356,11 @@ export function ScheduleView({ start, days, events, meals, weather, people, onOp
             {evs.map((o) => {
               const p = people.find((x) => x.id === o.person_ids[0]);
               return (
-                <button key={o.occurrence_id} className="sched-ev" style={eventStyle(o, people)} onClick={() => onOpen(o)}>
+                <button key={o.occurrence_id} className={"sched-ev" + busyCls(o)} style={eventStyle(o, people)} onClick={() => onOpen(o)}>
                   <span className="se-time">{o.all_day ? "All day" : <>{fmtTime(o.start)}<em>{fmtTime(o.end)}</em></>}</span>
                   <span className="se-bar" />
                   <span className="se-main">
-                    <span className="ev-title">{o.title}</span>
+                    <span className="ev-title">{evTitle(o, people)}</span>
                     {(o.location || o.repeat) && <span className="se-meta">
                       {o.location && <><IconPin size={14} /> {o.location}</>} {o.repeat && <IconRepeat size={14} />}
                     </span>}

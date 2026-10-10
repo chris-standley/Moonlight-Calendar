@@ -9,11 +9,12 @@ export interface Settings {
   temp_unit: "C" | "F";
   pin_set: boolean;
   chore_approval: boolean;
-  /** Photo screensaver: album id (null = all photos), seconds per photo, idle minutes per screen (0 = never). */
-  screensaver_album?: string | null;
+  /** Photo screensaver: seconds per photo, idle minutes per screen (0 = never). Photos come from Immich. */
   screensaver_seconds?: number;
   idle_minutes?: Partial<Record<"hallway" | "kitchen" | "phone", number>>;
   timezone?: string;
+  /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
+  media_players?: Partial<Record<"hallway" | "kitchen" | "phone", string>>;
 }
 
 export type Freq = "daily" | "weekly" | "monthly";
@@ -37,7 +38,12 @@ export interface CalEvent extends EventIn {
   /** Recurrence from iCloud that Moonlight can't edit (EXDATE, COUNT, moved occurrences...). */
   custom_repeat?: boolean;
   color?: string | null;
+  /** In a read-only calendar (e.g. a calendar link): can't be edited or deleted here. */
+  read_only?: boolean;
+  /** Set only on calendars shown as busy blocks (free/busy feeds); "free" events are never returned. */
+  busy?: BusyStatus | null;
 }
+export type BusyStatus = "busy" | "tentative" | "away" | "elsewhere" | "free";
 export interface Occurrence extends CalEvent { occurrence_id: string; recurring: boolean }
 
 export type TimeOfDay = "morning" | "afternoon" | "evening" | "anytime";
@@ -71,26 +77,67 @@ export interface Weather {
 export type Layout = "hallway" | "kitchen" | "phone";
 /** "service" = a non-screen client such as the Home Assistant integration. */
 export interface Display { id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean }
-export interface Album { id: string; name: string; created_at: string; photo_count: number; cover_photo_id: string | null }
-export interface Photo {
-  id: string; album_id: string; filename: string; width: number; height: number;
-  taken_at: string | null; uploaded_at: string; uploaded_by: string | null;
-  /** Ready to use as <img src> (the HTTP client prefixes the ingress base path). */
-  display_url: string; thumb_url: string;
+
+// Photo screensaver source: the family's Immich server. Moonlight keeps the API key (write-only) and proxies previews.
+export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
+export interface ImmichConfig {
+  configured: boolean; server_url: string; key_set: boolean; album_ids: string[]; favorites: boolean; memories: boolean;
+  status: ImmichStatus; last_error: string | null; last_refresh: string | null; photo_count: number; version: string | null;
 }
-export interface UploadResult { uploaded: Photo[]; errors: { filename: string; detail: string }[] }
+export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean }
+/** PUT /api/immich: `api_key` may be left out once one is saved. */
+export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; pin: string }
+export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
+/** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
+export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; url: string }
+export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[] }
 
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts";
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media";
 
-// Calendar sync (iCloud / CalDAV). The password is write-only.
-export type AccountKind = "icloud" | "caldav";
+/** GET /api/media/now-playing: the speaker set for this screen's layout (see API.md "Music"). */
+export interface NowPlaying {
+  layout: Layout;
+  configured: boolean;
+  entity: string | null;
+  name: string | null;
+  /** HA media_player state: playing, paused, idle, off, standby, buffering, unavailable... */
+  state: string;
+  /** Worth showing: playing/paused/buffering, or idle with a track still loaded. */
+  show: boolean;
+  title: string | null; artist: string | null; album: string | null;
+  /** Seconds; position was `position` at `position_updated_at` (HA's clock; compare with server_time). */
+  duration: number | null; position: number | null; position_updated_at: string | null;
+  volume: number | null; muted: boolean | null; shuffle: boolean | null; repeat: "off" | "all" | "one" | null;
+  source: string | null; app: string | null; music_assistant: boolean;
+  has_art: boolean;
+  /** Ready to use as <img src> (served by Moonlight; changes with the track). */
+  art_url: string | null;
+  supports: { play_pause: boolean; previous: boolean; next: boolean; volume: boolean; mute: boolean; shuffle: boolean; repeat: boolean; seek: boolean };
+  reachable: boolean;
+  error: string | null;
+  server_time: string;
+}
+export type MediaAction = "play_pause" | "play" | "pause" | "next" | "previous" | "volume_set" | "volume_mute" | "shuffle_set" | "repeat_set";
+export interface MediaPlayerOption { entity_id: string; name: string; state: string; music_assistant: boolean }
+export interface MediaFavourite { uri: string; name: string; media_type: string }
+
+// Calendar sync (iCloud / CalDAV / published calendar links). Passwords and link URLs are write-only.
+export type AccountKind = "icloud" | "caldav" | "ics";
 export type AccountStatus = "ok" | "auth_failed" | "error";
+/** For kind "ics" `server_url` is a masked form of the link (host/…/calendar.ics) and `username` is "". */
 export interface Account {
   id: string; kind: AccountKind; label: string; username: string; server_url: string;
   status: AccountStatus; last_error: string | null; last_sync: string | null; calendar_count: number;
 }
 export interface AccountIn { kind: AccountKind; username: string; password: string; server_url?: string; label?: string; pin: string }
-export interface SyncCalendar { id: string; account_id: string; name: string; color: string; person_ids: string[]; visible: boolean; read_only: boolean }
+export interface SyncCalendar {
+  id: string; account_id: string; name: string; color: string; person_ids: string[]; visible: boolean; read_only: boolean;
+  /** Shown as "Chris – busy" blocks: the household's choice, else automatic (every summary is Busy/Free/...). */
+  busy_blocks?: boolean; busy_blocks_auto?: boolean; busy_blocks_set?: boolean;
+}
+/** A published ICS link (webcal:// or https://); read-only, polled every 15 minutes. */
+export interface FeedIn { url: string; label?: string; person_ids: string[]; color?: string; pin: string }
+export interface FeedPreview { event_count: number; name: string; busy_only: boolean; masked_url: string }
 
 /** Default calendar for a new event (mirrors the server): the first person's own visible, writable calendar before shared ones. */
 export function pickCalendar(cals: SyncCalendar[], personIds: string[]): string | null {
@@ -149,19 +196,32 @@ export interface Api {
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;
   revokeDisplay(id: string, pin: string): Promise<void>;
-  // Photos
-  albums(): Promise<Album[]>;
-  createAlbum(name: string): Promise<Album>;
-  deleteAlbum(id: string, pin: string): Promise<void>;
-  photos(albumId?: string | null): Promise<Photo[]>;
-  uploadPhotos(albumId: string | null, files: File[]): Promise<UploadResult>;
-  deletePhoto(id: string, pin: string): Promise<void>;
+  // Photo screensaver (Immich; see API.md "Photo screensaver")
+  immich(): Promise<ImmichConfig>;
+  saveImmich(c: ImmichIn): Promise<ImmichConfig>;
+  disconnectImmich(pin: string): Promise<void>;
+  /** Without server_url/api_key the saved ones are tested. */
+  testImmich(t: { server_url?: string; api_key?: string; pin: string }): Promise<ImmichTest>;
+  immichAlbums(): Promise<ImmichAlbum[]>;
+  screensaverPhotos(): Promise<ScreensaverPhotos>;
   accounts(): Promise<Account[]>;
   connectAccount(a: AccountIn): Promise<Account>;
   reconnectAccount(id: string, creds: { password: string; username?: string; pin: string }): Promise<Account>;
   removeAccount(id: string, pin: string): Promise<void>;
   syncAccount(id: string): Promise<Account>;
+  /** Test a calendar link: how many events it has (nothing is saved). */
+  previewFeed(url: string): Promise<FeedPreview>;
+  addFeed(f: FeedIn): Promise<Account>;
+  /** Paste a new link (verified first) and/or rename. */
+  updateFeed(id: string, patch: { url?: string; label?: string; pin: string }): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;
-  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">>): Promise<SyncCalendar>;
+  /** busy_blocks: null = automatic. */
+  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null }): Promise<SyncCalendar>;
+  // Music (see API.md "Music"): the speaker set for a screen layout, through Home Assistant / Music Assistant.
+  nowPlaying(layout: Layout): Promise<NowPlaying>;
+  mediaCommand(layout: Layout, action: MediaAction, value?: number | boolean | string): Promise<NowPlaying>;
+  mediaPlayers(): Promise<MediaPlayerOption[]>;
+  mediaFavourites(layout: Layout): Promise<MediaFavourite[]>;
+  playFavourite(layout: Layout, uri: string): Promise<NowPlaying>;
   resetDemo?(): Promise<void>;
 }

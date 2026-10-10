@@ -1,48 +1,27 @@
-"""Screen pairing, the auth middleware and photo uploads: run from backend/ with `python -m pytest`."""
+"""Screen pairing and the auth middleware: run from backend/ with `python -m pytest`."""
 from __future__ import annotations
 
-import io
 import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
 from starlette.websockets import WebSocketDisconnect
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from moonlight.main import create_app  # noqa: E402
-from moonlight.routes import photos as photos_mod  # noqa: E402
 
 PIN = "4321"
 INGRESS_IP = "172.30.32.2"
 INGRESS = {"X-Ingress-Path": "/api/hassio_ingress/abc123", "X-Remote-User-Display-Name": "Chris"}
 
 
-def jpeg(w=1200, h=800, color=(200, 120, 60), orientation=None, taken=None, fmt="JPEG") -> bytes:
-    im = Image.new("RGB", (w, h), color)
-    im.paste((20, 40, 200), (0, 0, w // 4, h // 4))  # marker in the top-left corner
-    exif = Image.Exif()
-    if orientation:
-        exif[0x0112] = orientation
-    if taken:
-        exif.get_ifd(0x8769)[0x9003] = taken
-    buf = io.BytesIO()
-    im.save(buf, fmt, exif=exif.tobytes()) if fmt == "JPEG" else im.save(buf, fmt)
-    return buf.getvalue()
-
-
-def size_of(content: bytes) -> tuple[int, int]:
-    return Image.open(io.BytesIO(content)).size
-
-
 # ---------------------------------------------------------------- auth on
 
 @pytest.fixture
 def app_on(tmp_path):
-    return create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "no-dist",
-                      data_dir=tmp_path / "data", auth_enabled=True)
+    return create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "no-dist", auth_enabled=True)
 
 
 @pytest.fixture
@@ -200,157 +179,14 @@ def test_revoked_screen_is_rejected(app_on, ha):
     assert ha.request("DELETE", f"/api/displays/{d['id']}", json={"pin": PIN}).status_code == 404
 
 
-def test_photo_urls_work_for_paired_screen(app_on, ha):
-    screen = lan(app_on)
-    pair(ha, screen, name="Hallway", layout="hallway")
-    r = screen.post("/api/photos", files=[("files", ("a.jpg", jpeg(), "image/jpeg"))])
-    assert r.status_code == 200, r.text
-    p = r.json()["uploaded"][0]
-    assert p["uploaded_by"] == "Hallway"
-    assert screen.get(p["thumb_url"]).status_code == 200
-    assert screen.get(p["display_url"]).status_code == 200
-    assert lan(app_on).get(p["thumb_url"]).status_code == 401
-    r = ha.post("/api/photos", files=[("files", ("b.jpg", jpeg(), "image/jpeg"))])
-    assert r.json()["uploaded"][0]["uploaded_by"] == "Chris"
-
-
 def test_auth_off_by_default(tmp_path, monkeypatch):
     monkeypatch.delenv("MOONLIGHT_AUTH", raising=False)
     monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
-    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x", data_dir=tmp_path / "d")
+    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x")
     assert lan(app).get("/api/people").status_code == 200
     monkeypatch.setenv("SUPERVISOR_TOKEN", "abc")  # inside the add-on: on unless MOONLIGHT_AUTH=off
-    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x", data_dir=tmp_path / "d")
+    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x")
     assert lan(app).get("/api/people").status_code == 401
     monkeypatch.setenv("MOONLIGHT_AUTH", "off")
-    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x", data_dir=tmp_path / "d")
+    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x")
     assert lan(app).get("/api/people").status_code == 200
-
-
-# ---------------------------------------------------------------- photos (auth off)
-
-@pytest.fixture
-def client(tmp_path):
-    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "no-dist",
-                     data_dir=tmp_path / "data", auth_enabled=False)
-    with TestClient(app) as c:
-        assert c.patch("/api/settings", json={"pin": PIN}).status_code == 200
-        yield c
-
-
-def upload(c, *files, album_id=None):
-    data = {"album_id": album_id} if album_id else None
-    return c.post("/api/photos", data=data, files=[("files", f) for f in files])
-
-
-def test_upload_resize_and_thumbnail(client, tmp_path):
-    albums = client.get("/api/albums").json()
-    assert [a["name"] for a in albums] == ["Family"]
-    r = upload(client, ("big.jpg", jpeg(3000, 2000, taken="2024:07:14 15:30:00"), "image/jpeg"))
-    assert r.status_code == 200, r.text
-    p = r.json()["uploaded"][0]
-    assert r.json()["errors"] == []
-    assert (p["width"], p["height"]) == (3000, 2000)
-    assert p["taken_at"] == "2024-07-14T15:30:00" and p["album_id"] == albums[0]["id"] and p["filename"] == "big.jpg"
-    assert p["uploaded_by"] is None
-    d = client.get(p["display_url"])
-    assert d.status_code == 200 and d.headers["content-type"] == "image/jpeg"
-    assert "immutable" in d.headers["cache-control"] and "max-age=31536000" in d.headers["cache-control"]
-    assert size_of(d.content) == (2560, 1707)
-    t = client.get(p["thumb_url"])
-    assert size_of(t.content) == (600, 400) and "immutable" in t.headers["cache-control"]
-    assert len(list((tmp_path / "data" / "photos" / "originals").iterdir())) == 1
-    assert client.get("/api/albums").json()[0]["photo_count"] == 1
-    assert client.get("/api/albums").json()[0]["cover_photo_id"] == p["id"]
-
-
-def test_exif_rotation_is_applied(client):
-    # Stored 1200x800 landscape pixels with "rotate 90 CW" (orientation 6): a portrait photo.
-    r = upload(client, ("phone.jpg", jpeg(1200, 800, orientation=6), "image/jpeg"))
-    p = r.json()["uploaded"][0]
-    assert (p["width"], p["height"]) == (800, 1200) and p["taken_at"] is None
-    im = Image.open(io.BytesIO(client.get(p["display_url"]).content)).convert("RGB")
-    assert im.size == (800, 1200)
-    # The blue marker was top-left in the stored pixels; after rotating 90 CW it is top-right.
-    assert im.getpixel((780, 20))[2] > 150 and im.getpixel((20, 20))[2] < 100
-    assert im.getexif().get(0x0112) in (None, 1)
-    assert size_of(client.get(p["thumb_url"]).content) == (400, 600)
-
-
-def test_multiple_files_png_and_bad_file(client):
-    r = upload(client, ("a.jpg", jpeg(), "image/jpeg"), ("b.png", jpeg(fmt="PNG"), "image/png"),
-               ("notes.txt", b"hello", "text/plain"))
-    assert r.status_code == 200
-    assert [p["filename"] for p in r.json()["uploaded"]] == ["a.jpg", "b.png"]
-    assert len(r.json()["errors"]) == 1 and "notes.txt" in r.json()["errors"][0]["detail"]
-    assert len(client.get("/api/photos").json()) == 2
-    r = upload(client, ("notes.txt", b"hello", "text/plain"))
-    assert r.status_code == 400 and "notes.txt" in r.json()["detail"]
-
-
-def test_size_limit(client):
-    big = b"\xff\xd8" + b"\0" * (25 * 1024 * 1024)
-    r = upload(client, ("huge.jpg", big, "image/jpeg"))
-    assert r.status_code == 413 and "25 MB" in r.json()["detail"]
-    assert client.get("/api/photos").json() == []
-
-
-def test_heic(client):
-    try:
-        import pillow_heif  # noqa: F401
-        buf = io.BytesIO()
-        Image.new("RGB", (640, 480), (10, 200, 10)).save(buf, "HEIF")
-        data = buf.getvalue()
-    except Exception:
-        data = b"\0\0\0\x18ftypheic\0\0\0\0mif1heic" + b"\0" * 100
-    r = upload(client, ("IMG_0001.HEIC", data, "image/heic"))
-    if photos_mod.HEIF_SUPPORTED:
-        assert r.status_code == 200, r.text
-        assert (r.json()["uploaded"][0]["width"], r.json()["uploaded"][0]["height"]) == (640, 480)
-    else:
-        assert r.status_code == 400 and "HEIC" in r.json()["detail"]
-
-
-def test_delete_photo(client, tmp_path):
-    p = upload(client, ("a.jpg", jpeg(), "image/jpeg")).json()["uploaded"][0]
-    assert client.request("DELETE", f"/api/photos/{p['id']}", json={"pin": "0000"}).status_code == 403
-    assert client.request("DELETE", f"/api/photos/{p['id']}", json={}).status_code == 403
-    assert client.request("DELETE", f"/api/photos/{p['id']}", json={"pin": PIN}).status_code == 200
-    assert client.get(p["thumb_url"]).status_code == 404
-    assert client.get(p["display_url"]).status_code == 404
-    assert client.get("/api/photos").json() == []
-    for sub in ("originals", "display", "thumbs"):
-        assert list((tmp_path / "data" / "photos" / sub).iterdir()) == []
-    assert client.request("DELETE", f"/api/photos/{p['id']}", json={"pin": PIN}).status_code == 404
-
-
-def test_albums_and_screensaver_settings(client):
-    trip = client.post("/api/albums", json={"name": "Summer trip"}).json()
-    assert trip["name"] == "Summer trip" and trip["photo_count"] == 0
-    assert client.post("/api/albums", json={"name": " "}).status_code == 400
-    upload(client, ("a.jpg", jpeg(), "image/jpeg"), album_id=trip["id"])
-    upload(client, ("b.jpg", jpeg(), "image/jpeg"))
-    assert upload(client, ("c.jpg", jpeg(), "image/jpeg"), album_id="al_missing").status_code == 404
-    assert [p["filename"] for p in client.get(f"/api/photos?album={trip['id']}").json()] == ["a.jpg"]
-    assert len(client.get("/api/photos").json()) == 2
-
-    s = client.get("/api/settings").json()
-    assert s["screensaver_album"] is None and s["screensaver_seconds"] == 10
-    assert s["idle_minutes"] == {"hallway": 5, "kitchen": 3, "phone": 0}
-    r = client.patch("/api/settings", json={"pin": PIN, "screensaver_album": trip["id"], "screensaver_seconds": 20,
-                                            "idle_minutes": {"kitchen": 10}})
-    assert r.status_code == 200, r.text
-    assert r.json()["screensaver_album"] == trip["id"] and r.json()["screensaver_seconds"] == 20
-    assert r.json()["idle_minutes"] == {"hallway": 5, "kitchen": 10, "phone": 0}
-    assert client.patch("/api/settings", json={"pin": PIN, "idle_minutes": 7}).json()["idle_minutes"] == \
-        {"hallway": 7, "kitchen": 7, "phone": 0}
-    assert client.patch("/api/settings", json={"pin": PIN, "screensaver_seconds": 1}).status_code == 400
-    assert client.patch("/api/settings", json={"pin": PIN, "screensaver_album": "nope"}).status_code == 400
-    assert client.patch("/api/settings", json={"pin": PIN, "idle_minutes": {"attic": 1}}).status_code == 400
-
-    assert client.request("DELETE", f"/api/albums/{trip['id']}", json={"pin": "0000"}).status_code == 403
-    r = client.request("DELETE", f"/api/albums/{trip['id']}", json={"pin": PIN})
-    assert r.json() == {"ok": True, "deleted_photos": 1}
-    assert client.get("/api/settings").json()["screensaver_album"] is None
-    assert [a["name"] for a in client.get("/api/albums").json()] == ["Family"]
-    assert len(client.get("/api/photos").json()) == 1

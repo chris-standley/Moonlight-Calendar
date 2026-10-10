@@ -106,22 +106,6 @@ CREATE TABLE IF NOT EXISTS displays (
     last_seen  TEXT,
     revoked    INTEGER NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS albums (
-    id         TEXT PRIMARY KEY,
-    name       TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS photos (
-    id          TEXT PRIMARY KEY,
-    album_id    TEXT NOT NULL,
-    filename    TEXT NOT NULL,
-    width       INTEGER NOT NULL,
-    height      INTEGER NOT NULL,
-    taken_at    TEXT,
-    uploaded_at TEXT NOT NULL,
-    uploaded_by TEXT
-);
-CREATE INDEX IF NOT EXISTS photos_album ON photos(album_id);
 CREATE TABLE IF NOT EXISTS recipes (
     id          TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
@@ -136,11 +120,11 @@ CREATE TABLE IF NOT EXISTS recipes (
 SYNC_SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id         TEXT PRIMARY KEY,
-    kind       TEXT NOT NULL,              -- icloud | caldav
+    kind       TEXT NOT NULL,              -- icloud | caldav | ics (published calendar link)
     label      TEXT NOT NULL DEFAULT '',
     username   TEXT NOT NULL,
-    password   TEXT NOT NULL,              -- never returned by the API
-    server_url TEXT NOT NULL,
+    password   TEXT NOT NULL,              -- never returned by the API (for ics: the full feed URL)
+    server_url TEXT NOT NULL,              -- for ics: a masked form of the URL, safe to show
     home_url   TEXT,                       -- discovered calendar-home-set
     status     TEXT NOT NULL DEFAULT 'ok', -- ok | auth_failed | error
     last_error TEXT,
@@ -153,17 +137,36 @@ CREATE TABLE IF NOT EXISTS calendars (
     url        TEXT NOT NULL,
     name       TEXT NOT NULL,
     color      TEXT NOT NULL DEFAULT '#8A94A6',
-    ctag       TEXT,                       -- getctag (or sync-token) seen at the last full pull
+    ctag       TEXT,                       -- getctag (or sync-token) seen at the last full pull;
+                                           -- for ics: JSON {etag, last_modified, sha} of the last fetch
     person_ids TEXT NOT NULL DEFAULT '[]',
     visible    INTEGER NOT NULL DEFAULT 1,
     read_only  INTEGER NOT NULL DEFAULT 0,
     UNIQUE(account_id, url)
 );
 """
+# Photo screensaver source (see immich.py): one row; the API key lives only in this database file.
+IMMICH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS immich (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    server_url   TEXT NOT NULL,
+    api_key      TEXT NOT NULL,             -- never returned by the API
+    album_ids    TEXT NOT NULL DEFAULT '[]',
+    favorites    INTEGER NOT NULL DEFAULT 0,
+    memories     INTEGER NOT NULL DEFAULT 0,
+    updated_at   TEXT NOT NULL
+);
+"""
 # Nullable source columns on events; NULL calendar_id = local-only event.
 EVENT_SOURCE_COLUMNS = {
     "calendar_id": "TEXT", "uid": "TEXT", "href": "TEXT", "etag": "TEXT", "raw_ics": "TEXT",
     "custom_repeat": "INTEGER NOT NULL DEFAULT 0",  # 1 = expand from raw_ics (EXDATE, overrides, COUNT...)
+    "busy": "TEXT",  # free/busy status of a synced event: busy | tentative | away | elsewhere | free
+}
+# Added to calendars after the first release (see ics_feed.py).
+CALENDAR_EXTRA_COLUMNS = {
+    "busy_auto": "INTEGER NOT NULL DEFAULT 0",  # every summary looks like a free/busy placeholder
+    "busy_blocks": "INTEGER",                   # household's choice; NULL = follow busy_auto
 }
 
 DEFAULT_SETTINGS = {
@@ -171,8 +174,7 @@ DEFAULT_SETTINGS = {
     "week_start": "monday",
     "temp_unit": "C",
     "chore_approval": False,
-    # Photo screensaver: album id (None = all photos), seconds per photo, idle minutes per layout (0 = never).
-    "screensaver_album": None,
+    # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
     "idle_minutes": {"hallway": 5, "kitchen": 3, "phone": 0},
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
@@ -231,10 +233,15 @@ def init_db() -> None:
     with connect() as c:
         c.executescript(SCHEMA)
         c.executescript(SYNC_SCHEMA)
+        c.executescript(IMMICH_SCHEMA)
         have = {r[1] for r in c.execute("PRAGMA table_info(events)")}
         for col, decl in EVENT_SOURCE_COLUMNS.items():
             if col not in have:
                 c.execute(f"ALTER TABLE events ADD COLUMN {col} {decl}")
+        have = {r[1] for r in c.execute("PRAGMA table_info(calendars)")}
+        for col, decl in CALENDAR_EXTRA_COLUMNS.items():
+            if col not in have:
+                c.execute(f"ALTER TABLE calendars ADD COLUMN {col} {decl}")
         c.execute("CREATE INDEX IF NOT EXISTS events_calendar ON events(calendar_id)")
 
 

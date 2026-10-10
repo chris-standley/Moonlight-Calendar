@@ -1,7 +1,8 @@
 # Moonlight
 
 Self-hosted family wall calendar for kitchen and hallway screens, packaged as a Home Assistant add-on.
-Version 0.2: demo family data; iCloud calendar sync (Settings > Calendars).
+Version 0.3: demo family data; iCloud calendar sync and read-only calendar links (Settings > Calendars); photo
+screensaver from Immich; speaker controls and album art through Music Assistant.
 
 | Folder | What it is |
 |---|---|
@@ -22,7 +23,7 @@ alongside the other apps there.
 1. Settings > Apps > App Store > ⋮ > Repositories, add `https://github.com/chris-standley/home-assistant-apps`.
 2. **Moonlight** > Install (⋮ > Check for updates if it is not listed yet), set the options, Start, Show in sidebar.
 3. Options: `demo` (seed the demo family into an empty database, default on), `weather_entity` (e.g. `weather.home`),
-   `require_pairing` (default on). The household timezone defaults to Home Assistant's.
+   `media_player_entity` (the kitchen speaker, e.g. `media_player.kitchen` from Music Assistant), `require_pairing` (default on). The household timezone defaults to Home Assistant's.
 4. Pair wall screens on port 8099 (below) and connect iCloud in Settings > Calendars.
 
 The app page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
@@ -63,12 +64,17 @@ the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add
 turns this off. The Home Assistant integration (`custom_components/moonlight`) pairs the same way: its setup dialog
 shows a code to enter there, and it is listed as "Home Assistant" (Integration) so it can be revoked too.
 
-## Photos
+## Photo screensaver (Immich)
 
-Photos view (rail button; also in the phone's bottom bar): albums, upload (many at once, 25 MB each), delete with
-the PIN, "Start slideshow". The idle screensaver shows the chosen album (Settings > Photo screensaver) with a
-crossfade and slow zoom; portrait photos on a landscape screen are shown whole over a blurred copy. Files live in
-`/data/photos` in the add-on. iPhone HEIC needs `pillow-heif` (installed when its wheel is available).
+The idle screensaver shows photos from your [Immich](https://immich.app) server (for example the Immich add-on on the
+same Home Assistant box) with a crossfade and slow zoom; portrait photos on a landscape screen are shown whole over a
+blurred copy. Settings > Photo screensaver > Connect Immich: enter Immich's address and an API key (Immich > Account
+Settings > API Keys, with `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on this day"), Test
+connection, then pick albums and optionally favourites and "on this day" memories. Moonlight keeps the key in its
+database and proxies the preview images, so the screens never see Immich or the key, and only photos in the chosen
+albums can be fetched. Photos only (videos are skipped). If Immich is down or nothing is chosen, the screensaver shows
+painted landscapes. Moonlight no longer stores photos itself; earlier versions kept uploads in `/data/photos`, which
+can be deleted.
 
 ## iCloud calendars
 
@@ -79,9 +85,33 @@ to iCloud first and maps each calendar to people. Credentials stay in the add-on
 CalDAV server works too (`kind: "caldav"` via the API). The sync tests run a local Radicale server:
 `pip install radicale` before `python3 -m pytest tests`. Details in `API.md`.
 
+## Calendar links (read-only)
+
+Settings > Calendars > Add calendar link shows any published ICS calendar (`webcal://` or `https://`):
+a work calendar, school term dates, bin days, public holidays. Paste the link, check it (shows how many
+events it found), name it and pick whose calendar it is. Moonlight refreshes it every 15 minutes
+(`MOONLIGHT_FEED_SECONDS`) with a conditional GET, keeps events from 60 days back to a year ahead and never
+lets them be edited. The link is a secret: it is stored only in the add-on database and the API and
+screens only ever show a masked form (`outlook.office365.com/…/calendar.ics`).
+
+Work calendar (Outlook / Microsoft 365): Outlook on the web > Settings > Calendar > Shared calendars >
+Publish a calendar, pick the calendar and **Can view when I'm busy** (or **Can view titles and
+locations**), Publish, and copy the ICS link. Some workplaces turn publishing off. A free/busy-only
+calendar (every event just "Busy", "Tentative", "Away", "Free") is shown automatically as hatched
+"Alex – busy" blocks in the calendar's colour: tentative ones lighter, free time hidden. The calendar's
+sheet in Settings can force this on or off. Outlook's Windows timezone names ("GMT Standard Time",
+"Pacific Standard Time") are resolved by the `icalendar` library, from the feed's VTIMEZONE or its
+Windows-to-IANA table. Tests: `backend/tests/test_ics_feed.py` (fixtures in `backend/tests/fixtures/`,
+served by `httpx.MockTransport`).
+
 ## Home Assistant
 
 - Weather: set the add-on option `weather_entity` (e.g. `weather.home`) to show that entity's forecast; empty = demo forecast.
+- Music: the kitchen screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
+  bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Set
+  the add-on option `media_player_entity` or pick a speaker per screen in Settings > Music. Works with any HA
+  `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
+  show a small player in the top bar only if given a speaker.
 - Entities and services: install the `moonlight` integration through HACS, see `custom_components/moonlight/README.md`.
 
 ## Your family

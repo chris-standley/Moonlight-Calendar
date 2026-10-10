@@ -2,21 +2,26 @@
 
 All JSON. Times are household-local, naive ISO strings (`2026-10-12T09:00`), dates are `YYYY-MM-DD`.
 Ids are strings. Every mutation broadcasts `{"type":"changed","topic":<topic>}` on the WebSocket `/api/ws`
-(topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`).
+(topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`, `media`).
+`media` is also sent whenever the configured speaker changes in Home Assistant (see Music).
 Errors: `{"detail": "..."}` with 400 (bad input / not enough points), 401 (screen not paired, see Screens),
-403 (wrong PIN), 404, 413 (upload too large).
+403 (wrong PIN), 404, 502 (a connected service such as iCloud or Immich can't be reached).
 
 The frontend has two interchangeable clients: HTTP (talks to this API) and Demo (in-browser
 implementation of the same contract, used for the published preview). Keep them in step.
 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
-  screensaver_album: id|null, screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone}}`
-  `screensaver_album` null = all photos; `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
-  (default `{hallway: 5, kitchen: 3, phone: 0}`).
+  screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone},
+  media_players: {hallway, kitchen, phone}}`
+  `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
+  (default `{hallway: 5, kitchen: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
-- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone, screensaver_album,
-  screensaver_seconds, idle_minutes`, plus `pin` (required) -> settings. `idle_minutes` may be partial (`{kitchen: 10}`,
+  `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each layout shows; the kitchen defaults to
+  the add-on option `media_player_entity`, the others to none.
+- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
+  screensaver_seconds, idle_minutes, media_players`, plus `pin` (required) -> settings. `media_players` may be partial
+  (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
   merged) or one number (applies to hallway and kitchen).
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
 
@@ -46,8 +51,11 @@ implementation of the same contract, used for the published preview). Keep them 
 - `PATCH /api/events/{id}` partial -> Event (edits the whole series)
 - `DELETE /api/events/{id}` -> `{ok: true}`
 
-Events also carry `calendar_id` (null = local-only), `source` (null | `"icloud"` | `"caldav"`),
-`custom_repeat` (bool) and `color` (the calendar's colour, null for local events). See Calendar sync.
+Events also carry `calendar_id` (null = local-only), `source` (null | `"icloud"` | `"caldav"` | `"ics"`),
+`custom_repeat` (bool), `color` (the calendar's colour, null for local events), `read_only` (bool: in a
+read-only calendar, edits get 403) and `busy` (null, or on calendars shown as busy blocks one of
+`"busy"|"tentative"|"away"|"elsewhere"`; `"free"` events of such calendars are left out). See Calendar sync
+and Calendar links.
 
 ## Calendar sync (iCloud / CalDAV)
 iCloud is the master. Moonlight caches events locally and polls every account (default every 120 s,
@@ -55,9 +63,10 @@ env `MOONLIGHT_SYNC_SECONDS`): one PROPFIND on the calendar home gives every cal
 changed calendars are listed and only changed events downloaded. Errors back off exponentially; an
 account whose login is rejected gets `status: "auth_failed"` and is not retried until it is reconnected.
 
-Account = `{id, kind: "icloud"|"caldav", label, username, server_url, status: "ok"|"auth_failed"|"error",
+Account = `{id, kind: "icloud"|"caldav"|"ics", label, username, server_url, status: "ok"|"auth_failed"|"error",
 last_error: str|null, last_sync: datetime|null, calendar_count}`. The password is never returned.
-Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_only: bool}`.
+Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_only: bool,
+busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks: see Calendar links).
 - `GET /api/accounts` -> `[Account]`
 - `POST /api/accounts` `{kind, username, password, server_url (caldav only), label?, pin}` -> Account.
   Logs in and discovers event calendars first: 400 if the login is rejected, 502 if the server can't be
@@ -68,7 +77,8 @@ Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_
 - `DELETE /api/accounts/{id}` `{pin}` -> `{ok: true}`. Forgets the account and its cached events (nothing
   is deleted in iCloud).
 - `POST /api/accounts/{id}/sync` -> Account (after syncing now; check `status`).
-- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{person_ids?, visible?, color?}` -> Calendar.
+- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{person_ids?, visible?, color?,
+  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic).
   Hidden calendars keep syncing but their events are left out of `GET /api/events`.
 - `GET /api/sync/status` -> `{running, interval_seconds, needs_reconnect: bool,
   accounts: [{id, label, kind, status, last_sync, last_error}]}`
@@ -88,6 +98,31 @@ Synced events:
   stored only once accepted. If the event changed on another device: 409 with a clear `detail`, and the
   latest version is already re-fetched. Read-only calendar: 400 (target) / 403 (edit). Server rejected
   the login or is unreachable: 502 (the account's `status` says which).
+
+## Calendar links (published ICS, read-only)
+An account of `kind: "ics"` is one read-only calendar from a published link (`webcal://` is fetched as
+`https://`). The full URL is a secret: it is never returned; `server_url` is a masked form
+(`outlook.office365.com/…/calendar.ics`) and `username` is `""`. Polled every 900 s
+(`MOONLIGHT_FEED_SECONDS`) with `If-None-Match` / `If-Modified-Since`; a 304 or an identical body changes
+nothing. Errors (unreachable, 401/403/404, not a calendar) set `status: "error"` with a `last_error`
+message and back off (5, 10, 20... min, at most an hour); cached events stay meanwhile. The feed is cached
+per UID (master + RECURRENCE-ID overrides), so a change replaces just the events that changed; timezones
+(including Outlook's Windows names like "GMT Standard Time") and recurrence go through the same path as
+CalDAV events. Only events touching [today - 60 days, today + 1 year] are kept; cancelled events are
+dropped.
+- `POST /api/accounts/feed-preview` `{url}` -> `{event_count, name, busy_only, masked_url}` (nothing saved;
+  400 bad URL, 502 fetch/parse error with a `detail` that never contains the URL).
+- `POST /api/accounts` `{kind: "ics", url, label?, person_ids?, color?, pin}` -> Account. Fetched first
+  (same errors); `label` defaults to the feed's X-WR-CALNAME, `color` to the first person's colour.
+  400 if the same link is already added.
+- `PATCH /api/accounts/{id}` `{pin, url?, label?}` -> Account: a new link is fetched and replaces the
+  events; `label` also renames the calendar.
+- `POST /api/accounts/{id}/sync` `{force?: bool}` -> Account (`force` skips the conditional GET).
+- Free/busy: every event gets a status from `X-MICROSOFT-CDO-BUSYSTATUS`, else a placeholder summary
+  ("Busy", "Tentative", "Free", "Away"/"Out of Office", "Working elsewhere"), else `STATUS:TENTATIVE`,
+  `TRANSP:TRANSPARENT` (= free), else busy. `busy_blocks_auto` is true when every summary is such a
+  placeholder; `busy_blocks` = the household's choice (`busy_blocks_set`) or the automatic value. On such
+  calendars events carry `busy` and screens show "Alex – busy" blocks; free ones are not returned.
 
 ## Chores
 Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon"|"evening"|"anytime", schedule, sort}`
@@ -136,6 +171,43 @@ Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
   (state + `weather.get_forecasts` daily) via the Supervisor API, cached 10 minutes; if HA can't be reached the
   last good forecast is kept for up to an hour, then it falls back to the deterministic demo forecast (`source: "demo"`).
 
+## Music (now playing on a Home Assistant speaker)
+The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a
+Sonos speaker). Screens only name their `layout` (`hallway|kitchen|phone`, default `kitchen`); the backend maps it to
+the entity in `settings.media_players`, so a screen can't read or control any other entity. Without Home Assistant
+(`SUPERVISOR_TOKEN`, or `MOONLIGHT_HA_URL` + `MOONLIGHT_HA_TOKEN`) the commands return 409.
+- `GET /api/media/now-playing?layout=kitchen` -> NowPlaying:
+  `{layout, configured: bool, entity: str|null, name, state, show: bool, title, artist, album, duration, position,
+  position_updated_at, volume: 0..1|null, muted: bool|null, shuffle: bool|null, repeat: "off"|"all"|"one"|null,
+  source, app, music_assistant: bool, has_art: bool, art_url: str|null, supports: {play_pause, previous, next, volume,
+  mute, shuffle, repeat, seek}, reachable: bool, error: str|null, server_time}`.
+  `state` is HA's (`playing`, `paused`, `idle`, `off`, `standby`, `buffering`, `unavailable`, ...). `show` = worth
+  showing: playing/paused/buffering, or idle/on with a track loaded. `duration`/`position` are seconds; the position
+  was `position` at `position_updated_at` (HA's clock), so clients tick it locally using `server_time`.
+  `supports` comes from the entity's `supported_features`. `music_assistant` = the entity has Music Assistant's
+  `mass_player_type` attribute (or `app_id: music_assistant`). If HA is unreachable the last state is kept for 90 s,
+  then `state: "unavailable", reachable: false`.
+- `GET /api/media/art?layout=kitchen&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
+  `entity_picture_local`/`entity_picture` (a `/api/media_player_proxy/...` path, with its own HA token, or a public
+  URL fetched without any token) and caches the last 12 images. `v` is a hash of the picture URL; only the layout's
+  current (or recently cached) picture is served, and no HA token ever reaches the screen. Cache-Control: immutable.
+- `POST /api/media/command` `{layout, action, value?}` -> NowPlaying. Actions -> HA `media_player` services:
+  `play_pause` (media_play_pause), `play`, `pause`, `next` (media_next_track), `previous` (media_previous_track),
+  `volume_set` (value 0..1 -> volume_level), `volume_mute` (value bool -> is_volume_muted), `shuffle_set` (bool),
+  `repeat_set` (`off|all|one`). 400 bad action/value, 409 no speaker for that layout, 502 HA unreachable or refused.
+- `GET /api/media/players` -> `[{entity_id, name, state, music_assistant}]` every `media_player` in HA (Music
+  Assistant ones first), for the Settings picker. 502 if HA can't be reached.
+- `GET /api/media/favourites?layout=kitchen` -> `[{uri, name, media_type}]` Music Assistant favourite playlists (10)
+  and radio stations (6), via `music_assistant.get_library` (favorite: true) on the first loaded Music Assistant
+  config entry; cached 15 minutes. Empty for non-Music Assistant players or on any error.
+- `POST /api/media/play` `{layout, uri}` -> NowPlaying. Plays one of those favourites with
+  `music_assistant.play_media` (enqueue `replace`); 404 if `uri` isn't a current favourite.
+
+Live updates: the backend keeps one WebSocket to HA (`ws://supervisor/core/websocket`, or `MOONLIGHT_HA_WS_URL`)
+with `subscribe_trigger` (state trigger on the configured entities). Every change broadcasts the `media` topic.
+While that socket is down (HA restarting) it polls the entities' states every 5 s and retries with back-off
+(5, 10, 20, 30, 60 s).
+
 ## Summary (for the Home Assistant integration)
 - `GET /api/summary?date=YYYY-MM-DD&now=YYYY-MM-DDTHH:MM` (both optional; default today / now) ->
   `{version, family_name, date, now, people: [PersonSummary], dinner: Meal|null, next_event: EventSummary|null, lists: [List + {items: [Item]}]}`
@@ -176,23 +248,36 @@ Display = `{id, name, layout: "hallway"|"kitchen"|"phone"|"service", created_at,
 - `DELETE /api/displays/{id}` `{pin}` -> `{ok: true}`; that token stops working on its next request.
 Tokens are 256-bit random strings, stored as SHA-256 hashes.
 
-## Photos (screensaver albums)
-Album = `{id, name, created_at, photo_count, cover_photo_id|null}`. An album "Family" always exists (created on start).
-Photo = `{id, album_id, filename, width, height, taken_at|null (EXIF DateTimeOriginal), uploaded_at, uploaded_by|null,
-display_url, thumb_url}`. `width`/`height` are after EXIF rotation. `uploaded_by` = the paired screen's name, or the HA
-user's display name via ingress. URLs are absolute paths (`/api/photos/{id}/display`); clients prefix their base path.
-- `GET /api/albums`; `POST /api/albums` `{name}` -> Album; `DELETE /api/albums/{id}` `{pin}` -> `{ok, deleted_photos}`
-  (deletes its photos; resets `screensaver_album` if it pointed there)
-- `GET /api/photos?album=<id>` -> `[Photo]` newest first by `taken_at` (else `uploaded_at`); no `album` = all
-- `POST /api/photos` multipart: `files` (repeat, max 30 per request, 25 MB each), optional `album_id` (default: first album)
-  -> `{uploaded: [Photo], errors: [{filename, detail}]}`. If nothing was stored: 413 (all too large) or 400 with the reasons.
-  Accepts anything Pillow reads (JPEG, PNG, WebP, GIF, ...) and HEIC when `pillow-heif` is installed (otherwise HEIC is
-  rejected with a message). Stored under `$MOONLIGHT_DATA/photos/` (default: next to the DB; `/data` in the add-on):
-  `originals/` (as uploaded), `display/` (max 2560px long edge, JPEG q85, EXIF orientation applied) and
-  `thumbs/` (400px short edge, max 800px long edge).
-- `DELETE /api/photos/{id}` `{pin}` -> `{ok: true}`
-- `GET /api/photos/{id}/display`, `GET /api/photos/{id}/thumb` -> image/jpeg, `Cache-Control: private, max-age=31536000, immutable`.
-  Need the same auth as the rest of `/api` (paired screens send the cookie with `<img>` requests).
+## Photo screensaver (Immich)
+The screensaver shows photos from the family's [Immich](https://immich.app) server. Moonlight keeps the server address
+and an API key, fetches the chosen albums' photo list and proxies preview images, so screens never talk to Immich or
+see the key. Moonlight stores no photos of its own. Written against the Immich API of v3.3 (works with v1.1xx-v2.x):
+`GET /api/albums`, `POST /api/search/metadata` (album contents and favourites; the flat `albumIds`/`isFavorite`/`type`
+fields, falling back to the v3.2+ `filter` form if a server rejects them), `GET /api/memories?for=<date>&type=on_this_day`
+and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already applied), all with the `x-api-key` header.
+The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
+
+ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool,
+status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error", last_error|null, last_refresh|null, photo_count, version|null}`.
+The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
+- `GET /api/immich` -> ImmichConfig
+- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?}` -> ImmichConfig. `api_key` may be left out
+  once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
+  `server_url` is the Immich address (`http://homeassistant.local:2283`; a trailing `/api` is dropped).
+- `DELETE /api/immich` `{pin}` -> `{ok: true}` (forgets address, key and choice; nothing changes in Immich)
+- `POST /api/immich/test` `{pin, server_url?, api_key?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
+  `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.
+- `GET /api/immich/albums` -> `[ImmichAlbum]` live from Immich with the saved key (404 not connected, 400/502 as above)
+- `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, url}]}`.
+  Images only (videos, trashed, hidden and locked assets skipped), from the chosen albums plus favourites / today's
+  memories if enabled, de-duplicated, at most 5000. The list is cached and refreshed every 5 minutes
+  (`MOONLIGHT_IMMICH_REFRESH` seconds); if Immich can't be reached the last good list is kept (`status: "error"`, retried
+  every minute). Empty `photos` = the screens show their built-in painted scenes. `url` is an absolute path; clients
+  prefix their base path.
+- `GET /api/immich/assets/{id}/preview` -> the preview image streamed from Immich, `Cache-Control: private, max-age=86400`.
+  404 unless the id is in the current photo list (so the proxy can't read the rest of the library), 502 if Immich fails.
+  Needs the same auth as the rest of `/api` (paired screens send the cookie with `<img>` requests).
+Changes broadcast the `photos` topic.
 
 ## Display
 - `GET /display/{hallway|kitchen|phone}` and every non-`/api` path serve the SPA `index.html`.

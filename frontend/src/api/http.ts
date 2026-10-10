@@ -1,4 +1,4 @@
-import { Api, ApiError, Photo, Topic, UploadResult } from "./types";
+import { Api, ApiError, NowPlaying, ScreensaverPhotos, Topic } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -9,11 +9,11 @@ export function httpApi(base = ""): Api {
     const headers: Record<string, string> = {};
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (body !== undefined && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     const res = await fetch(base + path, {
       method,
       headers,
-      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (res.status === 401) notifyUnpaired(); // revoked or never paired: back to the pairing screen
     if (!res.ok) {
@@ -25,7 +25,7 @@ export function httpApi(base = ""): Api {
   }
   const get = <T>(p: string) => req<T>("GET", p);
   const q = (o: Record<string, string>) => "?" + new URLSearchParams(o).toString();
-  const photoUrls = (p: Photo): Photo => ({ ...p, display_url: base + p.display_url, thumb_url: base + p.thumb_url });
+  const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;
   function connect() {
@@ -95,24 +95,29 @@ export function httpApi(base = ""): Api {
     displays: () => get("/api/displays"),
     approveDisplay: (code, name, layout, pin) => req("POST", "/api/displays/approve", { code, name, layout, pin }),
     revokeDisplay: async (id, pin) => { await req("DELETE", `/api/displays/${id}`, { pin }); },
-    albums: () => get("/api/albums"),
-    createAlbum: (name) => req("POST", "/api/albums", { name }),
-    deleteAlbum: async (id, pin) => { await req("DELETE", `/api/albums/${id}`, { pin }); },
-    photos: async (albumId) => (await get<Photo[]>("/api/photos" + (albumId ? q({ album: albumId }) : ""))).map(photoUrls),
-    async uploadPhotos(albumId, files) {
-      const form = new FormData();
-      if (albumId) form.append("album_id", albumId);
-      files.forEach((f) => form.append("files", f, f.name));
-      const r = await req<UploadResult>("POST", "/api/photos", form);
-      return { ...r, uploaded: r.uploaded.map(photoUrls) };
+    immich: () => get("/api/immich"),
+    saveImmich: (c) => req("PUT", "/api/immich", c),
+    disconnectImmich: async (pin) => { await req("DELETE", "/api/immich", { pin }); },
+    testImmich: (t) => req("POST", "/api/immich/test", t),
+    immichAlbums: () => get("/api/immich/albums"),
+    async screensaverPhotos() {
+      const r = await get<ScreensaverPhotos>("/api/screensaver/photos");
+      return { ...r, photos: r.photos.map((p) => ({ ...p, url: base + p.url })) };
     },
-    deletePhoto: async (id, pin) => { await req("DELETE", `/api/photos/${id}`, { pin }); },
     accounts: () => get("/api/accounts"),
     connectAccount: (a) => req("POST", "/api/accounts", a),
     reconnectAccount: (id, creds) => req("PATCH", `/api/accounts/${id}`, creds),
     removeAccount: async (id, pin) => { await req("DELETE", `/api/accounts/${id}`, { pin }); },
     syncAccount: (id) => req("POST", `/api/accounts/${id}/sync`),
+    previewFeed: (url) => req("POST", "/api/accounts/feed-preview", { url }),
+    addFeed: (f) => req("POST", "/api/accounts", { kind: "ics", ...f }),
+    updateFeed: (id, patch) => req("PATCH", `/api/accounts/${id}`, patch),
     calendars: () => get("/api/calendars"),
     updateCalendar: (id, patch) => req("PATCH", `/api/calendars/${id}`, patch),
+    nowPlaying: (layout) => artUrl(get("/api/media/now-playing" + q({ layout }))),
+    mediaCommand: (layout, action, value) => artUrl(req("POST", "/api/media/command", { layout, action, value })),
+    mediaPlayers: () => get("/api/media/players"),
+    mediaFavourites: (layout) => get("/api/media/favourites" + q({ layout })),
+    playFavourite: (layout, uri) => artUrl(req("POST", "/api/media/play", { layout, uri })),
   };
 }

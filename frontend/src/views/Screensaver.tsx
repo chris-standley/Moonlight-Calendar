@@ -1,10 +1,11 @@
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-import { Photo } from "../api/types";
+import { CSSProperties, useEffect, useRef, useState } from "react";
+import { SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { WeatherIcon } from "../components/icons";
+import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 
-// Fallback "photos": generated scenes, shown until the family uploads some (Photos view).
+// Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
 const SCENES = [
   { sky: ["#1B2A4A", "#4B3F72", "#E58A6B"], hills: ["#2D2240", "#3C2E52", "#4D3B63"], sun: "#FFD6A0", y: 62 },
   { sky: ["#8EC5FC", "#B7D8F5", "#F3E7D3"], hills: ["#5E8C61", "#76A36B", "#9BBF7D"], sun: "#FFF4D6", y: 30 },
@@ -30,21 +31,33 @@ function Scene({ s }: { s: (typeof SCENES)[number] }) {
   );
 }
 
-/** `album`: undefined = the screensaver album from settings, null = all photos, or an album id. */
-export function Screensaver({ onWake, album }: { onWake: () => void; album?: string | null }) {
+const REFETCH_MS = 10 * 60_000; // the server refreshes its Immich list every few minutes
+
+export function Screensaver({ onWake }: { onWake: () => void }) {
   const { settings } = useApp();
   const now = useNow(10000);
-  const albumId = album !== undefined ? album : settings?.screensaver_album ?? null;
   const seconds = Math.max(3, settings?.screensaver_seconds ?? 10);
-  const [photos] = useData((api) => api.photos(albumId), ["photos"], [albumId]);
+  const [broken, setBroken] = useState(""); // the photo list whose images wouldn't load (Immich down)
+  const [data, reload] = useData((api) => api.screensaverPhotos(), ["photos"], []);
+  useEffect(() => {
+    const t = setInterval(() => { setBroken(""); reload(); }, REFETCH_MS); // also retry photos that failed to load
+    return () => clearInterval(t);
+  }, [reload]);
+  const photos = data?.photos ?? [];
+  const listKey = photos.map((p) => p.id).join();
+  const usePhotos = photos.length > 0 && broken !== listKey;
   const t = today();
   const [events] = useData((api) => api.events(t, addDays(t, 2)), ["events"], [t]);
   const [weather] = useData((api) => api.weather(), [], []);
   const nowS = isoDT(now);
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
+  const { np } = useMedia();
+  const music = !!np?.show && np.state === "playing";
   return (
     <div className="screensaver" onClick={onWake}>
-      {photos && (photos.length ? <PhotoShow photos={photos} seconds={seconds} /> : <SceneShow seconds={seconds} />)}
+      {data && (usePhotos
+        ? <PhotoShow key={listKey} photos={photos} seconds={seconds} onFail={() => setBroken(listKey)} />
+        : <SceneShow seconds={seconds} />)}
       <div className="ss-shade" />
       <div className="ss-info">
         <div className="ss-time">{now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -52,7 +65,7 @@ export function Screensaver({ onWake, album }: { onWake: () => void; album?: str
         {weather && <div className="ss-wx"><WeatherIcon condition={weather.current.condition} size={36} /> {weather.current.temp}°</div>}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
-      <div className="ss-family">{settings?.family_name}</div>
+      {music ? <ScreensaverNowPlaying /> : <div className="ss-family">{settings?.family_name}</div>}
     </div>
   );
 }
@@ -69,27 +82,46 @@ function shuffle<T>(xs: T[]): T[] {
   return a;
 }
 
-interface Slide { key: number; photo: Photo }
+interface Slide { key: number; photo: SlidePhoto; aspect: number }
 
-/** Uploaded photos: shuffled, crossfading, with a slow Ken Burns zoom (off for prefers-reduced-motion). */
-function PhotoShow({ photos, seconds }: { photos: Photo[]; seconds: number }) {
+/** Load and decode an image; resolves with its aspect ratio (from the pixels, so EXIF rotation is already in it). */
+function load(url: string): Promise<number> {
+  const img = new Image();
+  img.src = url;
+  return img.decode().then(() => img.naturalWidth / Math.max(1, img.naturalHeight));
+}
+
+/** Immich photos: shuffled, crossfading, with a slow Ken Burns zoom (off for prefers-reduced-motion).
+ * A photo that won't load is skipped; if several in a row fail, `onFail` hands back to the painted scenes. */
+function PhotoShow({ photos, seconds, onFail }: { photos: SlidePhoto[]; seconds: number; onFail: () => void }) {
   const box = useRef<HTMLDivElement>(null);
-  const order = useMemo(() => shuffle(photos), [photos]);
-  const [slides, setSlides] = useState<Slide[]>(() => [{ key: 0, photo: order[0] }]);
-  useEffect(() => { setSlides([{ key: Date.now(), photo: order[0] }]); }, [order]);
+  const [order] = useState(() => shuffle(photos)); // keyed by the list's ids, so a refetch doesn't restart it
+  const [slides, setSlides] = useState<Slide[]>([]);
+  const failRef = useRef(onFail);
+  failRef.current = onFail;
   useEffect(() => {
-    if (order.length < 2) return;
-    let n = 0, alive = true;
-    const t = setInterval(() => {
+    let n = -1, alive = true, failures = 0, busy = false, shown = false;
+    const giveUp = Math.min(3, order.length);
+    // Swap only once the next photo is decoded, so the crossfade never shows a half-loaded image.
+    const advance = () => {
+      if (busy || !alive) return;
+      busy = true;
       n = (n + 1) % order.length;
       const photo = order[n];
-      const img = new Image();
-      img.src = photo.display_url;
-      // Swap only once the next photo is decoded, so the crossfade never shows a half-loaded image.
-      img.decode().catch(() => undefined).then(() => {
-        if (alive) setSlides((s) => [...s.slice(-1), { key: Date.now(), photo }]);
+      load(photo.url).then((aspect) => {
+        failures = 0;
+        shown = true;
+        busy = false;
+        if (alive) setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect }]);
+      }, () => {
+        busy = false;
+        if (++failures >= giveUp) { if (alive) failRef.current(); }
+        else if (!shown) advance(); // nothing on screen yet: try the next one straight away
       });
-    }, seconds * 1000);
+    };
+    advance();
+    if (order.length < 2) return () => { alive = false; };
+    const t = setInterval(advance, seconds * 1000);
     return () => { alive = false; clearInterval(t); };
   }, [order, seconds]);
   const el = box.current;
@@ -97,14 +129,13 @@ function PhotoShow({ photos, seconds }: { photos: Photo[]; seconds: number }) {
   return (
     <div className="ss-photos" ref={box}>
       {slides.map((s, i) => {
-        const aspect = s.photo.width / Math.max(1, s.photo.height);
         // A photo much taller (or wider) than the screen is shown whole over a blurred copy of itself.
-        const fit = Math.max(aspect / screenAspect, screenAspect / aspect) > 1.4 ? "contain" : "cover";
+        const fit = Math.max(s.aspect / screenAspect, screenAspect / s.aspect) > 1.4 ? "contain" : "cover";
         const style = { "--kb": `${seconds + 2}s`, "--ox": `${(s.key % 3) * 50}%`, "--oy": `${(s.key % 2) * 100}%` } as CSSProperties;
         return (
           <div key={s.key} className={`ss-photo ${fit}` + (i === slides.length - 1 ? " top" : "")} style={style}>
-            {fit === "contain" && <img className="ss-blur" src={s.photo.display_url} alt="" />}
-            <img className="ss-img" src={s.photo.display_url} alt="" />
+            {fit === "contain" && <img className="ss-blur" src={s.photo.url} alt="" />}
+            <img className="ss-img" src={s.photo.url} alt="" />
           </div>
         );
       })}
