@@ -9,10 +9,11 @@ import { EventDetail, EventForm } from "./EventSheets";
 import { ListPanel } from "./ListsView";
 import { SLOTS } from "./MealsView";
 import { FamilyPrompt } from "./FamilySettings";
+import { NowPlayingCard } from "./NowPlaying";
 
 /** Kitchen home: today + tomorrow, meals, kids' chores, groceries. */
 export function TodayView({ go }: { go: (tab: string) => void }) {
-  const { people } = useApp();
+  const { people, layout } = useApp();
   const t = today();
   const [events] = useData((api) => api.events(t, addDays(t, 2)), ["events"], [t]);
   const [meals] = useData((api) => api.meals(t, addDays(t, 7)), ["meals"], [t]);
@@ -70,10 +71,13 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
           </div>
         </section>
       </div>
-      <section className="panel">
-        <h2 className="panel-title" onClick={() => go("lists")}>{grocery ? `${grocery.emoji} ${grocery.name}` : "Lists"}</h2>
-        {grocery ? <ListPanel list={grocery} compact /> : lists && <div className="sched-none">No shopping list yet. Make one in Lists.</div>}
-      </section>
+      <div className="today-right">
+        {layout === "kitchen" && <NowPlayingCard />}
+        <section className="panel">
+          <h2 className="panel-title" onClick={() => go("lists")}>{grocery ? `${grocery.emoji} ${grocery.name}` : "Lists"}</h2>
+          {grocery ? <ListPanel list={grocery} compact /> : lists && <div className="sched-none">No shopping list yet. Make one in Lists.</div>}
+        </section>
+      </div>
       {open && <EventDetail occ={open} onClose={() => setOpen(null)} onEdit={() => { setEdit(open); setOpen(null); }} />}
       {edit && <EventForm id={edit.id} initial={edit} onClose={() => setEdit(null)} />}
     </div>

@@ -7,6 +7,11 @@ configuration:
     description: >-
       A Home Assistant weather entity to show on the displays, e.g. weather.home or weather.forecast_home.
       Leave empty to use the built-in demo forecast.
+  media_player_entity:
+    name: Kitchen speaker
+    description: >-
+      A media_player entity for the kitchen screen's Now playing card, e.g. media_player.kitchen from the Music
+      Assistant integration. Other screens can be given a speaker in Moonlight (Settings > Music).
   require_pairing:
     name: Require pairing
     description: >-

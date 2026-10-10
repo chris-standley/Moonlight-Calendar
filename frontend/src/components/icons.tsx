@@ -45,6 +45,17 @@ export const IconCart = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="
 export const IconFlame = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.6 3-5.6 3.6-9.3 2.4 1.4 3.4 3.4 3.4 5.2 1-.6 1.8-1.6 2-2.9 2 1.7 4 4.2 4 7 0 3.6-2.6 6.2-6.5 6.2z" /></svg>;
 export const IconLock = ({ size, ...p }: P) => <svg {...base(size, p)}><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 018 0v2.5" /></svg>;
 
+// Playback (filled glyphs read better at a glance on a wall screen).
+export const IconPlay = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M7.5 4.8v14.4a1 1 0 001.5.9l11.3-7.2a1 1 0 000-1.7L9 4a1 1 0 00-1.5.8z" fill="currentColor" /></svg>;
+export const IconPause = ({ size, ...p }: P) => <svg {...base(size, p)}><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" /><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" /></svg>;
+export const IconNext = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M5 5.6v12.8a.9.9 0 001.4.8l9.4-6.4a.9.9 0 000-1.5L6.4 4.8A.9.9 0 005 5.6z" fill="currentColor" /><path d="M19 5v14" /></svg>;
+export const IconPrev = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M19 5.6v12.8a.9.9 0 01-1.4.8l-9.4-6.4a.9.9 0 010-1.5l9.4-6.5a.9.9 0 011.4.8z" fill="currentColor" /><path d="M5 5v14" /></svg>;
+export const IconVolume = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" /><path d="M15.5 9a4 4 0 010 6M18 6.5a7.5 7.5 0 010 11" /></svg>;
+export const IconMute = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" /><path d="M16 9.5l5 5M21 9.5l-5 5" /></svg>;
+export const IconShuffle = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M3 7h3.5c4.5 0 6.5 10 11 10H21M3 17h3.5c1.6 0 2.8-1.3 3.8-3M13.7 10c1-1.7 2.2-3 3.8-3H21" /><path d="M18.5 4.5L21 7l-2.5 2.5M18.5 14.5L21 17l-2.5 2.5" /></svg>;
+export const IconRepeatOne = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M17 2.5l3 3-3 3" /><path d="M4 11.5v-1a5 5 0 015-5h11M7 21.5l-3-3 3-3" /><path d="M20 12.5v1a5 5 0 01-5 5H4" /><path d="M11 10.5l1.3-.8v4.8" strokeWidth="1.6" /></svg>;
+export const IconMusic = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M9 18V5.5l11-2V16" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></svg>;
+
 /** Crescent logo mark. */
 export const Logo = ({ size = 32 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>

@@ -28,4 +28,5 @@ options:
 schema:
   demo: bool
   weather_entity: str?
+  media_player_entity: str?
   require_pairing: bool

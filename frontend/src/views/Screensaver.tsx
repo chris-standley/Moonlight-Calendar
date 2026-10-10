@@ -3,6 +3,7 @@ import { SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { WeatherIcon } from "../components/icons";
+import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 
 // Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
 const SCENES = [
@@ -50,6 +51,8 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const [weather] = useData((api) => api.weather(), [], []);
   const nowS = isoDT(now);
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
+  const { np } = useMedia();
+  const music = !!np?.show && np.state === "playing";
   return (
     <div className="screensaver" onClick={onWake}>
       {data && (usePhotos
@@ -62,7 +65,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
         {weather && <div className="ss-wx"><WeatherIcon condition={weather.current.condition} size={36} /> {weather.current.temp}°</div>}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
-      <div className="ss-family">{settings?.family_name}</div>
+      {music ? <ScreensaverNowPlaying /> : <div className="ss-family">{settings?.family_name}</div>}
     </div>
   );
 }

@@ -16,6 +16,14 @@ if bashio::config.has_value 'weather_entity'; then
 fi
 export MOONLIGHT_WEATHER_ENTITY
 
+# Speaker for the kitchen screen's "Now playing" card (e.g. media_player.kitchen from Music Assistant).
+# Other screens can be given a player in Moonlight's Settings > Music.
+export MOONLIGHT_MEDIA_ENTITY=""
+if bashio::config.has_value 'media_player_entity'; then
+    MOONLIGHT_MEDIA_ENTITY="$(bashio::config 'media_player_entity')"
+fi
+export MOONLIGHT_MEDIA_ENTITY
+
 # Wall screens on the LAN port must be paired (Settings > Screens); HA ingress is always allowed.
 if bashio::config.false 'require_pairing'; then
     export MOONLIGHT_AUTH=off
@@ -37,7 +45,7 @@ else
 fi
 
 export MOONLIGHT_DB="${MOONLIGHT_DB:-/data/moonlight.db}"
-bashio::log.info "Starting Moonlight on port ${MOONLIGHT_PORT:-8099} (db: ${MOONLIGHT_DB}, demo: ${MOONLIGHT_DEMO}, weather: ${MOONLIGHT_WEATHER_ENTITY:-demo}, pairing: ${MOONLIGHT_AUTH}, timezone: ${MOONLIGHT_TIMEZONE:-default})"
+bashio::log.info "Starting Moonlight on port ${MOONLIGHT_PORT:-8099} (db: ${MOONLIGHT_DB}, demo: ${MOONLIGHT_DEMO}, weather: ${MOONLIGHT_WEATHER_ENTITY:-demo}, music: ${MOONLIGHT_MEDIA_ENTITY:-none}, pairing: ${MOONLIGHT_AUTH}, timezone: ${MOONLIGHT_TIMEZONE:-default})"
 
 cd /app/backend
 exec python3 -m moonlight

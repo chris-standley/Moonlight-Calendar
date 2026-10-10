@@ -1,4 +1,4 @@
-import { Api, ApiError, ScreensaverPhotos, Topic } from "./types";
+import { Api, ApiError, NowPlaying, ScreensaverPhotos, Topic } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -25,6 +25,7 @@ export function httpApi(base = ""): Api {
   }
   const get = <T>(p: string) => req<T>("GET", p);
   const q = (o: Record<string, string>) => "?" + new URLSearchParams(o).toString();
+  const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;
   function connect() {
@@ -110,5 +111,10 @@ export function httpApi(base = ""): Api {
     syncAccount: (id) => req("POST", `/api/accounts/${id}/sync`),
     calendars: () => get("/api/calendars"),
     updateCalendar: (id, patch) => req("PATCH", `/api/calendars/${id}`, patch),
+    nowPlaying: (layout) => artUrl(get("/api/media/now-playing" + q({ layout }))),
+    mediaCommand: (layout, action, value) => artUrl(req("POST", "/api/media/command", { layout, action, value })),
+    mediaPlayers: () => get("/api/media/players"),
+    mediaFavourites: (layout) => get("/api/media/favourites" + q({ layout })),
+    playFavourite: (layout, uri) => artUrl(req("POST", "/api/media/play", { layout, uri })),
   };
 }
