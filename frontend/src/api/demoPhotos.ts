@@ -1,9 +1,10 @@
-// Demo-mode screens and photos. Sample photos are painted on a canvas at runtime (so the single-file preview
-// stays small); uploads are read with FileReader and kept in memory only (too big for localStorage).
-import { Album, Api, ApiError, Display, Photo, Topic, UploadResult } from "./types";
+// Demo-mode screens and a simulated Immich server for the photo screensaver. Sample photos are painted on a canvas
+// at runtime (so the single-file preview stays small). Kept in memory only.
+import { Api, ApiError, Display, ImmichAlbum, ImmichConfig, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
-type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "albums" | "createAlbum" | "deleteAlbum" | "photos" | "uploadPhotos" | "deletePhoto">;
+type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "immich" | "saveImmich" | "disconnectImmich" |
+  "testImmich" | "immichAlbums" | "screensaverPhotos">;
 
 interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number }
 const LOOKS: Look[] = [
@@ -54,22 +55,16 @@ function paint(look: Look, w: number, h: number, seed: number): HTMLCanvasElemen
   return c;
 }
 
-function scaled(src: CanvasImageSource, w: number, h: number, maxLong: number, minShort = 0): string {
-  const s = Math.min(1, maxLong / Math.max(w, h), minShort ? Math.max(minShort / Math.min(w, h), 0) : 1);
-  const c = document.createElement("canvas");
-  c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
-  c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", 0.85);
-}
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function readFile(f: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onerror = () => reject(new Error("read"));
-    fr.onload = () => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("decode")); img.src = String(fr.result); };
-    fr.readAsDataURL(f);
-  });
-}
+// The pretend Immich library: which sample photos are in which album, favourites and "on this day".
+const ALBUMS: (ImmichAlbum & { looks: number[] })[] = [
+  { id: "5d0c7c52-3f7e-4d55-9a8e-0f6a1b2c3d41", name: "Family", asset_count: 7, shared: true, looks: [0, 1, 2, 3, 4, 5, 6] },
+  { id: "8a1f2e33-6b4c-4e9a-8d17-2c3b4a5d6e72", name: "Garden", asset_count: 3, shared: false, looks: [1, 4, 5] },
+  { id: "c47b9d10-2e8f-4a63-b5c4-7d8e9f0a1b23", name: "Summer holiday", asset_count: 3, shared: false, looks: [0, 3, 6] },
+];
+const FAVOURITES = [2, 3];
+const ON_THIS_DAY = [5];
 
 export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]) => void): Extras {
   const ago = (min: number) => isoDT(new Date(Date.now() - min * 60_000));
@@ -77,32 +72,51 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     { id: "ds_hall", name: "Hallway", layout: "hallway", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
     { id: "ds_kitchen", name: "Kitchen", layout: "kitchen", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
   ];
-  let albums: Album[] = [{ id: "al_family", name: "Family", created_at: ago(60 * 24 * 30), photo_count: 0, cover_photo_id: null }];
-  let photos: Photo[] | null = null;
   let n = 0;
   const uid = (p: string) => `${p}_${Date.now().toString(36)}${(n++).toString(36)}`;
   const find = <T extends { id: string }>(xs: T[], id: string) => { const x = xs.find((a) => a.id === id); if (!x) throw new ApiError(404, "Not found"); return x; };
 
-  function all(): Photo[] {
-    if (photos) return photos;
+  // Starts connected to one album, so the preview's screensaver shows photos. Any address and key work;
+  // the key "wrong" is rejected and an address containing "offline" can't be reached.
+  let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean } | null =
+    { server_url: "http://homeassistant.local:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
+  let refreshed = ago(2);
+  let painted: SlidePhoto[] | null = null;
+  function library(): SlidePhoto[] {
+    if (painted) return painted;
     const t = today();
-    photos = LOOKS.map((look, i) => {
+    painted = LOOKS.map((look, i) => {
       const w = look.w ?? 1800, h = look.h ?? 1200;
-      const c = paint(look, w, h, 1000 + i * 7919);
-      const id = `ph_demo${i}`;
       return {
-        id, album_id: "al_family", filename: look.name, width: w, height: h,
-        taken_at: `${addDays(t, -look.ago)}T${String(9 + i).padStart(2, "0")}:30:00`, uploaded_at: ago(60 * 24 * 7 + i),
-        uploaded_by: i % 2 ? "Kitchen" : "Mum", display_url: c.toDataURL("image/jpeg", 0.85), thumb_url: scaled(c, w, h, 800, 400),
+        id: `0000000${i}-demo-4000-8000-00000000000${i}`, width: w, height: h,
+        taken_at: `${addDays(t, -look.ago)}T${String(9 + i).padStart(2, "0")}:30:00`,
+        url: paint(look, w, h, 1000 + i * 7919).toDataURL("image/jpeg", 0.85),
       };
     });
-    return photos;
+    return painted;
   }
-  const albumOut = (a: Album): Album => {
-    const ps = all().filter((p) => p.album_id === a.id);
-    return { ...a, photo_count: ps.length, cover_photo_id: ps[0]?.id ?? null };
+  const chosen = (): SlidePhoto[] => {
+    if (!cfg) return [];
+    const idx = new Set<number>();
+    for (const id of cfg.album_ids) ALBUMS.find((a) => a.id === id)?.looks.forEach((i) => idx.add(i));
+    if (cfg.favorites) FAVOURITES.forEach((i) => idx.add(i));
+    if (cfg.memories) ON_THIS_DAY.forEach((i) => idx.add(i));
+    return [...idx].sort().map((i) => library()[i]);
   };
-  const sortKey = (p: Photo) => p.taken_at ?? p.uploaded_at;
+  const out = (): ImmichConfig => cfg
+    ? { configured: true, server_url: cfg.server_url, key_set: true, album_ids: [...cfg.album_ids], favorites: cfg.favorites,
+        memories: cfg.memories, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
+    : { configured: false, server_url: "", key_set: false, album_ids: [], favorites: false, memories: false, status: "unconfigured",
+        last_error: null, last_refresh: null, photo_count: 0, version: null };
+  const albums = () => ALBUMS.map(({ looks, ...a }) => ({ ...a }));
+  async function check(url: string, key: string) {
+    await wait(700); // "talking to Immich"
+    if (!/^https?:\/\/[^/\s]+/.test(url)) throw new ApiError(400, "server_url must look like http://homeassistant.local:2283");
+    if (!key.trim()) throw new ApiError(400, "api_key is required");
+    if (url.includes("offline")) throw new ApiError(502, `Couldn't reach Immich at ${url} (ConnectError)`);
+    if (key.trim() === "wrong") throw new ApiError(400, "Immich didn't accept the API key");
+  }
+  const clean = (u: string) => u.trim().replace(/\/+$/, "").replace(/\/api$/, "");
 
   return {
     displays: async () => displays.map((d) => ({ ...d })),
@@ -116,40 +130,30 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
       return { ...d };
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
-    albums: async () => albums.map(albumOut),
-    async createAlbum(name) {
-      const a: Album = { id: uid("al"), name, created_at: ago(0), photo_count: 0, cover_photo_id: null };
-      albums = [...albums, a]; emit("photos"); return albumOut(a);
-    },
-    async deleteAlbum(id, pin) {
-      checkPin(pin); find(albums, id);
-      albums = albums.filter((a) => a.id !== id);
-      photos = all().filter((p) => p.album_id !== id);
-      if (!albums.length) albums = [{ id: uid("al"), name: "Family", created_at: ago(0), photo_count: 0, cover_photo_id: null }];
+    immich: async () => out(),
+    async saveImmich({ pin, server_url, api_key, album_ids, favorites, memories }) {
+      checkPin(pin);
+      const url = server_url !== undefined ? clean(server_url) : cfg?.server_url ?? "";
+      const key = api_key ? api_key.trim() : cfg?.key ?? "";
+      if (!cfg || url !== cfg.server_url || key !== cfg.key) await check(url, key);
+      cfg = { server_url: url, key, album_ids: album_ids ?? cfg?.album_ids ?? [], favorites: favorites ?? cfg?.favorites ?? false,
+        memories: memories ?? cfg?.memories ?? false };
+      refreshed = ago(0);
       emit("photos");
+      return out();
     },
-    photos: async (albumId) => all().filter((p) => !albumId || p.album_id === albumId).sort((a, b) => sortKey(b).localeCompare(sortKey(a))),
-    async uploadPhotos(albumId, files): Promise<UploadResult> {
-      const target = albumId ?? albums[0].id;
-      find(albums, target);
-      const out: UploadResult = { uploaded: [], errors: [] };
-      for (const f of files) {
-        if (f.size > 25 * 1024 * 1024) { out.errors.push({ filename: f.name, detail: `${f.name} is larger than 25 MB` }); continue; }
-        try {
-          const img = await readFile(f);
-          const w = img.naturalWidth, h = img.naturalHeight;
-          const p: Photo = {
-            id: uid("ph"), album_id: target, filename: f.name, width: w, height: h, taken_at: null, uploaded_at: ago(0),
-            uploaded_by: "This screen", display_url: scaled(img, w, h, 2560), thumb_url: scaled(img, w, h, 800, 400),
-          };
-          photos = [p, ...all()];
-          out.uploaded.push(p);
-        } catch { out.errors.push({ filename: f.name, detail: `${f.name}: not an image this browser can read` }); }
-      }
-      if (!out.uploaded.length) throw new ApiError(400, out.errors.map((e) => e.detail).join("; "));
-      emit("photos");
-      return out;
+    async disconnectImmich(pin) { checkPin(pin); cfg = null; emit("photos"); },
+    async testImmich({ pin, server_url, api_key }) {
+      checkPin(pin);
+      const url = server_url ? clean(server_url) : cfg?.server_url;
+      const key = api_key || cfg?.key;
+      if (!url || !key) throw new ApiError(400, "Enter the Immich address and an API key");
+      await check(url, key);
+      return { ok: true, version: "3.3.1", albums: albums() };
     },
-    async deletePhoto(id, pin) { checkPin(pin); find(all(), id); photos = all().filter((p) => p.id !== id); emit("photos"); },
+    async immichAlbums() { if (!cfg) throw new ApiError(404, "Immich isn't connected"); return albums(); },
+    screensaverPhotos: async () => cfg
+      ? { source: "immich", status: "ok", photos: chosen() }
+      : { source: "none", status: "unconfigured", photos: [] },
   };
 }

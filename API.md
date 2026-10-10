@@ -4,18 +4,18 @@ All JSON. Times are household-local, naive ISO strings (`2026-10-12T09:00`), dat
 Ids are strings. Every mutation broadcasts `{"type":"changed","topic":<topic>}` on the WebSocket `/api/ws`
 (topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`).
 Errors: `{"detail": "..."}` with 400 (bad input / not enough points), 401 (screen not paired, see Screens),
-403 (wrong PIN), 404, 413 (upload too large).
+403 (wrong PIN), 404, 502 (a connected service such as iCloud or Immich can't be reached).
 
 The frontend has two interchangeable clients: HTTP (talks to this API) and Demo (in-browser
 implementation of the same contract, used for the published preview). Keep them in step.
 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
-  screensaver_album: id|null, screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone}}`
-  `screensaver_album` null = all photos; `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
-  (default `{hallway: 5, kitchen: 3, phone: 0}`).
+  screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone}}`
+  `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
+  (default `{hallway: 5, kitchen: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
-- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone, screensaver_album,
+- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
   screensaver_seconds, idle_minutes`, plus `pin` (required) -> settings. `idle_minutes` may be partial (`{kitchen: 10}`,
   merged) or one number (applies to hallway and kitchen).
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
@@ -176,23 +176,36 @@ Display = `{id, name, layout: "hallway"|"kitchen"|"phone"|"service", created_at,
 - `DELETE /api/displays/{id}` `{pin}` -> `{ok: true}`; that token stops working on its next request.
 Tokens are 256-bit random strings, stored as SHA-256 hashes.
 
-## Photos (screensaver albums)
-Album = `{id, name, created_at, photo_count, cover_photo_id|null}`. An album "Family" always exists (created on start).
-Photo = `{id, album_id, filename, width, height, taken_at|null (EXIF DateTimeOriginal), uploaded_at, uploaded_by|null,
-display_url, thumb_url}`. `width`/`height` are after EXIF rotation. `uploaded_by` = the paired screen's name, or the HA
-user's display name via ingress. URLs are absolute paths (`/api/photos/{id}/display`); clients prefix their base path.
-- `GET /api/albums`; `POST /api/albums` `{name}` -> Album; `DELETE /api/albums/{id}` `{pin}` -> `{ok, deleted_photos}`
-  (deletes its photos; resets `screensaver_album` if it pointed there)
-- `GET /api/photos?album=<id>` -> `[Photo]` newest first by `taken_at` (else `uploaded_at`); no `album` = all
-- `POST /api/photos` multipart: `files` (repeat, max 30 per request, 25 MB each), optional `album_id` (default: first album)
-  -> `{uploaded: [Photo], errors: [{filename, detail}]}`. If nothing was stored: 413 (all too large) or 400 with the reasons.
-  Accepts anything Pillow reads (JPEG, PNG, WebP, GIF, ...) and HEIC when `pillow-heif` is installed (otherwise HEIC is
-  rejected with a message). Stored under `$MOONLIGHT_DATA/photos/` (default: next to the DB; `/data` in the add-on):
-  `originals/` (as uploaded), `display/` (max 2560px long edge, JPEG q85, EXIF orientation applied) and
-  `thumbs/` (400px short edge, max 800px long edge).
-- `DELETE /api/photos/{id}` `{pin}` -> `{ok: true}`
-- `GET /api/photos/{id}/display`, `GET /api/photos/{id}/thumb` -> image/jpeg, `Cache-Control: private, max-age=31536000, immutable`.
-  Need the same auth as the rest of `/api` (paired screens send the cookie with `<img>` requests).
+## Photo screensaver (Immich)
+The screensaver shows photos from the family's [Immich](https://immich.app) server. Moonlight keeps the server address
+and an API key, fetches the chosen albums' photo list and proxies preview images, so screens never talk to Immich or
+see the key. Moonlight stores no photos of its own. Written against the Immich API of v3.3 (works with v1.1xx-v2.x):
+`GET /api/albums`, `POST /api/search/metadata` (album contents and favourites; the flat `albumIds`/`isFavorite`/`type`
+fields, falling back to the v3.2+ `filter` form if a server rejects them), `GET /api/memories?for=<date>&type=on_this_day`
+and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already applied), all with the `x-api-key` header.
+The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
+
+ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool,
+status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error", last_error|null, last_refresh|null, photo_count, version|null}`.
+The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
+- `GET /api/immich` -> ImmichConfig
+- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?}` -> ImmichConfig. `api_key` may be left out
+  once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
+  `server_url` is the Immich address (`http://homeassistant.local:2283`; a trailing `/api` is dropped).
+- `DELETE /api/immich` `{pin}` -> `{ok: true}` (forgets address, key and choice; nothing changes in Immich)
+- `POST /api/immich/test` `{pin, server_url?, api_key?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
+  `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.
+- `GET /api/immich/albums` -> `[ImmichAlbum]` live from Immich with the saved key (404 not connected, 400/502 as above)
+- `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, url}]}`.
+  Images only (videos, trashed, hidden and locked assets skipped), from the chosen albums plus favourites / today's
+  memories if enabled, de-duplicated, at most 5000. The list is cached and refreshed every 5 minutes
+  (`MOONLIGHT_IMMICH_REFRESH` seconds); if Immich can't be reached the last good list is kept (`status: "error"`, retried
+  every minute). Empty `photos` = the screens show their built-in painted scenes. `url` is an absolute path; clients
+  prefix their base path.
+- `GET /api/immich/assets/{id}/preview` -> the preview image streamed from Immich, `Cache-Control: private, max-age=86400`.
+  404 unless the id is in the current photo list (so the proxy can't read the rest of the library), 502 if Immich fails.
+  Needs the same auth as the rest of `/api` (paired screens send the cookie with `<img>` requests).
+Changes broadcast the `photos` topic.
 
 ## Display
 - `GET /display/{hallway|kitchen|phone}` and every non-`/api` path serve the SPA `index.html`.

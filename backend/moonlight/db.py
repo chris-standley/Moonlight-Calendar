@@ -106,22 +106,6 @@ CREATE TABLE IF NOT EXISTS displays (
     last_seen  TEXT,
     revoked    INTEGER NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS albums (
-    id         TEXT PRIMARY KEY,
-    name       TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS photos (
-    id          TEXT PRIMARY KEY,
-    album_id    TEXT NOT NULL,
-    filename    TEXT NOT NULL,
-    width       INTEGER NOT NULL,
-    height      INTEGER NOT NULL,
-    taken_at    TEXT,
-    uploaded_at TEXT NOT NULL,
-    uploaded_by TEXT
-);
-CREATE INDEX IF NOT EXISTS photos_album ON photos(album_id);
 CREATE TABLE IF NOT EXISTS recipes (
     id          TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
@@ -160,6 +144,18 @@ CREATE TABLE IF NOT EXISTS calendars (
     UNIQUE(account_id, url)
 );
 """
+# Photo screensaver source (see immich.py): one row; the API key lives only in this database file.
+IMMICH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS immich (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    server_url   TEXT NOT NULL,
+    api_key      TEXT NOT NULL,             -- never returned by the API
+    album_ids    TEXT NOT NULL DEFAULT '[]',
+    favorites    INTEGER NOT NULL DEFAULT 0,
+    memories     INTEGER NOT NULL DEFAULT 0,
+    updated_at   TEXT NOT NULL
+);
+"""
 # Nullable source columns on events; NULL calendar_id = local-only event.
 EVENT_SOURCE_COLUMNS = {
     "calendar_id": "TEXT", "uid": "TEXT", "href": "TEXT", "etag": "TEXT", "raw_ics": "TEXT",
@@ -171,8 +167,7 @@ DEFAULT_SETTINGS = {
     "week_start": "monday",
     "temp_unit": "C",
     "chore_approval": False,
-    # Photo screensaver: album id (None = all photos), seconds per photo, idle minutes per layout (0 = never).
-    "screensaver_album": None,
+    # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
     "idle_minutes": {"hallway": 5, "kitchen": 3, "phone": 0},
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
@@ -231,6 +226,7 @@ def init_db() -> None:
     with connect() as c:
         c.executescript(SCHEMA)
         c.executescript(SYNC_SCHEMA)
+        c.executescript(IMMICH_SCHEMA)
         have = {r[1] for r in c.execute("PRAGMA table_info(events)")}
         for col, decl in EVENT_SOURCE_COLUMNS.items():
             if col not in have:

@@ -34,7 +34,16 @@ Settings > Calendars > Connect iCloud with an Apple ID and an app-specific passw
 (account.apple.com > Sign-In and Security > App-Specific Passwords), then choose which person each calendar
 belongs to. Moonlight syncs every 2 minutes and writes changes made on the screens back to iCloud.
 
+## Photo screensaver
+
+The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter
+Immich's address (e.g. `http://homeassistant.local:2283`) and an API key made in Immich (Account Settings > API Keys;
+permissions `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on this day"), test the connection and
+choose albums. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
+painted landscapes.
+
 ## Data
 
-The database is `/data/moonlight.db` and uploaded photos are in `/data/photos`; both are part of the add-on's
-backups and survive updates and restarts.
+The database is `/data/moonlight.db` (including the Immich address and API key); it is part of the add-on's backups and
+survives updates and restarts. Older versions kept uploaded photos in `/data/photos`; Moonlight no longer uses that
+folder.

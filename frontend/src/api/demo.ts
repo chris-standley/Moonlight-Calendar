@@ -374,7 +374,7 @@ export function demoApi(): Api {
       return r.ingredients.length;
     },
     weather: async () => demoWeather(),
-    ...demoExtras(checkPin, emit), // screens + photos, kept in memory
+    ...demoExtras(checkPin, emit), // screens + simulated Immich, kept in memory
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {
       checkPin(a.pin);
