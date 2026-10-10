@@ -1,7 +1,7 @@
 # Moonlight
 
 Self-hosted family wall calendar for kitchen and hallway screens, packaged as a Home Assistant add-on.
-Version 0.2: demo family data; iCloud calendar sync (Settings > Calendars).
+Version 0.2: demo family data; iCloud calendar sync and read-only calendar links (Settings > Calendars).
 
 | Folder | What it is |
 |---|---|
@@ -75,6 +75,25 @@ Settings > Calendars > Connect iCloud with each adult's Apple ID and an app-spec
 to iCloud first and maps each calendar to people. Credentials stay in the add-on database. Any other
 CalDAV server works too (`kind: "caldav"` via the API). The sync tests run a local Radicale server:
 `pip install radicale` before `python3 -m pytest tests`. Details in `API.md`.
+
+## Calendar links (read-only)
+
+Settings > Calendars > Add calendar link shows any published ICS calendar (`webcal://` or `https://`):
+a work calendar, school term dates, bin days, public holidays. Paste the link, check it (shows how many
+events it found), name it and pick whose calendar it is. Moonlight refreshes it every 15 minutes
+(`MOONLIGHT_FEED_SECONDS`) with a conditional GET, keeps events from 60 days back to a year ahead and never
+lets them be edited. The link is a secret: it is stored only in the add-on database and the API and
+screens only ever show a masked form (`outlook.office365.com/…/calendar.ics`).
+
+Work calendar (Outlook / Microsoft 365): Outlook on the web > Settings > Calendar > Shared calendars >
+Publish a calendar, pick the calendar and **Can view when I'm busy** (or **Can view titles and
+locations**), Publish, and copy the ICS link. Some workplaces turn publishing off. A free/busy-only
+calendar (every event just "Busy", "Tentative", "Away", "Free") is shown automatically as hatched
+"Alex – busy" blocks in the calendar's colour: tentative ones lighter, free time hidden. The calendar's
+sheet in Settings can force this on or off. Outlook's Windows timezone names ("GMT Standard Time",
+"Pacific Standard Time") are resolved by the `icalendar` library, from the feed's VTIMEZONE or its
+Windows-to-IANA table. Tests: `backend/tests/test_ics_feed.py` (fixtures in `backend/tests/fixtures/`,
+served by `httpx.MockTransport`).
 
 ## Home Assistant
 

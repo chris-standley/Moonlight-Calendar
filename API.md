@@ -46,8 +46,11 @@ implementation of the same contract, used for the published preview). Keep them 
 - `PATCH /api/events/{id}` partial -> Event (edits the whole series)
 - `DELETE /api/events/{id}` -> `{ok: true}`
 
-Events also carry `calendar_id` (null = local-only), `source` (null | `"icloud"` | `"caldav"`),
-`custom_repeat` (bool) and `color` (the calendar's colour, null for local events). See Calendar sync.
+Events also carry `calendar_id` (null = local-only), `source` (null | `"icloud"` | `"caldav"` | `"ics"`),
+`custom_repeat` (bool), `color` (the calendar's colour, null for local events), `read_only` (bool: in a
+read-only calendar, edits get 403) and `busy` (null, or on calendars shown as busy blocks one of
+`"busy"|"tentative"|"away"|"elsewhere"`; `"free"` events of such calendars are left out). See Calendar sync
+and Calendar links.
 
 ## Calendar sync (iCloud / CalDAV)
 iCloud is the master. Moonlight caches events locally and polls every account (default every 120 s,
@@ -55,9 +58,10 @@ env `MOONLIGHT_SYNC_SECONDS`): one PROPFIND on the calendar home gives every cal
 changed calendars are listed and only changed events downloaded. Errors back off exponentially; an
 account whose login is rejected gets `status: "auth_failed"` and is not retried until it is reconnected.
 
-Account = `{id, kind: "icloud"|"caldav", label, username, server_url, status: "ok"|"auth_failed"|"error",
+Account = `{id, kind: "icloud"|"caldav"|"ics", label, username, server_url, status: "ok"|"auth_failed"|"error",
 last_error: str|null, last_sync: datetime|null, calendar_count}`. The password is never returned.
-Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_only: bool}`.
+Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_only: bool,
+busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks: see Calendar links).
 - `GET /api/accounts` -> `[Account]`
 - `POST /api/accounts` `{kind, username, password, server_url (caldav only), label?, pin}` -> Account.
   Logs in and discovers event calendars first: 400 if the login is rejected, 502 if the server can't be
@@ -68,7 +72,8 @@ Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_
 - `DELETE /api/accounts/{id}` `{pin}` -> `{ok: true}`. Forgets the account and its cached events (nothing
   is deleted in iCloud).
 - `POST /api/accounts/{id}/sync` -> Account (after syncing now; check `status`).
-- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{person_ids?, visible?, color?}` -> Calendar.
+- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{person_ids?, visible?, color?,
+  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic).
   Hidden calendars keep syncing but their events are left out of `GET /api/events`.
 - `GET /api/sync/status` -> `{running, interval_seconds, needs_reconnect: bool,
   accounts: [{id, label, kind, status, last_sync, last_error}]}`
@@ -88,6 +93,31 @@ Synced events:
   stored only once accepted. If the event changed on another device: 409 with a clear `detail`, and the
   latest version is already re-fetched. Read-only calendar: 400 (target) / 403 (edit). Server rejected
   the login or is unreachable: 502 (the account's `status` says which).
+
+## Calendar links (published ICS, read-only)
+An account of `kind: "ics"` is one read-only calendar from a published link (`webcal://` is fetched as
+`https://`). The full URL is a secret: it is never returned; `server_url` is a masked form
+(`outlook.office365.com/…/calendar.ics`) and `username` is `""`. Polled every 900 s
+(`MOONLIGHT_FEED_SECONDS`) with `If-None-Match` / `If-Modified-Since`; a 304 or an identical body changes
+nothing. Errors (unreachable, 401/403/404, not a calendar) set `status: "error"` with a `last_error`
+message and back off (5, 10, 20... min, at most an hour); cached events stay meanwhile. The feed is cached
+per UID (master + RECURRENCE-ID overrides), so a change replaces just the events that changed; timezones
+(including Outlook's Windows names like "GMT Standard Time") and recurrence go through the same path as
+CalDAV events. Only events touching [today - 60 days, today + 1 year] are kept; cancelled events are
+dropped.
+- `POST /api/accounts/feed-preview` `{url}` -> `{event_count, name, busy_only, masked_url}` (nothing saved;
+  400 bad URL, 502 fetch/parse error with a `detail` that never contains the URL).
+- `POST /api/accounts` `{kind: "ics", url, label?, person_ids?, color?, pin}` -> Account. Fetched first
+  (same errors); `label` defaults to the feed's X-WR-CALNAME, `color` to the first person's colour.
+  400 if the same link is already added.
+- `PATCH /api/accounts/{id}` `{pin, url?, label?}` -> Account: a new link is fetched and replaces the
+  events; `label` also renames the calendar.
+- `POST /api/accounts/{id}/sync` `{force?: bool}` -> Account (`force` skips the conditional GET).
+- Free/busy: every event gets a status from `X-MICROSOFT-CDO-BUSYSTATUS`, else a placeholder summary
+  ("Busy", "Tentative", "Free", "Away"/"Out of Office", "Working elsewhere"), else `STATUS:TENTATIVE`,
+  `TRANSP:TRANSPARENT` (= free), else busy. `busy_blocks_auto` is true when every summary is such a
+  placeholder; `busy_blocks` = the household's choice (`busy_blocks_set`) or the automatic value. On such
+  calendars events carry `busy` and screens show "Alex – busy" blocks; free ones are not returned.
 
 ## Chores
 Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon"|"evening"|"anytime", schedule, sort}`

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Account, AccountKind, ApiError, SyncCalendar } from "../api/types";
+import { Account, AccountKind, ApiError, FeedPreview, SyncCalendar } from "../api/types";
 import { useApp, useData } from "../state";
 import { Avatar, PersonPicker, Sheet } from "../components/ui";
 
@@ -10,6 +10,9 @@ export const IconCloud = ({ size }: IconProps) => (
 );
 export const IconAlert = ({ size }: IconProps) => (
   <svg {...svg(size)}><path d="M12 3.5l9.5 16.5h-19z" /><path d="M12 10v4.5M12 17.4v.1" /></svg>
+);
+const IconLink = ({ size }: IconProps) => (
+  <svg {...svg(size)}><path d="M10 14a4.5 4.5 0 006.4 0l3-3a4.5 4.5 0 00-6.4-6.4l-1 1" /><path d="M14 10a4.5 4.5 0 00-6.4 0l-3 3a4.5 4.5 0 006.4 6.4l1-1" /></svg>
 );
 const IconSync = ({ size }: IconProps) => (
   <svg {...svg(size)}><path d="M20 11a8 8 0 00-14.3-4.2L4 9M4 4v5h5M4 13a8 8 0 0014.3 4.2L20 15m0 5v-5h-5" /></svg>
@@ -31,17 +34,18 @@ function ago(iso: string | null): string {
 
 function statusText(a: Account): string {
   if (a.status === "auth_failed") return "Sign-in stopped working · reconnect to keep syncing";
-  if (a.status === "error") return `Couldn't sync${a.last_error ? `: ${a.last_error}` : ""} · retrying`;
-  return `Synced ${ago(a.last_sync)}`;
+  if (a.status === "error") return `Couldn't ${a.kind === "ics" ? "refresh" : "sync"}${a.last_error ? `: ${a.last_error}` : ""} · retrying`;
+  return `${a.kind === "ics" ? "Checked" : "Synced"} ${ago(a.last_sync)}`;
 }
 
-const kindName = (k: AccountKind) => (k === "icloud" ? "iCloud" : "CalDAV");
+const kindName = (k: AccountKind) => (k === "icloud" ? "iCloud" : k === "ics" ? "Calendar link" : "CalDAV");
 
 export function CalendarsPanel() {
   const { api, people, askPin, toast } = useApp();
   const [accounts] = useData((a) => a.accounts(), ["accounts"], []);
   const [calendars] = useData((a) => a.calendars(), ["accounts"], []);
   const [connect, setConnect] = useState<{ account?: Account } | null>(null);
+  const [feed, setFeed] = useState<{ account?: Account } | null>(null);
   const [editing, setEditing] = useState<SyncCalendar | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
 
@@ -49,12 +53,13 @@ export function CalendarsPanel() {
     setSyncing(a.id);
     try {
       const r = await api.syncAccount(a.id);
-      toast(r.status === "ok" ? "Calendars up to date" : r.status === "auth_failed" ? "iCloud needs reconnecting" : "Couldn't sync right now");
+      toast(r.status === "ok" ? "Calendars up to date" : r.status === "auth_failed" ? "iCloud needs reconnecting" : r.kind === "ics" ? "Couldn't refresh that link right now" : "Couldn't sync right now");
     } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't sync"); }
     finally { setSyncing(null); }
   }
   async function remove(a: Account) {
-    const pin = await askPin(`Disconnect ${a.label}? Its events leave this screen (nothing is deleted in ${kindName(a.kind)}).`);
+    const pin = await askPin(a.kind === "ics" ? `Remove the calendar link ${a.label}? Its events leave this screen.`
+      : `Disconnect ${a.label}? Its events leave this screen (nothing is deleted in ${kindName(a.kind)}).`);
     if (!pin) return;
     try { await api.removeAccount(a.id, pin); toast("Disconnected"); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't disconnect"); }
@@ -68,12 +73,16 @@ export function CalendarsPanel() {
     <section className="panel cal-panel">
       <div className="cal-panel-head">
         <h2 className="panel-title">Calendars</h2>
-        <button className="btn small" onClick={() => setConnect({})}><IconCloud size={20} /> Connect iCloud</button>
+        <div className="cal-head-btns">
+          <button className="btn ghost small" onClick={() => setFeed({})}><IconLink size={20} /> Add calendar link</button>
+          <button className="btn small" onClick={() => setConnect({})}><IconCloud size={20} /> Connect iCloud</button>
+        </div>
       </div>
-      {accounts && accounts.length === 0 && (
+      {accounts && !accounts.some((a) => a.kind !== "ics") && (
         <p className="muted cal-intro">
           Connect each adult's iCloud calendar. iCloud stays the master copy: changes made on phones appear here
-          within a couple of minutes, and events added here go straight to iCloud.
+          within a couple of minutes, and events added here go straight to iCloud. To show a calendar you can only
+          read (a work calendar, school term dates, bin days), add its published link instead.
           {api.mode === "demo" && " (Demo: any Apple ID works; the password “wrong” shows a failed sign-in.)"}
         </p>
       )}
@@ -83,12 +92,13 @@ export function CalendarsPanel() {
             <span className={`status-dot s-${a.status}`} aria-label={a.status} />
             <div className="acct-name">
               <b>{a.label}</b>
-              <span className={a.status !== "ok" ? `s-${a.status}` : undefined}>{kindName(a.kind)} · {statusText(a)}</span>
+              <span className={a.status !== "ok" ? `s-${a.status}` : undefined}>{kindName(a.kind)}{a.kind === "ics" ? ` · ${a.server_url}` : ""} · {statusText(a)}</span>
             </div>
             <div className="acct-actions">
               {a.status === "auth_failed" && <button className="btn small" onClick={() => setConnect({ account: a })}>Reconnect</button>}
+              {a.kind === "ics" && a.status === "error" && <button className="btn small" onClick={() => setFeed({ account: a })}>Paste new link</button>}
               <button className="btn ghost small" disabled={syncing === a.id} onClick={() => syncNow(a)}>
-                <IconSync size={18} /> {syncing === a.id ? "Syncing…" : "Sync now"}
+                <IconSync size={18} /> {syncing === a.id ? (a.kind === "ics" ? "Refreshing…" : "Syncing…") : a.kind === "ics" ? "Refresh" : "Sync now"}
               </button>
               <button className="btn ghost small danger" onClick={() => remove(a)}>Remove</button>
             </div>
@@ -101,7 +111,7 @@ export function CalendarsPanel() {
                   <button className="cal-swatch" style={{ background: c.color }} onClick={() => setEditing(c)} aria-label={`Edit ${c.name}`} />
                   <button className="cal-name" onClick={() => setEditing(c)}>
                     <b>{c.name}</b>
-                    {c.read_only && <span className="tag">Read-only</span>}
+                    {c.busy_blocks ? <span className="tag">Busy times</span> : c.read_only && <span className="tag">Read-only</span>}
                   </button>
                   <button className="cal-who" onClick={() => setEditing(c)}>
                     {who.length ? who.map((p) => <Avatar key={p!.id} person={p!} size={1.7} />) : <span className="muted">Choose people</span>}
@@ -115,7 +125,8 @@ export function CalendarsPanel() {
         </div>
       ))}
       {connect && <ConnectSheet account={connect.account} onClose={() => setConnect(null)} />}
-      {editing && <CalendarSheet cal={editing} onClose={() => setEditing(null)} />}
+      {feed && <FeedSheet account={feed.account} onClose={() => setFeed(null)} />}
+      {editing && <CalendarSheet cal={editing} feed={accounts?.find((a) => a.id === editing.account_id)?.kind === "ics"} onClose={() => setEditing(null)} />}
     </section>
   );
 }
@@ -186,14 +197,17 @@ function ConnectSheet({ account, onClose }: { account?: Account; onClose: () => 
   );
 }
 
-function CalendarSheet({ cal, onClose }: { cal: SyncCalendar; onClose: () => void }) {
+function CalendarSheet({ cal, feed, onClose }: { cal: SyncCalendar; feed?: boolean; onClose: () => void }) {
   const { api, people, toast } = useApp();
   const [who, setWho] = useState(cal.person_ids);
   const [color, setColor] = useState(cal.color);
   const [visible, setVisible] = useState(cal.visible);
+  // null = automatic (on when every event is just "Busy" / "Free" ...).
+  const [busy, setBusy] = useState<boolean | null>(cal.busy_blocks_set ? !!cal.busy_blocks : null);
+  const busyOn = busy ?? !!cal.busy_blocks_auto;
   const colors = PALETTE.includes(cal.color) ? PALETTE : [cal.color, ...PALETTE.slice(0, -1)];
   async function save() {
-    try { await api.updateCalendar(cal.id, { person_ids: who, color, visible }); onClose(); }
+    try { await api.updateCalendar(cal.id, { person_ids: who, color, visible, ...(feed ? { busy_blocks: busy } : {}) }); onClose(); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
   }
   return (
@@ -215,8 +229,108 @@ function CalendarSheet({ cal, onClose }: { cal: SyncCalendar; onClose: () => voi
         <div className="set-row"><span>Show on Moonlight</span>
           <button className={"toggle" + (visible ? " on" : "")} onClick={() => setVisible(!visible)} aria-pressed={visible}><span /></button>
         </div>
+        {feed && (<>
+          <div className="set-row"><span>Show as busy blocks</span>
+            <button className={"toggle" + (busyOn ? " on" : "")} onClick={() => setBusy(!busyOn)} aria-pressed={busyOn}><span /></button>
+          </div>
+          <p className="muted connect-note">
+            {busyOn ? `Events show as “${people.find((p) => p.id === who[0])?.name ?? "Someone"} – busy” blocks; free time is hidden.` : "Events show with their own titles."}
+            {busy === null ? (cal.busy_blocks_auto ? " Turned on automatically: this link only shares busy times." : " Automatic: turns on when a link only shares busy times.")
+              : <> <button type="button" className="link-btn" style={{ display: "inline", margin: 0 }} onClick={() => setBusy(null)}>Use automatic</button></>}
+          </p>
+        </>)}
         {cal.read_only && <p className="muted connect-note">This calendar is read-only, so its events can't be edited here.</p>}
       </div>
+    </Sheet>
+  );
+}
+
+const OUTLOOK_HELP = "Outlook on the web: Settings › Calendar › Shared calendars › Publish a calendar";
+
+/** Add (or replace the link of) a read-only calendar from a published ICS link. */
+function FeedSheet({ account, onClose }: { account?: Account; onClose: () => void }) {
+  const { api, people, askPin, toast } = useApp();
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState(account?.label ?? "");
+  const [who, setWho] = useState<string[]>(people.filter((p) => p.role === "adult").slice(0, 1).map((p) => p.id));
+  const [found, setFound] = useState<{ url: string; preview: FeedPreview } | null>(null);
+  const [busy, setBusy] = useState<"" | "check" | "save">("");
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = url.trim();
+  const looksOk = /^(https?|webcals?):\/\/\S+/i.test(trimmed);
+  const checked = found?.url === trimmed ? found.preview : null;
+
+  async function check() {
+    if (!looksOk || busy) return;
+    setBusy("check"); setError(null);
+    try {
+      const preview = await api.previewFeed(trimmed);
+      setFound({ url: trimmed, preview });
+      if (!label.trim() && preview.name && preview.name.toLowerCase() !== "calendar") setLabel(preview.name);
+    } catch (e) {
+      setFound(null);
+      setError(e instanceof ApiError ? e.message : "Couldn't fetch that link. Check the network and try again.");
+    } finally { setBusy(""); }
+  }
+  async function submit() {
+    if (!looksOk || busy) return;
+    const name = label.trim() || (checked?.busy_only ? "Work" : checked?.name) || "";
+    const pin = await askPin(account ? `Replace the link for ${account.label}` : `Add ${name || "this calendar"}`);
+    if (!pin) return;
+    setBusy("save"); setError(null);
+    try {
+      if (account) {
+        await api.updateFeed(account.id, { url: trimmed, label: label.trim() || undefined, pin });
+        toast("Link updated");
+      } else {
+        await api.addFeed({ url: trimmed, label: name || undefined, person_ids: who, pin });
+        toast(`Added ${name || "calendar"}`);
+      }
+      onClose();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't add that link. Check the network and try again.");
+    } finally { setBusy(""); }
+  }
+
+  return (
+    <Sheet title={account ? `New link for ${account.label}` : "Add calendar link"} onClose={onClose} footer={<>
+      <button className="btn ghost" onClick={onClose}>Cancel</button>
+      <span style={{ flex: 1 }} />
+      <button className="btn" disabled={!looksOk || !!busy} onClick={submit}>{busy === "save" ? "Adding…" : account ? "Use this link" : "Add calendar"}</button>
+    </>}>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <div className="connect-help">
+          Shows a calendar you can read but not change, refreshed every 15 minutes: a work calendar, school term dates, bin days.
+          <ol>
+            <li><b>Work (Outlook / Microsoft 365):</b> {OUTLOOK_HELP}. Pick the calendar, choose <b>Can view when I'm busy</b> (or <b>Can view titles and locations</b>), Publish, then copy the <b>ICS</b> link.</li>
+            <li><b>Anything else:</b> copy its “subscribe” or iCal link (webcal:// or https://…ics).</li>
+          </ol>
+          Some workplaces turn publishing off; if there's no Publish option, ask IT or use a personal calendar instead.
+        </div>
+        <label className="field-label">Calendar link</label>
+        <div className="feed-row">
+          <input className="input" placeholder="webcal://… or https://…/calendar.ics" value={url}
+            onChange={(e) => { setUrl(e.target.value); setError(null); }} onBlur={() => { if (!checked) check(); }}
+            autoCapitalize="off" autoCorrect="off" spellCheck={false} autoFocus />
+          <button type="button" className="btn ghost small" disabled={!looksOk || !!busy} onClick={check}>{busy === "check" ? "Checking…" : "Check link"}</button>
+        </div>
+        {checked && (
+          <div className="feed-found" role="status">
+            Found {checked.event_count} event{checked.event_count === 1 ? "" : "s"}{checked.busy_only ? " · busy times only, shown as busy blocks" : ""}
+          </div>
+        )}
+        {error && <div className="connect-error" role="alert">{error}</div>}
+        <label className="field-label">Name</label>
+        <input className="input" placeholder={checked?.busy_only ? "Work" : checked?.name || "e.g. Work, School, Bins"} value={label} onChange={(e) => setLabel(e.target.value)} />
+        {!account && (<>
+          <label className="field-label">Whose calendar is it?</label>
+          <PersonPicker people={people} value={who} onChange={setWho} />
+        </>)}
+        <p className="muted connect-note">
+          The link works like a password: anyone who has it can read the calendar. It's kept only on this Moonlight add-on and never shown in full. A PIN is needed to add it.
+        </p>
+        <button type="submit" hidden />
+      </form>
     </Sheet>
   );
 }

@@ -38,6 +38,7 @@ from lxml import etree
 
 from . import db
 from .common import hub
+from .freebusy import busy_status
 from .recurrence import WEEKDAYS, fmt_dt, normalize_repeat
 
 log = logging.getLogger("moonlight.sync")
@@ -375,7 +376,7 @@ def parse_resource(ics: str, tz: ZoneInfo) -> dict | None:
         "uid": _text(master, "UID"), "title": _text(master, "SUMMARY") or "(No title)",
         "start": fmt_dt(start), "end": fmt_dt(end), "all_day": all_day,
         "location": _text(master, "LOCATION"), "notes": _text(master, "DESCRIPTION"),
-        "repeat": repeat, "custom_repeat": custom, "person_ids": people,
+        "repeat": repeat, "custom_repeat": custom, "person_ids": people, "busy": busy_status(master),
     }
 
 
@@ -472,7 +473,12 @@ def expand_custom(base: dict, raw: str, cache_key: str, rs: datetime, re_: datet
     for comp in comps:
         ds = comp.decoded("DTSTART")
         all_day = not isinstance(ds, datetime)
-        de = comp.decoded("DTEND") if "DTEND" in comp else ds
+        if "DTEND" in comp:
+            de = comp.decoded("DTEND")
+        elif "DURATION" in comp:
+            de = ds + comp.decoded("DURATION")
+        else:
+            de = ds + timedelta(days=1) if all_day else ds
         s, e = to_local(ds, tz), to_local(de, tz)
         if e < s:
             e = s
@@ -484,6 +490,8 @@ def expand_custom(base: dict, raw: str, cache_key: str, rs: datetime, re_: datet
             "notes": _text(comp, "DESCRIPTION"), "start": fmt_dt(s), "end": fmt_dt(e), "all_day": all_day,
             "occurrence_id": f"{base['id']}@{s.date().isoformat()}", "recurring": True,
         })
+        if base.get("busy") is not None:  # free/busy calendar: a moved occurrence may be tentative
+            occ["busy"] = busy_status(comp)
         out.append(occ)
     return out
 
@@ -539,14 +547,15 @@ def apply_resource(c, calendar_id: str, href: str, etag: str | None, ics: str, t
     eid = existing["id"] if existing else (event_id or db.new_id("e"))
     args = (p["title"], json.dumps(p["person_ids"]), p["start"], p["end"], int(p["all_day"]), p["location"],
             p["notes"], json.dumps(p["repeat"]) if p["repeat"] else None, calendar_id, p["uid"], href, etag,
-            ics, int(p["custom_repeat"]), eid)
+            ics, int(p["custom_repeat"]), p["busy"], eid)
     if existing or db.row(c, "SELECT 1 AS x FROM events WHERE id = ?", (eid,)):
         c.execute('UPDATE events SET title=?, person_ids=?, start=?, "end"=?, all_day=?, location=?, notes=?, '
-                  "repeat=?, calendar_id=?, uid=?, href=?, etag=?, raw_ics=?, custom_repeat=? WHERE id=?", args)
+                  "repeat=?, calendar_id=?, uid=?, href=?, etag=?, raw_ics=?, custom_repeat=?, busy=? WHERE id=?",
+                  args)
     else:
         c.execute('INSERT INTO events(title, person_ids, start, "end", all_day, location, notes, repeat, '
-                  "calendar_id, uid, href, etag, raw_ics, custom_repeat, id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                  args)
+                  "calendar_id, uid, href, etag, raw_ics, custom_repeat, busy, id) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", args)
     return eid
 
 
@@ -591,6 +600,8 @@ def sync_account(account_id: str, force: bool = False) -> bool:
             acct = db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,))
         if not acct:
             return False
+        if acct["kind"] == "ics":
+            return _sync_feed(acct, force)
         remote = remote_for(acct)
         try:
             home = acct["home_url"] or remote.home_url()
@@ -620,6 +631,21 @@ def sync_account(account_id: str, force: bool = False) -> bool:
             raise SyncError(str(e))
         _set_status(account_id, "ok", None, synced=True)
         return changed
+
+
+def _sync_feed(acct: dict, force: bool) -> bool:
+    from . import ics_feed  # imports this module
+    try:
+        changed = ics_feed.sync_feed(acct, force)
+    except SyncError as e:
+        _set_status(acct["id"], "error", str(e))
+        raise
+    except Exception as e:
+        log.exception("Feed %s failed", acct["id"])
+        _set_status(acct["id"], "error", f"Couldn't read the calendar: {e.__class__.__name__}")
+        raise SyncError(str(e))
+    _set_status(acct["id"], "ok", None, synced=True)
+    return changed
 
 
 # ---------------------------------------------------------------- writes (blocking, run in a thread)
@@ -774,13 +800,16 @@ def delete_event(existing: dict) -> None:
 # ---------------------------------------------------------------- background loop
 
 class SyncManager:
-    """Polls every account every `interval` seconds (exponential backoff on errors).
+    """Polls every CalDAV account every `interval` seconds and every ICS feed every `feed_interval`
+    seconds (default 15 min), with exponential backoff on errors.
 
     An account whose login fails is marked auth_failed and skipped until its credentials change.
     """
 
     def __init__(self, interval: float | None = None):
         self.interval = float(interval or os.environ.get("MOONLIGHT_SYNC_SECONDS", "120"))
+        from .ics_feed import feed_interval
+        self.feed_interval = feed_interval()
         self.task: asyncio.Task | None = None
         self.wake: asyncio.Event | None = None
         self.state: dict[str, dict] = {}
@@ -809,18 +838,29 @@ class SyncManager:
         if self.wake:
             self.wake.set()
 
+    def interval_for(self, account_id: str) -> float:
+        with db.connect() as c:
+            r = db.row(c, "SELECT kind FROM accounts WHERE id = ?", (account_id,))
+        return self.feed_interval if r and r["kind"] == "ics" else self.interval
+
+    def synced(self, account_id: str) -> None:
+        """An account was just synced outside the loop (e.g. a feed added): next poll one interval later."""
+        self.state[account_id] = {"fails": 0, "next": _time.monotonic() + self.interval_for(account_id)}
+
     async def sync_one(self, account_id: str, force: bool = False) -> None:
         st = self.state.setdefault(account_id, {"fails": 0, "next": 0.0})
         changed = False
+        interval = self.interval_for(account_id)
         try:
             changed = await asyncio.to_thread(sync_account, account_id, force)
-            st.update(fails=0, next=_time.monotonic() + self.interval)
+            st.update(fails=0, next=_time.monotonic() + interval)
         except AuthFailed:
-            st.update(fails=0, next=_time.monotonic() + self.interval)
+            st.update(fails=0, next=_time.monotonic() + interval)
             log.warning("Calendar account %s: login rejected; waiting for new credentials", account_id)
         except Exception as e:
             st["fails"] += 1
-            st["next"] = _time.monotonic() + min(self.interval * 2 ** st["fails"], 3600)
+            # Retry sooner than a long feed interval, then back off to at most an hour.
+            st["next"] = _time.monotonic() + min(min(interval, 300) * 2 ** st["fails"], max(3600, interval))
             log.warning("Calendar account %s sync failed (%s); retry in %ds", account_id, e,
                         st["next"] - _time.monotonic())
         await hub.broadcast(*(("accounts", "events") if changed else ("accounts",)))
@@ -838,7 +878,7 @@ class SyncManager:
                         await self.sync_one(a["id"])
                 nexts = [self.state[a["id"]]["next"] for a in accts if a["status"] != "auth_failed"
                          and a["id"] in self.state]
-                wait = min([n - _time.monotonic() for n in nexts] + [self.interval])
+                wait = min([n - _time.monotonic() for n in nexts] + [self.interval, self.feed_interval])
                 wait = max(1.0, wait)
             except asyncio.CancelledError:
                 raise
@@ -871,3 +911,8 @@ async def sync_now(account_id: str, force: bool = False) -> None:
 def poke(account_id: str | None = None) -> None:
     if manager is not None:
         manager.poke(account_id)
+
+
+def mark_synced(account_id: str) -> None:
+    if manager is not None:
+        manager.synced(account_id)

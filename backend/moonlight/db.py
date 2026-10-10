@@ -136,11 +136,11 @@ CREATE TABLE IF NOT EXISTS recipes (
 SYNC_SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id         TEXT PRIMARY KEY,
-    kind       TEXT NOT NULL,              -- icloud | caldav
+    kind       TEXT NOT NULL,              -- icloud | caldav | ics (published calendar link)
     label      TEXT NOT NULL DEFAULT '',
     username   TEXT NOT NULL,
-    password   TEXT NOT NULL,              -- never returned by the API
-    server_url TEXT NOT NULL,
+    password   TEXT NOT NULL,              -- never returned by the API (for ics: the full feed URL)
+    server_url TEXT NOT NULL,              -- for ics: a masked form of the URL, safe to show
     home_url   TEXT,                       -- discovered calendar-home-set
     status     TEXT NOT NULL DEFAULT 'ok', -- ok | auth_failed | error
     last_error TEXT,
@@ -153,7 +153,8 @@ CREATE TABLE IF NOT EXISTS calendars (
     url        TEXT NOT NULL,
     name       TEXT NOT NULL,
     color      TEXT NOT NULL DEFAULT '#8A94A6',
-    ctag       TEXT,                       -- getctag (or sync-token) seen at the last full pull
+    ctag       TEXT,                       -- getctag (or sync-token) seen at the last full pull;
+                                           -- for ics: JSON {etag, last_modified, sha} of the last fetch
     person_ids TEXT NOT NULL DEFAULT '[]',
     visible    INTEGER NOT NULL DEFAULT 1,
     read_only  INTEGER NOT NULL DEFAULT 0,
@@ -164,6 +165,12 @@ CREATE TABLE IF NOT EXISTS calendars (
 EVENT_SOURCE_COLUMNS = {
     "calendar_id": "TEXT", "uid": "TEXT", "href": "TEXT", "etag": "TEXT", "raw_ics": "TEXT",
     "custom_repeat": "INTEGER NOT NULL DEFAULT 0",  # 1 = expand from raw_ics (EXDATE, overrides, COUNT...)
+    "busy": "TEXT",  # free/busy status of a synced event: busy | tentative | away | elsewhere | free
+}
+# Added to calendars after the first release (see ics_feed.py).
+CALENDAR_EXTRA_COLUMNS = {
+    "busy_auto": "INTEGER NOT NULL DEFAULT 0",  # every summary looks like a free/busy placeholder
+    "busy_blocks": "INTEGER",                   # household's choice; NULL = follow busy_auto
 }
 
 DEFAULT_SETTINGS = {
@@ -235,6 +242,10 @@ def init_db() -> None:
         for col, decl in EVENT_SOURCE_COLUMNS.items():
             if col not in have:
                 c.execute(f"ALTER TABLE events ADD COLUMN {col} {decl}")
+        have = {r[1] for r in c.execute("PRAGMA table_info(calendars)")}
+        for col, decl in CALENDAR_EXTRA_COLUMNS.items():
+            if col not in have:
+                c.execute(f"ALTER TABLE calendars ADD COLUMN {col} {decl}")
         c.execute("CREATE INDEX IF NOT EXISTS events_calendar ON events(calendar_id)")
 
 

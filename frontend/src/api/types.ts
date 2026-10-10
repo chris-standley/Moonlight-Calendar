@@ -37,7 +37,12 @@ export interface CalEvent extends EventIn {
   /** Recurrence from iCloud that Moonlight can't edit (EXDATE, COUNT, moved occurrences...). */
   custom_repeat?: boolean;
   color?: string | null;
+  /** In a read-only calendar (e.g. a calendar link): can't be edited or deleted here. */
+  read_only?: boolean;
+  /** Set only on calendars shown as busy blocks (free/busy feeds); "free" events are never returned. */
+  busy?: BusyStatus | null;
 }
+export type BusyStatus = "busy" | "tentative" | "away" | "elsewhere" | "free";
 export interface Occurrence extends CalEvent { occurrence_id: string; recurring: boolean }
 
 export type TimeOfDay = "morning" | "afternoon" | "evening" | "anytime";
@@ -82,15 +87,23 @@ export interface UploadResult { uploaded: Photo[]; errors: { filename: string; d
 
 export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts";
 
-// Calendar sync (iCloud / CalDAV). The password is write-only.
-export type AccountKind = "icloud" | "caldav";
+// Calendar sync (iCloud / CalDAV / published calendar links). Passwords and link URLs are write-only.
+export type AccountKind = "icloud" | "caldav" | "ics";
 export type AccountStatus = "ok" | "auth_failed" | "error";
+/** For kind "ics" `server_url` is a masked form of the link (host/…/calendar.ics) and `username` is "". */
 export interface Account {
   id: string; kind: AccountKind; label: string; username: string; server_url: string;
   status: AccountStatus; last_error: string | null; last_sync: string | null; calendar_count: number;
 }
 export interface AccountIn { kind: AccountKind; username: string; password: string; server_url?: string; label?: string; pin: string }
-export interface SyncCalendar { id: string; account_id: string; name: string; color: string; person_ids: string[]; visible: boolean; read_only: boolean }
+export interface SyncCalendar {
+  id: string; account_id: string; name: string; color: string; person_ids: string[]; visible: boolean; read_only: boolean;
+  /** Shown as "Chris – busy" blocks: the household's choice, else automatic (every summary is Busy/Free/...). */
+  busy_blocks?: boolean; busy_blocks_auto?: boolean; busy_blocks_set?: boolean;
+}
+/** A published ICS link (webcal:// or https://); read-only, polled every 15 minutes. */
+export interface FeedIn { url: string; label?: string; person_ids: string[]; color?: string; pin: string }
+export interface FeedPreview { event_count: number; name: string; busy_only: boolean; masked_url: string }
 
 /** Default calendar for a new event (mirrors the server): the first person's own visible, writable calendar before shared ones. */
 export function pickCalendar(cals: SyncCalendar[], personIds: string[]): string | null {
@@ -161,7 +174,13 @@ export interface Api {
   reconnectAccount(id: string, creds: { password: string; username?: string; pin: string }): Promise<Account>;
   removeAccount(id: string, pin: string): Promise<void>;
   syncAccount(id: string): Promise<Account>;
+  /** Test a calendar link: how many events it has (nothing is saved). */
+  previewFeed(url: string): Promise<FeedPreview>;
+  addFeed(f: FeedIn): Promise<Account>;
+  /** Paste a new link (verified first) and/or rename. */
+  updateFeed(id: string, patch: { url?: string; label?: string; pin: string }): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;
-  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">>): Promise<SyncCalendar>;
+  /** busy_blocks: null = automatic. */
+  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null }): Promise<SyncCalendar>;
   resetDemo?(): Promise<void>;
 }

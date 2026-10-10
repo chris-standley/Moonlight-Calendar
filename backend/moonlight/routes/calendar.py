@@ -199,7 +199,8 @@ async def delete_person(person_id: str, body: dict | None = Body(None)):
 
 # Synced events (calendar_id set) take their people from the calendar mapping unless the event
 # names its own (X-MOONLIGHT-PEOPLE), and their colour from the calendar.
-EVENT_SELECT = ("SELECT e.*, cal.person_ids AS cal_person_ids, cal.color AS cal_color, a.kind AS source "
+EVENT_SELECT = ("SELECT e.*, cal.person_ids AS cal_person_ids, cal.color AS cal_color, a.kind AS source, "
+                "COALESCE(cal.busy_blocks, cal.busy_auto) AS cal_busy_blocks, cal.read_only AS cal_read_only "
                 "FROM events e LEFT JOIN calendars cal ON cal.id = e.calendar_id "
                 "LEFT JOIN accounts a ON a.id = cal.account_id")
 
@@ -212,6 +213,9 @@ def event_out(r: dict) -> dict:
         "repeat": json.loads(r["repeat"]) if r["repeat"] else None,
         "calendar_id": r.get("calendar_id"), "source": r.get("source"),
         "custom_repeat": bool(r.get("custom_repeat")), "color": r.get("cal_color"),
+        "read_only": bool(r.get("cal_read_only")),
+        # Only on calendars shown as free/busy blocks: busy | tentative | away | elsewhere | free.
+        "busy": (r.get("busy") or "busy") if r.get("cal_busy_blocks") else None,
     }
     if out["calendar_id"] and not out["person_ids"]:
         out["person_ids"] = json.loads(r.get("cal_person_ids") or "[]")
@@ -305,6 +309,7 @@ def list_events(start: str, end: str):
             out.extend(caldav_sync.expand_custom(event_out(r), r["raw_ics"], f"{r['id']}:{r['etag']}", rs, re_))
         else:
             out.extend(expand_event(event_out(r), rs, re_))
+    out = [o for o in out if o.get("busy") != "free"]  # free time on a busy-blocks calendar isn't shown
     out.sort(key=lambda o: (o["start"], not o["all_day"], o["end"], o["title"]))
     return out
 
