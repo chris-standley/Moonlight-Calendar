@@ -45,7 +45,7 @@ else
 fi
 
 export MOONLIGHT_DB="${MOONLIGHT_DB:-/data/moonlight.db}"
-bashio::log.info "Starting Moonlight on port ${MOONLIGHT_PORT:-8099} (db: ${MOONLIGHT_DB}, demo: ${MOONLIGHT_DEMO}, weather: ${MOONLIGHT_WEATHER_ENTITY:-demo}, music: ${MOONLIGHT_MEDIA_ENTITY:-none}, pairing: ${MOONLIGHT_AUTH}, timezone: ${MOONLIGHT_TIMEZONE:-default})"
+bashio::log.info "Starting Moonlight on port ${MOONLIGHT_PORT:-8091} (db: ${MOONLIGHT_DB}, demo: ${MOONLIGHT_DEMO}, weather: ${MOONLIGHT_WEATHER_ENTITY:-demo}, music: ${MOONLIGHT_MEDIA_ENTITY:-none}, pairing: ${MOONLIGHT_AUTH}, timezone: ${MOONLIGHT_TIMEZONE:-default})"
 
 cd /app/backend
 exec python3 -m moonlight

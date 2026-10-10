@@ -7,7 +7,7 @@ from datetime import timedelta
 DOMAIN = "moonlight"
 LOGGER = logging.getLogger(__package__)
 
-DEFAULT_PORT = 8099
+DEFAULT_PORT = 8091
 DEFAULT_HOST = "local-moonlight"
 CONF_TOKEN = "token"  # Moonlight display token from pairing (absent when Moonlight doesn't require pairing)
 SCAN_INTERVAL = timedelta(seconds=60)

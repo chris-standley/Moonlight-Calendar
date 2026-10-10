@@ -24,7 +24,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MOONLIGHT_DB=/data/moonlight.db \
     MOONLIGHT_SEED=/app/seed/demo.json \
     MOONLIGHT_STATIC=/app/frontend/dist \
-    MOONLIGHT_PORT=8099
+    MOONLIGHT_PORT=8091
 
 # tzdata: zone files so TZ (Home Assistant's timezone, set in run.sh) works with musl.
 RUN apk add --no-cache tzdata
@@ -41,7 +41,7 @@ COPY --from=frontend /src/frontend/dist /app/frontend/dist
 COPY addon/run.sh /run.sh
 RUN chmod a+x /run.sh
 
-EXPOSE 8099
+EXPOSE 8091
 CMD ["/run.sh"]
 
 LABEL io.hass.type="addon" \

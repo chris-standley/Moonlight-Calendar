@@ -8,7 +8,7 @@ screensaver from Immich; speaker controls and album art through Music Assistant.
 |---|---|
 | `API.md` | The HTTP + WebSocket contract shared by backend and frontend |
 | `seed/demo.json` | Demo family (4 people, events, chores, rewards, lists, meals), dates relative to today |
-| `backend/` | Python FastAPI + SQLite. `cd backend && python3 -m moonlight` (port 8099). Tests: `python3 -m pytest tests` |
+| `backend/` | Python FastAPI + SQLite. `cd backend && python3 -m moonlight` (port 8091). Tests: `python3 -m pytest tests` |
 | `frontend/` | React + TypeScript (Vite). `npm ci && npm run build` -> `dist/` served by the backend |
 | `addon/` | Home Assistant add-on (config.yaml, multi-stage Dockerfile built from the repo root, DOCS.md). It is listed in [home-assistant-apps](https://github.com/chris-standley/home-assistant-apps) |
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
@@ -25,7 +25,7 @@ alongside the other apps there.
 2. **Moonlight** > Install (⋮ > Check for updates if it is not listed yet), set the options, Start, Show in sidebar.
 3. Options: `demo` (seed the demo family into an empty database, default on), `weather_entity` (e.g. `weather.home`),
    `media_player_entity` (the kitchen speaker, e.g. `media_player.kitchen` from Music Assistant), `require_pairing` (default on). The household timezone defaults to Home Assistant's.
-4. Pair wall screens on port 8099 (below) and connect iCloud in Settings > Calendars.
+4. Pair wall screens on port 8091 (below) and connect iCloud in Settings > Calendars.
 
 The app page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
 
@@ -45,8 +45,8 @@ needs the whole repo.
 
 ## Screens
 
-- Hallway: `http://<ha-host>:8099/display/hallway` (27in, 2560x1440, browser zoom 1, root font 20px). Opens on the week calendar.
-- Kitchen: `http://<ha-host>:8099/display/kitchen` (Touch Display 2, 1920x1200, run TouchKio at 2x zoom = 960x600 CSS px). Opens on Today.
+- Hallway: `http://<ha-host>:8091/display/hallway` (27in, 2560x1440, browser zoom 1, root font 20px). Opens on the week calendar.
+- Kitchen: `http://<ha-host>:8091/display/kitchen` (Touch Display 2, 1920x1200, run TouchKio at 2x zoom = 960x600 CSS px). Opens on Today.
 - Phone: `/display/phone`, or the HA sidebar via ingress.
 - Apple TV: the native app in [`appletv/`](appletv/README.md) finds Moonlight on the network and pairs with a code like the other screens.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.
@@ -59,7 +59,7 @@ against an in-browser copy of the API (`src/api/demo.ts`) seeded from `seed/demo
 ## Pairing wall screens
 
 On the add-on's LAN port every screen must be paired (HA users via ingress are already signed in). Open
-`http://<ha-host>:8099/display/kitchen` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
+`http://<ha-host>:8091/display/kitchen` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
 go to Settings > Screens > Pair a new screen, enter the code and the PIN; the kiosk loads the app and remembers its
 token (localStorage + an HttpOnly cookie). Revoke a screen there too. For TouchKio you can instead copy a token into
 the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`

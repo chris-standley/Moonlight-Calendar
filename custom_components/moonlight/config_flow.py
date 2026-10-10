@@ -30,7 +30,7 @@ SCHEMA = vol.Schema(
 
 
 class MoonlightConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Manual setup. The add-on is usually reachable as `local-moonlight` (or the HA host's IP) on 8099."""
+    """Manual setup. The add-on is usually reachable as `local-moonlight` (or the HA host's IP) on 8091."""
 
     VERSION = 1
 

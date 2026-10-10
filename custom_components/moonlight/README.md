@@ -4,7 +4,7 @@ A custom integration that brings your [Moonlight](https://github.com/chris-stand
 wall calendar into Home Assistant: stars, chores, tonight's dinner, the next event, every list as a to-do
 entity and a calendar per person, plus services to tick off chores, award stars and add list items.
 
-It talks to Moonlight's local HTTP API (port 8099), polls every 60 seconds and also listens to Moonlight's
+It talks to Moonlight's local HTTP API (port 8091), polls every 60 seconds and also listens to Moonlight's
 WebSocket, so a chore ticked off on the wall shows up in HA within a second or two.
 
 ## Install
@@ -16,7 +16,7 @@ WebSocket, so a chore ticked off on the wall shows up in HA within a second or t
    - **Host**: where Moonlight runs. For the Moonlight add-on this is usually `local-moonlight` when the
      add-on was installed from a local add-on folder, `<repo-hash>-moonlight` when installed from an add-on
      repository (shown as *Hostname* on the add-on's Info page), or simply your Home Assistant host's IP address.
-   - **Port**: `8099`.
+   - **Port**: `8091`.
 
    Setup checks `GET /api/health`. You can change host/port later with **Reconfigure**.
 4. **Pairing.** The add-on's LAN port only answers paired clients (add-on option `require_pairing`, on by
