@@ -10,7 +10,7 @@
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- The add-on is served over plain http on the home network (port 8099), under whatever name the house uses. -->
+		<!-- The add-on is served over plain http on the home network (port 8091 by default), under whatever name the house uses. -->
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>

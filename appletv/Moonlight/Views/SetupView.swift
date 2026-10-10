@@ -61,7 +61,7 @@ struct SetupView: View {
                 Button("Search again") { discovery.start() }.buttonStyle(.pill)
                 Button("Enter address") { manual = true }.buttonStyle(.pill)
             }
-            Text("Moonlight runs as a Home Assistant add-on on port \(Discovery.port).")
+            Text("Moonlight runs as a Home Assistant add-on, on port \(Discovery.defaultPort) unless you changed it.")
                 .font(Theme.font(24, .semibold)).foregroundStyle(Theme.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -149,6 +149,7 @@ struct AddressPicker: View {
     let onDone: (URL) -> Void
     let onCancel: () -> Void
     @State private var parts: [Int] = Discovery.localIPv4().map { [$0[0], $0[1], $0[2], 1] } ?? [192, 168, 1, 1]
+    @State private var port = Discovery.defaultPort
     @State private var checking = false
     @State private var error: String?
     @FocusState private var focused: Int?
@@ -157,23 +158,25 @@ struct AddressPicker: View {
         VStack(spacing: 50) {
             VStack(spacing: 14) {
                 Text("Moonlight's address").font(Theme.font(60, .heavy)).foregroundStyle(Theme.text)
-                Text("Use the address of your Home Assistant. Swipe up or down to change a number, left or right to move.")
+                Text("Use your Home Assistant's address and Moonlight's port. Swipe up or down to change a number, left or right to move.")
                     .font(Theme.font(30, .bold)).foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center).frame(maxWidth: 1200)
             }
             // Everything focusable sits on one row: up/down only ever change a number, never move focus away.
-            HStack(spacing: 16) {
-                Button("Back", action: onCancel).buttonStyle(.pill).padding(.trailing, 30)
+            HStack(spacing: 12) {
+                Button("Back", action: onCancel).buttonStyle(.pill).padding(.trailing, 16)
                 ForEach(0..<4, id: \.self) { i in
-                    if i > 0 { Text(".").font(Theme.font(90, .heavy)).foregroundStyle(Theme.muted) }
+                    if i > 0 { Text(".").font(Theme.font(70, .heavy)).foregroundStyle(Theme.muted) }
                     OctetField(value: $parts[i], focused: focused == i)
                         .focused($focused, equals: i)
                 }
-                Text(":\(Discovery.port)").font(Theme.font(60, .heavy)).foregroundStyle(Theme.muted)
+                Text(":").font(Theme.font(70, .heavy)).foregroundStyle(Theme.muted)
+                OctetField(value: $port, range: 1...65535, width: 260, label: "Port", focused: focused == 4)
+                    .focused($focused, equals: 4)
                 Button(checking ? "Checking…" : "Connect") { Task { await connect() } }
                     .buttonStyle(.pillProminent)
                     .disabled(checking)
-                    .padding(.leading, 30)
+                    .padding(.leading, 16)
             }
             Text(error ?? " ").font(Theme.font(26, .bold)).foregroundStyle(Theme.danger)
         }
@@ -183,28 +186,36 @@ struct AddressPicker: View {
 
     private func connect() async {
         let host = parts.map(String.init).joined(separator: ".")
-        guard let url = URL(string: "http://\(host):\(Discovery.port)") else { return }
+        guard let url = URL(string: "http://\(host):\(port)") else { return }
         checking = true
         defer { checking = false }
         if let h = try? await APIClient(baseURL: url, token: nil).health(), h.ok {
             onDone(url)
         } else {
-            error = "No Moonlight found at \(host). Check the address and that the add-on is running."
+            error = "No Moonlight found at \(host):\(port). Check the address, the port (add-on › Configuration › Network) and that it's running."
         }
     }
 }
 
-/// One number of an IPv4 address. Up/down change it (held = faster), left/right leave it as usual.
+/// One number of the address (or the port). Up/down change it, left/right move on as usual.
 private struct OctetField: View {
     @Binding var value: Int
+    var range: ClosedRange<Int> = 0...255
+    var width: CGFloat = 160
+    var label = "Address part"
     let focused: Bool
+
+    private func step(_ n: Int) {
+        let span = range.count
+        value = range.lowerBound + ((value - range.lowerBound + n) % span + span) % span
+    }
 
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: "chevron.up").opacity(focused ? 1 : 0)
             Text("\(value)")
-                .font(.system(size: 80, weight: .heavy, design: .rounded).monospacedDigit())
-                .frame(width: 190, height: 130)
+                .font(.system(size: 72, weight: .heavy, design: .rounded).monospacedDigit())
+                .frame(width: width, height: 130)
                 .background(focused ? Theme.accent : Theme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .foregroundStyle(focused ? Color.white : Theme.text)
                 .scaleEffect(focused ? 1.08 : 1)
@@ -217,18 +228,18 @@ private struct OctetField: View {
         .focusable()
         .onMoveCommand { dir in
             switch dir {
-            case .up: value = (value + 1) % 256
-            case .down: value = (value + 255) % 256
+            case .up: step(1)
+            case .down: step(-1)
             default: break
             }
         }
         .accessibilityElement()
-        .accessibilityLabel("Address part")
+        .accessibilityLabel(label)
         .accessibilityValue("\(value)")
         .accessibilityAdjustableAction { dir in
             switch dir {
-            case .increment: value = (value + 1) % 256
-            case .decrement: value = (value + 255) % 256
+            case .increment: step(1)
+            case .decrement: step(-1)
             @unknown default: break
             }
         }

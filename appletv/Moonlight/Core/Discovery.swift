@@ -5,7 +5,8 @@ import Observation
 /// Finds the Moonlight add-on on the home network without typing anything.
 ///
 /// Home Assistant advertises itself over Bonjour (`_home-assistant._tcp`, with its address in the TXT record),
-/// and Moonlight's direct port is 8099 on the same host. We also try the usual `homeassistant.local`.
+/// and Moonlight's direct port is on the same host: 8091 by default (8099 before 0.3.1). The host port can be changed in
+/// the add-on's Network settings; anything else is picked in the address picker. We also try `homeassistant.local`.
 /// Every candidate is checked with `GET /api/health` before it's offered.
 @Observable
 @MainActor
@@ -14,10 +15,12 @@ final class Discovery {
         let url: URL
         let version: String?
         var id: String { url.absoluteString }
-        var host: String { url.host ?? url.absoluteString }
+        var host: String { "\(url.host ?? url.absoluteString):\(url.port ?? Discovery.defaultPort)" }
     }
 
-    static let port = 8099
+    /// Ports tried on every host, most likely first.
+    static let ports = [8091, 8099]
+    static let defaultPort = ports[0]
 
     private(set) var servers: [Server] = []
     private(set) var searching = false
@@ -59,11 +62,16 @@ final class Discovery {
         }
     }
 
-    /// Check `host:8099` really is Moonlight, then list it.
+    /// Check each Moonlight port on `host` (`GET /api/health`) and list the ones that answer.
     func probe(host: String) {
-        guard !host.isEmpty, tried.insert(host.lowercased()).inserted,
-              let url = URL(string: "http://\(host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host):\(Self.port)")
-        else { return }
+        guard !host.isEmpty, tried.insert(host.lowercased()).inserted else { return }
+        let name = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host // bare IPv6
+        for port in Self.ports {
+            if let url = URL(string: "http://\(name):\(port)") { check(url) }
+        }
+    }
+
+    private func check(_ url: URL) {
         Task {
             guard let health = try? await APIClient(baseURL: url, token: nil).health(), health.ok else { return }
             if !servers.contains(where: { $0.url == url }) {

@@ -19,7 +19,7 @@ enum APIError: LocalizedError {
     }
 }
 
-/// Talks to the Moonlight add-on on its direct port (8099) with this Apple TV's display token.
+/// Talks to the Moonlight add-on on its direct LAN port (8091 by default) with this Apple TV's display token.
 struct APIClient: Sendable {
     let baseURL: URL
     let token: String?

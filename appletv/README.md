@@ -20,9 +20,10 @@ editing (events, chores, rewards, list items) stays on the wall screens and phon
 ## Pairing
 
 1. Open the app. It finds Moonlight on the home network: Home Assistant announces itself over Bonjour
-   (`_home-assistant._tcp`) and the add-on answers on port 8099 of the same host; `homeassistant.local` is tried too.
-   If nothing is found, **Enter address** picks the IP with the remote (swipe up/down on each number; it starts from
-   the Apple TV's own network so usually only the last number changes).
+   (`_home-assistant._tcp`) and the add-on answers on the same host, on port 8091 (the default) or 8099 (before
+   0.3.1); `homeassistant.local` is tried too. If nothing is found, or you moved the add-on to another host port
+   (add-on › Configuration › Network), **Enter address** picks the IP and port with the remote (swipe up/down on each
+   number; it starts from the Apple TV's own network so usually only the last number changes).
 2. The TV shows a 6-digit code. On a phone or wall screen open Moonlight › Settings › Screens › Pair a new screen and
    enter it. The TV is paired as a hallway-style screen named "Apple TV" (rename it there if you like).
 3. The token is kept in the Apple TV's Keychain. Deleting the screen in Settings › Screens sends the TV back to pairing.
