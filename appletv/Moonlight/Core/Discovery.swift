@@ -19,8 +19,8 @@ final class Discovery {
     }
 
     /// Ports tried on every host, most likely first.
-    static let ports = [8091, 8099]
-    static let defaultPort = ports[0]
+    nonisolated static let ports = [8091, 8099]
+    nonisolated static let defaultPort = 8091
 
     private(set) var servers: [Server] = []
     private(set) var searching = false
