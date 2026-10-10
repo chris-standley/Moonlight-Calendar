@@ -1,5 +1,0 @@
-# Home Assistant add-on repository: Settings > Add-ons > Add-on Store > ⋮ > Repositories > add the URL below.
-# Needs the GitHub repo (and the GHCR images in addon/config.yaml) to be public. The add-on itself is addon/.
-name: Moonlight
-url: https://github.com/chris-standley/Moonlight-Calendar
-maintainer: Christopher

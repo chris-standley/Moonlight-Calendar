@@ -3,7 +3,7 @@ version: "0.2.0"
 slug: moonlight
 description: Family wall calendar, chores, lists and meal planner for kiosk displays
 url: https://github.com/chris-standley/Moonlight-Calendar
-# Prebuilt by .github/workflows/addon.yml; HA pulls <image>:<version> instead of building from source.
+# Prebuilt by .github/workflows/addon.yml in chris-standley/Moonlight-Calendar; HA pulls <image>:<version>.
 image: ghcr.io/chris-standley/{arch}-moonlight-addon
 arch:
   - aarch64

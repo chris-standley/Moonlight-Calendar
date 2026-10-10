@@ -9,26 +9,29 @@ Version 0.2: demo family data; iCloud calendar sync (Settings > Calendars).
 | `seed/demo.json` | Demo family (4 people, events, chores, rewards, lists, meals), dates relative to today |
 | `backend/` | Python FastAPI + SQLite. `cd backend && python3 -m moonlight` (port 8099). Tests: `python3 -m pytest tests` |
 | `frontend/` | React + TypeScript (Vite). `npm ci && npm run build` -> `dist/` served by the backend |
-| `addon/` | Home Assistant add-on (config.yaml, multi-stage Dockerfile built from the repo root, DOCS.md). `repository.yaml` makes this repo an add-on repository |
+| `addon/` | Home Assistant add-on (config.yaml, multi-stage Dockerfile built from the repo root, DOCS.md). It is listed in [home-assistant-apps](https://github.com/chris-standley/home-assistant-apps) |
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
 | `tests/` | Tests for the integration (`python3 -m pytest tests`; `tests/ha/` needs pytest-homeassistant-custom-component) |
 | `screenshots/` | Every view at hallway (2560x1440), kitchen (1920x1200 at 2x zoom) and phone sizes |
 
 ## Install on Home Assistant
 
-1. Settings > Add-ons > Add-on Store > ⋮ > Repositories, add `https://github.com/chris-standley/Moonlight-Calendar`.
+Moonlight is listed in [chris-standley/home-assistant-apps](https://github.com/chris-standley/home-assistant-apps),
+alongside the other apps there.
+
+1. Settings > Apps > App Store > ⋮ > Repositories, add `https://github.com/chris-standley/home-assistant-apps`.
 2. **Moonlight** > Install (⋮ > Check for updates if it is not listed yet), set the options, Start, Show in sidebar.
 3. Options: `demo` (seed the demo family into an empty database, default on), `weather_entity` (e.g. `weather.home`),
    `require_pairing` (default on). The household timezone defaults to Home Assistant's.
 4. Pair wall screens on port 8099 (below) and connect iCloud in Settings > Calendars.
 
-The add-on page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
+The app page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
 
-This needs the repo to be **public**. HA doesn't build anything: `config.yaml` names prebuilt images
-(`ghcr.io/chris-standley/{arch}-moonlight-addon`), which `.github/workflows/addon.yml` builds for amd64 and aarch64
-and pushes to GHCR on main when `version` in `addon/config.yaml` is new (or on a manual run). The GHCR packages must be
-public too: if they don't inherit the repo's visibility, open each package on GitHub (Packages) > Package settings >
-Change visibility > Public. Pull requests build both images and start them without pushing.
+HA doesn't build anything: `config.yaml` names prebuilt public images (`ghcr.io/chris-standley/{arch}-moonlight-addon`),
+which `.github/workflows/addon.yml` builds for amd64 and aarch64 and pushes to GHCR on main when `version` in
+`addon/config.yaml` is new (or on a manual run). Pull requests build both images and start them without pushing.
+home-assistant-apps' `sync-moonlight` workflow then copies `addon/config.yaml`, `addon/DOCS.md` and the translations
+into its `moonlight/` folder, so edit them here, not there.
 
 To release: bump `version` in `addon/config.yaml` and `__version__` in `backend/moonlight/__init__.py` (CI checks
 they match) and merge to main; HA then offers the update.

@@ -2,13 +2,13 @@
 
 ## Install
 
-1. Settings > Add-ons > Add-on Store > ⋮ (top right) > Repositories, add
-   `https://github.com/chris-standley/Moonlight-Calendar` and close the dialog.
+1. Settings > Apps > App Store > ⋮ (top right) > Repositories, add
+   `https://github.com/chris-standley/home-assistant-apps` and close the dialog.
 2. Find **Moonlight** in the store (⋮ > Check for updates if it is not listed yet) and click **Install**.
    Home Assistant downloads the prebuilt image for your machine (amd64 or aarch64) from GitHub's container registry.
 3. Set the options below, **Start**, and turn on **Show in sidebar**.
 
-New versions show up as an update on the add-on page.
+New versions show up as an update on the app page.
 
 ## Options
 
