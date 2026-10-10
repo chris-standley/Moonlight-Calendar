@@ -1,0 +1,28 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "all_chores_done": {
+        "default": "mdi:checkbox-blank-circle-outline",
+        "state": { "on": "mdi:check-all" }
+      }
+    },
+    "calendar": {
+      "calendar": { "default": "mdi:calendar-account" }
+    },
+    "sensor": {
+      "stars": { "default": "mdi:star" },
+      "chores_left": { "default": "mdi:broom" },
+      "chores_done": { "default": "mdi:check-circle-outline" },
+      "dinner": { "default": "mdi:silverware-fork-knife" },
+      "next_event": { "default": "mdi:calendar-clock" }
+    },
+    "todo": {
+      "list": { "default": "mdi:clipboard-list-outline" }
+    }
+  },
+  "services": {
+    "complete_chore": { "service": "mdi:check-bold" },
+    "award_stars": { "service": "mdi:star-plus" },
+    "add_list_item": { "service": "mdi:playlist-plus" }
+  }
+}

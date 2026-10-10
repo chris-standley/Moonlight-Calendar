@@ -1,0 +1,333 @@
+"""SQLite storage (stdlib sqlite3, no ORM) plus small shared helpers."""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import sqlite3
+import uuid
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Any, Iterator
+from zoneinfo import ZoneInfo
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS people (
+    id    TEXT PRIMARY KEY,
+    name  TEXT NOT NULL,
+    color TEXT NOT NULL,
+    role  TEXT NOT NULL,
+    sort  INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS events (
+    id         TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    person_ids TEXT NOT NULL DEFAULT '[]',
+    start      TEXT NOT NULL,
+    "end"      TEXT NOT NULL,
+    all_day    INTEGER NOT NULL DEFAULT 0,
+    location   TEXT NOT NULL DEFAULT '',
+    notes      TEXT NOT NULL DEFAULT '',
+    repeat     TEXT
+);
+CREATE TABLE IF NOT EXISTS chores (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    emoji       TEXT NOT NULL DEFAULT '',
+    person_id   TEXT NOT NULL,
+    points      INTEGER NOT NULL DEFAULT 0,
+    time_of_day TEXT NOT NULL DEFAULT 'anytime',
+    schedule    TEXT NOT NULL,
+    sort        INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS completions (
+    chore_id     TEXT NOT NULL,
+    date         TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    PRIMARY KEY (chore_id, date)
+);
+CREATE TABLE IF NOT EXISTS ledger (
+    seq       INTEGER PRIMARY KEY AUTOINCREMENT,
+    id        TEXT NOT NULL UNIQUE,
+    person_id TEXT NOT NULL,
+    change    INTEGER NOT NULL,
+    reason    TEXT NOT NULL DEFAULT '',
+    at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ledger_person ON ledger(person_id);
+CREATE TABLE IF NOT EXISTS rewards (
+    id        TEXT PRIMARY KEY,
+    title     TEXT NOT NULL,
+    emoji     TEXT NOT NULL DEFAULT '',
+    cost      INTEGER NOT NULL,
+    person_id TEXT
+);
+CREATE TABLE IF NOT EXISTS lists (
+    id    TEXT PRIMARY KEY,
+    name  TEXT NOT NULL,
+    emoji TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    kind  TEXT NOT NULL,
+    sort  INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS items (
+    id         TEXT PRIMARY KEY,
+    list_id    TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    done       INTEGER NOT NULL DEFAULT 0,
+    person_id  TEXT,
+    due        TEXT,
+    created_at TEXT NOT NULL,
+    done_at    TEXT,
+    sort       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS items_list ON items(list_id);
+CREATE TABLE IF NOT EXISTS meals (
+    id        TEXT PRIMARY KEY,
+    date      TEXT NOT NULL,
+    slot      TEXT NOT NULL,
+    title     TEXT NOT NULL,
+    notes     TEXT NOT NULL DEFAULT '',
+    recipe_id TEXT
+);
+CREATE INDEX IF NOT EXISTS meals_date ON meals(date);
+CREATE TABLE IF NOT EXISTS displays (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    layout     TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    last_seen  TEXT,
+    revoked    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS albums (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS photos (
+    id          TEXT PRIMARY KEY,
+    album_id    TEXT NOT NULL,
+    filename    TEXT NOT NULL,
+    width       INTEGER NOT NULL,
+    height      INTEGER NOT NULL,
+    taken_at    TEXT,
+    uploaded_at TEXT NOT NULL,
+    uploaded_by TEXT
+);
+CREATE INDEX IF NOT EXISTS photos_album ON photos(album_id);
+CREATE TABLE IF NOT EXISTS recipes (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    emoji       TEXT NOT NULL DEFAULT '',
+    minutes     INTEGER,
+    ingredients TEXT NOT NULL DEFAULT '[]',
+    url         TEXT
+);
+"""
+
+# Calendar sync (see caldav_sync.py). Credentials live only in this database file.
+SYNC_SCHEMA = """
+CREATE TABLE IF NOT EXISTS accounts (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,              -- icloud | caldav
+    label      TEXT NOT NULL DEFAULT '',
+    username   TEXT NOT NULL,
+    password   TEXT NOT NULL,              -- never returned by the API
+    server_url TEXT NOT NULL,
+    home_url   TEXT,                       -- discovered calendar-home-set
+    status     TEXT NOT NULL DEFAULT 'ok', -- ok | auth_failed | error
+    last_error TEXT,
+    last_sync  TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS calendars (
+    id         TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    url        TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL DEFAULT '#8A94A6',
+    ctag       TEXT,                       -- getctag (or sync-token) seen at the last full pull
+    person_ids TEXT NOT NULL DEFAULT '[]',
+    visible    INTEGER NOT NULL DEFAULT 1,
+    read_only  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(account_id, url)
+);
+"""
+# Nullable source columns on events; NULL calendar_id = local-only event.
+EVENT_SOURCE_COLUMNS = {
+    "calendar_id": "TEXT", "uid": "TEXT", "href": "TEXT", "etag": "TEXT", "raw_ics": "TEXT",
+    "custom_repeat": "INTEGER NOT NULL DEFAULT 0",  # 1 = expand from raw_ics (EXDATE, overrides, COUNT...)
+}
+
+DEFAULT_SETTINGS = {
+    "family_name": "Our Family",
+    "week_start": "monday",
+    "temp_unit": "C",
+    "chore_approval": False,
+    # Photo screensaver: album id (None = all photos), seconds per photo, idle minutes per layout (0 = never).
+    "screensaver_album": None,
+    "screensaver_seconds": 10,
+    "idle_minutes": {"hallway": 5, "kitchen": 3, "phone": 0},
+    "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
+}
+
+FALLBACK_TIMEZONE = "Europe/London"
+
+
+def default_timezone() -> str:
+    """Household timezone when none is saved: MOONLIGHT_TIMEZONE (the add-on passes Home Assistant's zone)
+    if it is a valid IANA name, else Europe/London."""
+    name = os.environ.get("MOONLIGHT_TIMEZONE", "").strip()
+    if name:
+        try:
+            ZoneInfo(name)
+            return name
+        except Exception:
+            pass
+    return FALLBACK_TIMEZONE
+
+
+def default_settings() -> dict[str, Any]:
+    """DEFAULT_SETTINGS with the timezone resolved from the environment."""
+    return {**DEFAULT_SETTINGS, "timezone": default_timezone()}
+
+_db_path: str = os.environ.get("MOONLIGHT_DB", "./moonlight.db")
+
+
+def configure(path: str) -> None:
+    global _db_path
+    _db_path = path
+
+
+def db_path() -> str:
+    return _db_path
+
+
+@contextmanager
+def connect() -> Iterator[sqlite3.Connection]:
+    """Open a connection, commit on success, roll back on error, always close."""
+    conn = sqlite3.connect(_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def init_db() -> None:
+    parent = os.path.dirname(os.path.abspath(_db_path))
+    os.makedirs(parent, exist_ok=True)
+    with connect() as c:
+        c.executescript(SCHEMA)
+        c.executescript(SYNC_SCHEMA)
+        have = {r[1] for r in c.execute("PRAGMA table_info(events)")}
+        for col, decl in EVENT_SOURCE_COLUMNS.items():
+            if col not in have:
+                c.execute(f"ALTER TABLE events ADD COLUMN {col} {decl}")
+        c.execute("CREATE INDEX IF NOT EXISTS events_calendar ON events(calendar_id)")
+
+
+def is_empty() -> bool:
+    with connect() as c:
+        n = c.execute(
+            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings)"
+        ).fetchone()[0]
+    return n == 0
+
+
+# ---------------------------------------------------------------- helpers
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def now_iso() -> str:
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def now_precise() -> str:
+    """Microsecond timestamp for ordering (e.g. item done time); not exposed in the API."""
+    return datetime.now().isoformat()
+
+
+def rows(c: sqlite3.Connection, sql: str, args: tuple | list = ()) -> list[dict]:
+    return [dict(r) for r in c.execute(sql, args).fetchall()]
+
+
+def row(c: sqlite3.Connection, sql: str, args: tuple | list = ()) -> dict | None:
+    r = c.execute(sql, args).fetchone()
+    return dict(r) if r else None
+
+
+# ---------------------------------------------------------------- settings
+
+def get_setting(c: sqlite3.Connection, key: str, default: Any = None) -> Any:
+    r = c.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return json.loads(r["value"]) if r else default
+
+
+def set_setting(c: sqlite3.Connection, key: str, value: Any) -> None:
+    c.execute(
+        "INSERT INTO settings(key, value) VALUES(?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, json.dumps(value)),
+    )
+
+
+# ---------------------------------------------------------------- PIN
+
+_PBKDF2_ROUNDS = 100_000
+
+
+def hash_pin(pin: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, _PBKDF2_ROUNDS)
+    return f"pbkdf2_sha256${_PBKDF2_ROUNDS}${salt.hex()}${digest.hex()}"
+
+
+def check_pin_hash(pin: str, stored: str) -> bool:
+    try:
+        _, rounds, salt_hex, digest_hex = stored.split("$")
+        digest = hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt_hex), int(rounds))
+        return hmac.compare_digest(digest.hex(), digest_hex)
+    except (ValueError, AttributeError):
+        return False
+
+
+def set_pin(c: sqlite3.Connection, pin: str) -> None:
+    set_setting(c, "pin_hash", hash_pin(pin))
+
+
+def verify_pin(c: sqlite3.Connection, pin: Any) -> bool:
+    stored = get_setting(c, "pin_hash")
+    if not stored:
+        return True  # no PIN configured: nothing to protect
+    if pin is None:
+        return False
+    return check_pin_hash(str(pin), stored)
+
+
+# ---------------------------------------------------------------- points
+
+def balance(c: sqlite3.Connection, person_id: str) -> int:
+    return c.execute(
+        "SELECT COALESCE(SUM(change), 0) FROM ledger WHERE person_id = ?", (person_id,)
+    ).fetchone()[0]
+
+
+def add_ledger(c: sqlite3.Connection, person_id: str, change: int, reason: str, at: str | None = None) -> None:
+    c.execute(
+        "INSERT INTO ledger(id, person_id, change, reason, at) VALUES(?, ?, ?, ?, ?)",
+        (new_id("lg"), person_id, int(change), reason, at or now_iso()),
+    )

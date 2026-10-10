@@ -1,0 +1,74 @@
+complete_chore:
+  fields:
+    person:
+      required: true
+      example: Ada
+      selector:
+        text:
+    chore:
+      required: true
+      example: Make bed
+      selector:
+        text:
+    date:
+      required: false
+      selector:
+        date:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight
+
+award_stars:
+  fields:
+    person:
+      required: true
+      example: Ada
+      selector:
+        text:
+    stars:
+      required: true
+      example: 5
+      selector:
+        number:
+          min: -100
+          max: 100
+          mode: box
+    reason:
+      required: false
+      example: Helped with the shopping
+      selector:
+        text:
+    pin:
+      required: false
+      selector:
+        text:
+          type: password
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight
+
+add_list_item:
+  fields:
+    list:
+      required: true
+      example: Groceries
+      selector:
+        text:
+    item:
+      required: true
+      example: Milk
+      selector:
+        text:
+    due:
+      required: false
+      selector:
+        date:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight

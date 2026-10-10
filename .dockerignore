@@ -1,0 +1,15 @@
+# Docker build context is the repo root (addon/Dockerfile); send only what the image needs.
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/*.db
+.git
+.github
+.venv*
+frontend/dist
+frontend/dist-demo
+screenshots
+tests
+backend/tests
+custom_components

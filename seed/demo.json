@@ -1,0 +1,1221 @@
+{
+ "_about": "Demo family seed, dates relative to the day the database is seeded. 'day', 'end_day' (events, inclusive last day of an all-day event, default = day), meal 'day' and item 'due_day' are offsets from Monday of the current week. 'ago' and completions_ago are days before today. Timed events use 'start'/'end' HH:MM; all_day events omit them. Items without done are open. Used by the backend seeder and the in-browser demo client.",
+ "settings": {
+  "family_name": "The Demo Family",
+  "week_start": "monday",
+  "temp_unit": "C",
+  "pin": "1234",
+  "chore_approval": false
+ },
+ "people": [
+  {
+   "id": "p_alex",
+   "name": "Alex",
+   "color": "#4F7CEC",
+   "role": "adult",
+   "sort": 0
+  },
+  {
+   "id": "p_jordan",
+   "name": "Jordan",
+   "color": "#9B6BE0",
+   "role": "adult",
+   "sort": 1
+  },
+  {
+   "id": "p_mia",
+   "name": "Mia",
+   "color": "#F0679A",
+   "role": "child",
+   "sort": 2
+  },
+  {
+   "id": "p_leo",
+   "name": "Leo",
+   "color": "#2FB58A",
+   "role": "child",
+   "sort": 3
+  }
+ ],
+ "events": [
+  {
+   "id": "e_school_mia",
+   "title": "School",
+   "person_ids": [
+    "p_mia"
+   ],
+   "day": 0,
+   "start": "08:30",
+   "end": "15:15",
+   "location": "Oakfield Primary",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "MO",
+     "TU",
+     "WE",
+     "TH",
+     "FR"
+    ]
+   }
+  },
+  {
+   "id": "e_school_leo",
+   "title": "School",
+   "person_ids": [
+    "p_leo"
+   ],
+   "day": 0,
+   "start": "08:30",
+   "end": "15:00",
+   "location": "Oakfield Primary",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "MO",
+     "TU",
+     "WE",
+     "TH",
+     "FR"
+    ]
+   }
+  },
+  {
+   "id": "e_standup",
+   "title": "Team stand-up",
+   "person_ids": [
+    "p_alex"
+   ],
+   "day": 0,
+   "start": "09:30",
+   "end": "09:45",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "MO",
+     "TU",
+     "WE",
+     "TH",
+     "FR"
+    ]
+   }
+  },
+  {
+   "id": "e_swim",
+   "title": "Swimming lesson",
+   "person_ids": [
+    "p_mia"
+   ],
+   "day": 1,
+   "start": "16:30",
+   "end": "17:15",
+   "location": "Leisure Centre",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "TU"
+    ]
+   }
+  },
+  {
+   "id": "e_football",
+   "title": "Football training",
+   "person_ids": [
+    "p_leo"
+   ],
+   "day": 3,
+   "start": "17:00",
+   "end": "18:00",
+   "location": "Rec ground",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "TH"
+    ]
+   }
+  },
+  {
+   "id": "e_yoga",
+   "title": "Yoga",
+   "person_ids": [
+    "p_jordan"
+   ],
+   "day": 2,
+   "start": "19:30",
+   "end": "20:30",
+   "location": "Studio 4",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "WE"
+    ]
+   }
+  },
+  {
+   "id": "e_bins",
+   "title": "Bin day",
+   "person_ids": [
+    "p_alex",
+    "p_jordan"
+   ],
+   "day": 3,
+   "all_day": true,
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "TH"
+    ]
+   }
+  },
+  {
+   "id": "e_piano",
+   "title": "Piano",
+   "person_ids": [
+    "p_mia"
+   ],
+   "day": 3,
+   "start": "16:00",
+   "end": "16:30",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "TH"
+    ]
+   }
+  },
+  {
+   "id": "e_dentist",
+   "title": "Dentist",
+   "person_ids": [
+    "p_leo",
+    "p_jordan"
+   ],
+   "day": 1,
+   "start": "10:00",
+   "end": "10:40",
+   "location": "Smile Dental, High St"
+  },
+  {
+   "id": "e_1on1",
+   "title": "1:1 with Priya",
+   "person_ids": [
+    "p_alex"
+   ],
+   "day": 1,
+   "start": "14:00",
+   "end": "14:30"
+  },
+  {
+   "id": "e_parents",
+   "title": "Parents' evening",
+   "person_ids": [
+    "p_alex",
+    "p_jordan"
+   ],
+   "day": 2,
+   "start": "18:00",
+   "end": "18:30",
+   "location": "Oakfield Primary"
+  },
+  {
+   "id": "e_book",
+   "title": "Book club",
+   "person_ids": [
+    "p_jordan"
+   ],
+   "day": 4,
+   "start": "20:00",
+   "end": "22:00",
+   "location": "Sam's house"
+  },
+  {
+   "id": "e_pizza",
+   "title": "Pizza & movie night",
+   "person_ids": [
+    "p_alex",
+    "p_jordan",
+    "p_mia",
+    "p_leo"
+   ],
+   "day": 4,
+   "start": "18:00",
+   "end": "20:30"
+  },
+  {
+   "id": "e_parkrun",
+   "title": "Parkrun",
+   "person_ids": [
+    "p_alex"
+   ],
+   "day": 5,
+   "start": "09:00",
+   "end": "10:00",
+   "location": "Victoria Park",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "SA"
+    ]
+   }
+  },
+  {
+   "id": "e_party",
+   "title": "Ella's birthday party",
+   "person_ids": [
+    "p_mia"
+   ],
+   "day": 5,
+   "start": "14:00",
+   "end": "16:30",
+   "location": "Jump Zone"
+  },
+  {
+   "id": "e_grandma",
+   "title": "Lunch at Grandma's",
+   "person_ids": [
+    "p_alex",
+    "p_jordan",
+    "p_mia",
+    "p_leo"
+   ],
+   "day": 6,
+   "start": "12:30",
+   "end": "15:30"
+  },
+  {
+   "id": "e_haircut",
+   "title": "Haircut",
+   "person_ids": [
+    "p_jordan"
+   ],
+   "day": 0,
+   "start": "12:15",
+   "end": "13:00"
+  },
+  {
+   "id": "e_conf",
+   "title": "Work trip to Leeds",
+   "person_ids": [
+    "p_alex"
+   ],
+   "day": 8,
+   "all_day": true,
+   "end_day": 10
+  },
+  {
+   "id": "e_halfterm",
+   "title": "Half term",
+   "person_ids": [
+    "p_mia",
+    "p_leo"
+   ],
+   "day": 14,
+   "all_day": true,
+   "end_day": 19
+  },
+  {
+   "id": "e_vet",
+   "title": "Vet: Biscuit's jabs",
+   "person_ids": [
+    "p_jordan"
+   ],
+   "day": 9,
+   "start": "11:00",
+   "end": "11:30"
+  },
+  {
+   "id": "e_playdate",
+   "title": "Playdate with Noah",
+   "person_ids": [
+    "p_leo"
+   ],
+   "day": 9,
+   "start": "15:30",
+   "end": "17:30"
+  },
+  {
+   "id": "e_mot",
+   "title": "Car MOT",
+   "person_ids": [
+    "p_alex"
+   ],
+   "day": 11,
+   "start": "08:00",
+   "end": "09:00",
+   "location": "Kwik Garage"
+  },
+  {
+   "id": "e_dinner",
+   "title": "Dinner with the Patels",
+   "person_ids": [
+    "p_alex",
+    "p_jordan"
+   ],
+   "day": 12,
+   "start": "19:00",
+   "end": "22:00"
+  },
+  {
+   "id": "e_play",
+   "title": "School play rehearsal",
+   "person_ids": [
+    "p_mia"
+   ],
+   "day": 10,
+   "start": "15:15",
+   "end": "16:30"
+  },
+  {
+   "id": "e_last_week",
+   "title": "Boiler service",
+   "person_ids": [
+    "p_jordan"
+   ],
+   "day": -4,
+   "start": "08:00",
+   "end": "10:00"
+  },
+  {
+   "id": "e_movies",
+   "title": "Cinema",
+   "person_ids": [
+    "p_mia",
+    "p_leo",
+    "p_jordan"
+   ],
+   "day": -2,
+   "start": "11:00",
+   "end": "13:00"
+  },
+  {
+   "id": "e_hallow",
+   "title": "Halloween trick or treat",
+   "person_ids": [
+    "p_alex",
+    "p_jordan",
+    "p_mia",
+    "p_leo"
+   ],
+   "day": 18,
+   "start": "17:30",
+   "end": "19:30"
+  },
+  {
+   "id": "e_gym",
+   "title": "Gym",
+   "person_ids": [
+    "p_jordan"
+   ],
+   "day": 0,
+   "start": "07:00",
+   "end": "08:00",
+   "repeat": {
+    "freq": "weekly",
+    "interval": 1,
+    "byday": [
+     "MO",
+     "FR"
+    ]
+   }
+  }
+ ],
+ "chores": [
+  {
+   "id": "c_mia_bed",
+   "title": "Make bed",
+   "emoji": "🛏️",
+   "person_id": "p_mia",
+   "points": 2,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_mia_teeth_am",
+   "title": "Brush teeth",
+   "emoji": "🪥",
+   "person_id": "p_mia",
+   "points": 1,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_mia_bag",
+   "title": "Pack school bag",
+   "emoji": "🎒",
+   "person_id": "p_mia",
+   "points": 2,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "MO",
+     "TU",
+     "WE",
+     "TH",
+     "FR"
+    ]
+   }
+  },
+  {
+   "id": "c_mia_read",
+   "title": "Reading 20 mins",
+   "emoji": "📚",
+   "person_id": "p_mia",
+   "points": 3,
+   "time_of_day": "afternoon",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_mia_piano",
+   "title": "Piano practice",
+   "emoji": "🎹",
+   "person_id": "p_mia",
+   "points": 3,
+   "time_of_day": "afternoon",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "MO",
+     "TU",
+     "WE",
+     "TH",
+     "FR",
+     "SA"
+    ]
+   }
+  },
+  {
+   "id": "c_mia_table",
+   "title": "Set the table",
+   "emoji": "🍽️",
+   "person_id": "p_mia",
+   "points": 2,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_mia_teeth_pm",
+   "title": "Brush teeth",
+   "emoji": "🪥",
+   "person_id": "p_mia",
+   "points": 1,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_mia_room",
+   "title": "Tidy bedroom",
+   "emoji": "🧸",
+   "person_id": "p_mia",
+   "points": 5,
+   "time_of_day": "anytime",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "SA"
+    ]
+   }
+  },
+  {
+   "id": "c_leo_dress",
+   "title": "Get dressed",
+   "emoji": "👕",
+   "person_id": "p_leo",
+   "points": 1,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_leo_teeth_am",
+   "title": "Brush teeth",
+   "emoji": "🪥",
+   "person_id": "p_leo",
+   "points": 1,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_leo_feed",
+   "title": "Feed Biscuit",
+   "emoji": "🐶",
+   "person_id": "p_leo",
+   "points": 2,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_leo_read",
+   "title": "Reading 10 mins",
+   "emoji": "📖",
+   "person_id": "p_leo",
+   "points": 3,
+   "time_of_day": "afternoon",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "MO",
+     "TU",
+     "WE",
+     "TH",
+     "FR"
+    ]
+   }
+  },
+  {
+   "id": "c_leo_toys",
+   "title": "Put toys away",
+   "emoji": "🧩",
+   "person_id": "p_leo",
+   "points": 2,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_leo_plate",
+   "title": "Clear your plate",
+   "emoji": "🍽️",
+   "person_id": "p_leo",
+   "points": 1,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_leo_teeth_pm",
+   "title": "Brush teeth",
+   "emoji": "🪥",
+   "person_id": "p_leo",
+   "points": 1,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_alex_dish",
+   "title": "Empty dishwasher",
+   "emoji": "🧽",
+   "person_id": "p_alex",
+   "points": 0,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "daily"
+   }
+  },
+  {
+   "id": "c_alex_bins",
+   "title": "Bins out",
+   "emoji": "🗑️",
+   "person_id": "p_alex",
+   "points": 0,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "WE"
+    ]
+   }
+  },
+  {
+   "id": "c_alex_lunch",
+   "title": "Make packed lunches",
+   "emoji": "🥪",
+   "person_id": "p_alex",
+   "points": 0,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "SU",
+     "MO",
+     "TU",
+     "WE",
+     "TH"
+    ]
+   }
+  },
+  {
+   "id": "c_jordan_plants",
+   "title": "Water plants",
+   "emoji": "🪴",
+   "person_id": "p_jordan",
+   "points": 0,
+   "time_of_day": "anytime",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "MO",
+     "TH"
+    ]
+   }
+  },
+  {
+   "id": "c_jordan_laundry",
+   "title": "Laundry",
+   "emoji": "🧺",
+   "person_id": "p_jordan",
+   "points": 0,
+   "time_of_day": "morning",
+   "schedule": {
+    "type": "weekly",
+    "days": [
+     "MO",
+     "WE",
+     "SA"
+    ]
+   }
+  },
+  {
+   "id": "c_jordan_walk",
+   "title": "Walk Biscuit",
+   "emoji": "🦮",
+   "person_id": "p_jordan",
+   "points": 0,
+   "time_of_day": "evening",
+   "schedule": {
+    "type": "daily"
+   }
+  }
+ ],
+ "completions_ago": {
+  "_note": "chore id -> list of days-ago that were completed (0 = today)",
+  "c_mia_bed": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8
+  ],
+  "c_mia_teeth_am": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "c_mia_read": [
+   1,
+   2,
+   3,
+   5,
+   6
+  ],
+  "c_mia_piano": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "c_mia_table": [
+   1,
+   2,
+   4
+  ],
+  "c_mia_teeth_pm": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "c_leo_dress": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ],
+  "c_leo_teeth_am": [
+   1,
+   2,
+   3
+  ],
+  "c_leo_feed": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "c_leo_read": [
+   1,
+   3,
+   4
+  ],
+  "c_leo_toys": [
+   1,
+   2
+  ],
+  "c_leo_teeth_pm": [
+   1,
+   2,
+   3,
+   4
+  ],
+  "c_alex_dish": [
+   0,
+   1,
+   2
+  ],
+  "c_jordan_walk": [
+   1,
+   2,
+   3
+  ]
+ },
+ "bonus_points": [
+  {
+   "person_id": "p_mia",
+   "change": 20,
+   "reason": "⭐ Starting stars",
+   "ago": 14
+  },
+  {
+   "person_id": "p_leo",
+   "change": 15,
+   "reason": "⭐ Starting stars",
+   "ago": 14
+  },
+  {
+   "person_id": "p_mia",
+   "change": -10,
+   "reason": "🍦 Ice cream trip",
+   "ago": 3
+  },
+  {
+   "person_id": "p_leo",
+   "change": 5,
+   "reason": "💛 Kind to his sister",
+   "ago": 2
+  }
+ ],
+ "rewards": [
+  {
+   "id": "r_screen",
+   "title": "30 mins extra screen time",
+   "emoji": "📱",
+   "cost": 15,
+   "person_id": null
+  },
+  {
+   "id": "r_icecream",
+   "title": "Ice cream trip",
+   "emoji": "🍦",
+   "cost": 25,
+   "person_id": null
+  },
+  {
+   "id": "r_movie",
+   "title": "Pick the Friday movie",
+   "emoji": "🎬",
+   "cost": 20,
+   "person_id": null
+  },
+  {
+   "id": "r_late",
+   "title": "Stay up 30 mins late",
+   "emoji": "🌙",
+   "cost": 30,
+   "person_id": null
+  },
+  {
+   "id": "r_lego",
+   "title": "New LEGO set",
+   "emoji": "🧱",
+   "cost": 120,
+   "person_id": "p_leo"
+  },
+  {
+   "id": "r_sleepover",
+   "title": "Sleepover with a friend",
+   "emoji": "⛺",
+   "cost": 100,
+   "person_id": "p_mia"
+  }
+ ],
+ "lists": [
+  {
+   "id": "l_grocery",
+   "name": "Groceries",
+   "emoji": "🛒",
+   "color": "#2FB58A",
+   "kind": "grocery",
+   "items": [
+    {
+     "title": "Semi-skimmed milk"
+    },
+    {
+     "title": "Bananas"
+    },
+    {
+     "title": "Sourdough loaf"
+    },
+    {
+     "title": "Cheddar"
+    },
+    {
+     "title": "Chicken thighs"
+    },
+    {
+     "title": "Greek yoghurt"
+    },
+    {
+     "title": "Cherry tomatoes"
+    },
+    {
+     "title": "Dog food",
+     "person_id": "p_jordan"
+    },
+    {
+     "title": "Eggs",
+     "done": true
+    },
+    {
+     "title": "Pasta",
+     "done": true
+    },
+    {
+     "title": "Apples",
+     "done": true
+    }
+   ]
+  },
+  {
+   "id": "l_house",
+   "name": "House jobs",
+   "emoji": "🏠",
+   "color": "#4F7CEC",
+   "kind": "todo",
+   "items": [
+    {
+     "title": "Book boiler service",
+     "person_id": "p_jordan",
+     "done": true
+    },
+    {
+     "title": "Fix the garden gate",
+     "person_id": "p_alex",
+     "due_day": 5
+    },
+    {
+     "title": "Renew car insurance",
+     "person_id": "p_alex",
+     "due_day": 9
+    },
+    {
+     "title": "Order school photos",
+     "person_id": "p_jordan",
+     "due_day": 2
+    },
+    {
+     "title": "Sort out loft",
+     "person_id": null
+    }
+   ]
+  },
+  {
+   "id": "l_halfterm",
+   "name": "Half term ideas",
+   "emoji": "🍂",
+   "color": "#F5A524",
+   "kind": "todo",
+   "items": [
+    {
+     "title": "Science museum"
+    },
+    {
+     "title": "Pumpkin carving"
+    },
+    {
+     "title": "Forest walk + hot chocolate"
+    },
+    {
+     "title": "Bake cookies with Grandma"
+    }
+   ]
+  },
+  {
+   "id": "l_gifts",
+   "name": "Gift ideas",
+   "emoji": "🎁",
+   "color": "#F0679A",
+   "kind": "todo",
+   "items": [
+    {
+     "title": "Ella: art set",
+     "person_id": "p_mia"
+    },
+    {
+     "title": "Grandma: photo book"
+    }
+   ]
+  }
+ ],
+ "recipes": [
+  {
+   "id": "rc_bolognese",
+   "title": "Spaghetti bolognese",
+   "emoji": "🍝",
+   "minutes": 40,
+   "ingredients": [
+    "Beef mince",
+    "Spaghetti",
+    "Chopped tomatoes",
+    "Onion",
+    "Garlic",
+    "Carrot"
+   ]
+  },
+  {
+   "id": "rc_tacos",
+   "title": "Chicken tacos",
+   "emoji": "🌮",
+   "minutes": 25,
+   "ingredients": [
+    "Chicken thighs",
+    "Tortillas",
+    "Peppers",
+    "Sour cream",
+    "Lime"
+   ]
+  },
+  {
+   "id": "rc_curry",
+   "title": "Chickpea curry",
+   "emoji": "🍛",
+   "minutes": 35,
+   "ingredients": [
+    "Chickpeas",
+    "Coconut milk",
+    "Spinach",
+    "Curry paste",
+    "Basmati rice"
+   ]
+  },
+  {
+   "id": "rc_fish",
+   "title": "Fish pie",
+   "emoji": "🐟",
+   "minutes": 60,
+   "ingredients": [
+    "Fish pie mix",
+    "Potatoes",
+    "Milk",
+    "Peas",
+    "Butter"
+   ]
+  },
+  {
+   "id": "rc_pizza",
+   "title": "Homemade pizza",
+   "emoji": "🍕",
+   "minutes": 30,
+   "ingredients": [
+    "Pizza bases",
+    "Passata",
+    "Mozzarella",
+    "Pepperoni"
+   ]
+  },
+  {
+   "id": "rc_roast",
+   "title": "Sunday roast chicken",
+   "emoji": "🍗",
+   "minutes": 100,
+   "ingredients": [
+    "Whole chicken",
+    "Potatoes",
+    "Carrots",
+    "Broccoli",
+    "Gravy granules"
+   ]
+  },
+  {
+   "id": "rc_stirfry",
+   "title": "Veg stir fry",
+   "emoji": "🥡",
+   "minutes": 20,
+   "ingredients": [
+    "Egg noodles",
+    "Stir fry veg",
+    "Soy sauce",
+    "Ginger"
+   ]
+  },
+  {
+   "id": "rc_pancakes",
+   "title": "Pancakes",
+   "emoji": "🥞",
+   "minutes": 20,
+   "ingredients": [
+    "Flour",
+    "Eggs",
+    "Milk",
+    "Maple syrup"
+   ]
+  }
+ ],
+ "meals": [
+  {
+   "day": 0,
+   "slot": "dinner",
+   "title": "Spaghetti bolognese",
+   "recipe_id": "rc_bolognese"
+  },
+  {
+   "day": 1,
+   "slot": "dinner",
+   "title": "Chicken tacos",
+   "recipe_id": "rc_tacos"
+  },
+  {
+   "day": 2,
+   "slot": "dinner",
+   "title": "Chickpea curry",
+   "recipe_id": "rc_curry"
+  },
+  {
+   "day": 3,
+   "slot": "dinner",
+   "title": "Fish pie",
+   "recipe_id": "rc_fish"
+  },
+  {
+   "day": 4,
+   "slot": "dinner",
+   "title": "Homemade pizza",
+   "recipe_id": "rc_pizza"
+  },
+  {
+   "day": 5,
+   "slot": "dinner",
+   "title": "Takeaway night"
+  },
+  {
+   "day": 6,
+   "slot": "dinner",
+   "title": "Leftovers & soup"
+  },
+  {
+   "day": 6,
+   "slot": "lunch",
+   "title": "Sunday roast at Grandma's",
+   "recipe_id": "rc_roast"
+  },
+  {
+   "day": 5,
+   "slot": "breakfast",
+   "title": "Pancakes",
+   "recipe_id": "rc_pancakes"
+  },
+  {
+   "day": 6,
+   "slot": "breakfast",
+   "title": "Full English"
+  },
+  {
+   "day": 0,
+   "slot": "breakfast",
+   "title": "Porridge & berries"
+  },
+  {
+   "day": 1,
+   "slot": "breakfast",
+   "title": "Toast & eggs"
+  },
+  {
+   "day": 2,
+   "slot": "breakfast",
+   "title": "Cereal"
+  },
+  {
+   "day": 3,
+   "slot": "breakfast",
+   "title": "Porridge & berries"
+  },
+  {
+   "day": 4,
+   "slot": "breakfast",
+   "title": "Yoghurt & granola"
+  },
+  {
+   "day": 0,
+   "slot": "lunch",
+   "title": "School lunch / sandwiches"
+  },
+  {
+   "day": 5,
+   "slot": "lunch",
+   "title": "Picnic in the park"
+  },
+  {
+   "day": 2,
+   "slot": "snack",
+   "title": "Apple slices & peanut butter"
+  },
+  {
+   "day": 4,
+   "slot": "snack",
+   "title": "Popcorn for movie night"
+  },
+  {
+   "day": 7,
+   "slot": "dinner",
+   "title": "Veg stir fry",
+   "recipe_id": "rc_stirfry"
+  },
+  {
+   "day": 8,
+   "slot": "dinner",
+   "title": "Spaghetti bolognese",
+   "recipe_id": "rc_bolognese"
+  },
+  {
+   "day": -1,
+   "slot": "dinner",
+   "title": "Sunday roast chicken",
+   "recipe_id": "rc_roast"
+  }
+ ]
+}

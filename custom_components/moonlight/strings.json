@@ -1,0 +1,168 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Moonlight",
+        "description": "Enter where the Moonlight add-on (or server) is running. Inside Home Assistant OS the add-on is usually reachable as `{addon_host}` (installed from a local add-on folder) or via your Home Assistant host's IP address, on port {port}.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of Moonlight, e.g. local-moonlight or 192.168.1.20.",
+          "port": "Moonlight's HTTP port (8099 by default)."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Moonlight",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of Moonlight.",
+          "port": "Moonlight's HTTP port (8099 by default)."
+        }
+      },
+      "pair": {
+        "title": "Pair Home Assistant with Moonlight",
+        "description": "This Moonlight only answers paired screens and apps. Enter this code in Moonlight: **Settings > Screens > Pair a new screen**, with your parent PIN.\n\n## {code}\n\nThen select **Submit**. The code is valid for 10 minutes; Home Assistant will appear in Moonlight's screen list as \"Home Assistant\", where you can revoke it."
+      },
+      "reauth_confirm": {
+        "title": "Pair Home Assistant with Moonlight again",
+        "description": "Moonlight at `{host}` no longer accepts Home Assistant (pairing was turned on, or Home Assistant was revoked under Settings > Screens). Select **Submit** to get a new pairing code."
+      }
+    },
+    "error": {
+      "cannot_connect": "Couldn't connect. Check the host and port, and that the add-on is running.",
+      "not_moonlight": "Something answered, but it doesn't look like Moonlight.",
+      "unknown": "Unexpected error",
+      "not_paired": "That code hasn't been entered in Moonlight yet. Enter it under Settings > Screens > Pair a new screen, then select Submit again.",
+      "pair_expired": "The code expired; here is a new one.",
+      "pair_busy": "Too many screens are waiting to pair with Moonlight. Try again in a few minutes.",
+      "pair_failed": "Moonlight couldn't start pairing. Make sure the add-on is up to date."
+    },
+    "abort": {
+      "already_configured": "This Moonlight is already set up.",
+      "reconfigure_successful": "Moonlight was reconfigured.",
+      "reauth_successful": "Home Assistant is paired with Moonlight again."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "all_chores_done": {
+        "name": "{person} all chores done"
+      }
+    },
+    "calendar": {
+      "calendar": {
+        "name": "{person}"
+      }
+    },
+    "sensor": {
+      "stars": {
+        "name": "{person} stars"
+      },
+      "chores_left": {
+        "name": "{person} chores left",
+        "state_attributes": {
+          "remaining": {
+            "name": "Remaining"
+          },
+          "total": {
+            "name": "Total"
+          },
+          "done": {
+            "name": "Done"
+          }
+        }
+      },
+      "chores_done": {
+        "name": "{person} chores done"
+      },
+      "dinner": {
+        "name": "Tonight's dinner"
+      },
+      "next_event": {
+        "name": "Next event"
+      }
+    },
+    "todo": {
+      "list": {
+        "name": "List"
+      }
+    }
+  },
+  "services": {
+    "complete_chore": {
+      "name": "Complete chore",
+      "description": "Ticks off a chore in Moonlight and awards its stars.",
+      "fields": {
+        "person": {
+          "name": "Person",
+          "description": "Name or id of the person the chore belongs to."
+        },
+        "chore": {
+          "name": "Chore",
+          "description": "Chore title (emoji optional) or id."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Day to tick off. Defaults to today."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    },
+    "award_stars": {
+      "name": "Award stars",
+      "description": "Adds (or with a negative number, removes) stars for a person.",
+      "fields": {
+        "person": {
+          "name": "Person",
+          "description": "Name or id of the person."
+        },
+        "stars": {
+          "name": "Stars",
+          "description": "Number of stars; negative to take some away."
+        },
+        "reason": {
+          "name": "Reason",
+          "description": "Shown in the person's star history."
+        },
+        "pin": {
+          "name": "Parent PIN",
+          "description": "Moonlight's parent PIN, if one is set."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    },
+    "add_list_item": {
+      "name": "Add list item",
+      "description": "Adds an item to a Moonlight list.",
+      "fields": {
+        "list": {
+          "name": "List",
+          "description": "List name (emoji optional) or id."
+        },
+        "item": {
+          "name": "Item",
+          "description": "What to add."
+        },
+        "due": {
+          "name": "Due date",
+          "description": "Optional due date."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    }
+  }
+}
