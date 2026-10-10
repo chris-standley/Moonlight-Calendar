@@ -125,7 +125,7 @@ jobs:
         run: |
           set -eux
           docker run --rm --platform "$PLATFORM" --entrypoint python3 "$IMG" \
-            -c "import moonlight.main, caldav, lxml.etree, PIL.Image, pillow_heif; print('imports ok')"
+            -c "import moonlight.main, caldav, lxml.etree, httpx; print('imports ok')"
           # TZ needs the zone files (tzdata) under musl.
           test "$(docker run --rm --platform "$PLATFORM" --entrypoint date -e TZ=America/Chicago "$IMG" +%Z)" != "UTC"
           mkdir -p "$RUNNER_TEMP/data"

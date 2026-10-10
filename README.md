@@ -1,7 +1,7 @@
 # Moonlight
 
 Self-hosted family wall calendar for kitchen and hallway screens, packaged as a Home Assistant add-on.
-Version 0.2: demo family data; iCloud calendar sync (Settings > Calendars).
+Version 0.2: demo family data; iCloud calendar sync (Settings > Calendars); photo screensaver from Immich.
 
 | Folder | What it is |
 |---|---|
@@ -60,12 +60,17 @@ the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add
 turns this off. The Home Assistant integration (`custom_components/moonlight`) pairs the same way: its setup dialog
 shows a code to enter there, and it is listed as "Home Assistant" (Integration) so it can be revoked too.
 
-## Photos
+## Photo screensaver (Immich)
 
-Photos view (rail button; also in the phone's bottom bar): albums, upload (many at once, 25 MB each), delete with
-the PIN, "Start slideshow". The idle screensaver shows the chosen album (Settings > Photo screensaver) with a
-crossfade and slow zoom; portrait photos on a landscape screen are shown whole over a blurred copy. Files live in
-`/data/photos` in the add-on. iPhone HEIC needs `pillow-heif` (installed when its wheel is available).
+The idle screensaver shows photos from your [Immich](https://immich.app) server (for example the Immich add-on on the
+same Home Assistant box) with a crossfade and slow zoom; portrait photos on a landscape screen are shown whole over a
+blurred copy. Settings > Photo screensaver > Connect Immich: enter Immich's address and an API key (Immich > Account
+Settings > API Keys, with `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on this day"), Test
+connection, then pick albums and optionally favourites and "on this day" memories. Moonlight keeps the key in its
+database and proxies the preview images, so the screens never see Immich or the key, and only photos in the chosen
+albums can be fetched. Photos only (videos are skipped). If Immich is down or nothing is chosen, the screensaver shows
+painted landscapes. Moonlight no longer stores photos itself; earlier versions kept uploads in `/data/photos`, which
+can be deleted.
 
 ## iCloud calendars
 

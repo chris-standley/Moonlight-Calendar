@@ -9,8 +9,7 @@ export interface Settings {
   temp_unit: "C" | "F";
   pin_set: boolean;
   chore_approval: boolean;
-  /** Photo screensaver: album id (null = all photos), seconds per photo, idle minutes per screen (0 = never). */
-  screensaver_album?: string | null;
+  /** Photo screensaver: seconds per photo, idle minutes per screen (0 = never). Photos come from Immich. */
   screensaver_seconds?: number;
   idle_minutes?: Partial<Record<"hallway" | "kitchen" | "phone", number>>;
   timezone?: string;
@@ -71,14 +70,20 @@ export interface Weather {
 export type Layout = "hallway" | "kitchen" | "phone";
 /** "service" = a non-screen client such as the Home Assistant integration. */
 export interface Display { id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean }
-export interface Album { id: string; name: string; created_at: string; photo_count: number; cover_photo_id: string | null }
-export interface Photo {
-  id: string; album_id: string; filename: string; width: number; height: number;
-  taken_at: string | null; uploaded_at: string; uploaded_by: string | null;
-  /** Ready to use as <img src> (the HTTP client prefixes the ingress base path). */
-  display_url: string; thumb_url: string;
+
+// Photo screensaver source: the family's Immich server. Moonlight keeps the API key (write-only) and proxies previews.
+export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
+export interface ImmichConfig {
+  configured: boolean; server_url: string; key_set: boolean; album_ids: string[]; favorites: boolean; memories: boolean;
+  status: ImmichStatus; last_error: string | null; last_refresh: string | null; photo_count: number; version: string | null;
 }
-export interface UploadResult { uploaded: Photo[]; errors: { filename: string; detail: string }[] }
+export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean }
+/** PUT /api/immich: `api_key` may be left out once one is saved. */
+export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; pin: string }
+export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
+/** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
+export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; url: string }
+export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[] }
 
 export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts";
 
@@ -149,13 +154,14 @@ export interface Api {
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;
   revokeDisplay(id: string, pin: string): Promise<void>;
-  // Photos
-  albums(): Promise<Album[]>;
-  createAlbum(name: string): Promise<Album>;
-  deleteAlbum(id: string, pin: string): Promise<void>;
-  photos(albumId?: string | null): Promise<Photo[]>;
-  uploadPhotos(albumId: string | null, files: File[]): Promise<UploadResult>;
-  deletePhoto(id: string, pin: string): Promise<void>;
+  // Photo screensaver (Immich; see API.md "Photo screensaver")
+  immich(): Promise<ImmichConfig>;
+  saveImmich(c: ImmichIn): Promise<ImmichConfig>;
+  disconnectImmich(pin: string): Promise<void>;
+  /** Without server_url/api_key the saved ones are tested. */
+  testImmich(t: { server_url?: string; api_key?: string; pin: string }): Promise<ImmichTest>;
+  immichAlbums(): Promise<ImmichAlbum[]>;
+  screensaverPhotos(): Promise<ScreensaverPhotos>;
   accounts(): Promise<Account[]>;
   connectAccount(a: AccountIn): Promise<Account>;
   reconnectAccount(id: string, creds: { password: string; username?: string; pin: string }): Promise<Account>;

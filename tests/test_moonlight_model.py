@@ -229,7 +229,7 @@ def test_contract_with_backend_pairing(tmp_path):
     from moonlight.main import create_app
 
     app = create_app(db_path=str(tmp_path / "p.db"), demo=False, static_dir=tmp_path / "none",
-                     data_dir=tmp_path / "data", auth_enabled=True)
+                     auth_enabled=True)
     ingress = TestClient(app, client=("172.30.32.2", 1), headers={"X-Ingress-Path": "/x"})
     assert ingress.patch("/api/settings", json={"pin": "1234"}).status_code == 200
     hass = TestClient(app, client=("192.168.1.9", 2))

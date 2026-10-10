@@ -13,8 +13,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, auth, caldav_sync, db
+from . import immich as immich_source
 from .common import hub, log
-from .routes import accounts, calendar, chores, displays, lists, meals, photos
+from .routes import accounts, calendar, chores, displays, immich, lists, meals
 from .routes import summary as summary_routes
 from .auth import AuthMiddleware
 from .seed import default_seed_path, seed_file
@@ -43,7 +44,6 @@ def create_app(
     seed_path: str | Path | None = None,
     static_dir: str | Path | None = None,
     today: date | None = None,
-    data_dir: str | Path | None = None,
     auth_enabled: bool | None = None,
     ingress_ips: set[str] | None = None,
     sync: bool = False,
@@ -51,8 +51,7 @@ def create_app(
     """`sync=True` starts the background calendar sync loop (off by default so tests stay offline)."""
     db.configure(db_path or os.environ.get("MOONLIGHT_DB", "./moonlight.db"))
     db.init_db()
-    # Uploaded photos live in <data>/photos; default: next to the database (/data in the add-on).
-    photos.configure(data_dir or os.environ.get("MOONLIGHT_DATA") or os.path.dirname(os.path.abspath(db.db_path())))
+    immich_source.cache.reset()  # the cached photo list belongs to the previous database's settings
     if auth_enabled is None:
         auth_enabled = auth.auth_enabled_from_env()
     if demo is None:
@@ -79,7 +78,7 @@ def create_app(
             msgs.append(f"{loc}: {e.get('msg')}" if loc else str(e.get("msg")))
         return JSONResponse({"detail": "; ".join(msgs) or "Invalid request"}, status_code=400)
 
-    for module in (calendar, chores, lists, meals, displays, photos, accounts):
+    for module in (calendar, chores, lists, meals, displays, immich, accounts):
         app.include_router(module.router)
     app.include_router(summary_routes.router)
 

@@ -4,7 +4,7 @@ import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
-  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconPhotos, IconSettings, IconStar, Logo, WeatherIcon,
+  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconSettings, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -14,10 +14,9 @@ import { ListsView } from "./views/ListsView";
 import { TodayView } from "./views/TodayView";
 import { Screensaver } from "./views/Screensaver";
 import { SettingsView } from "./views/SettingsView";
-import { PhotosView } from "./views/PhotosView";
 import { SyncBanner } from "./views/SyncBanner";
 
-type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists" | "settings" | "photos";
+type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { key: "today", label: "Today", icon: IconHome },
   { key: "calendar", label: "Calendar", icon: IconCalendar },
@@ -40,7 +39,6 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [saver, setSaver] = useState(false);
-  const [saverAlbum, setSaverAlbum] = useState<string | null | undefined>(undefined); // undefined = settings' album
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,7 +55,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   useEffect(() => {
     const ms = idleMin !== undefined ? idleMin * 60_000 : IDLE_MS[layout];
     if (!ms) return;
-    const start = () => { setSaverAlbum(undefined); setSaver(true); };
+    const start = () => setSaver(true);
     let t = setTimeout(start, ms);
     const reset = () => { clearTimeout(t); t = setTimeout(start, ms); };
     const el = root.current!;
@@ -104,9 +102,6 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
               <span>{n.label}</span>
             </button>
           ))}
-          <button className={"rail-item rail-photos" + (tab === "photos" ? " on" : "")} onClick={() => setTab("photos")}>
-            <IconPhotos size={layout === "hallway" ? 30 : 24} /><span>Photos</span>
-          </button>
         </nav>
         <main className="main">
           <TopBar familyName={settings?.family_name ?? ""} />
@@ -119,15 +114,14 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
               {tab === "rewards" && <RewardsView />}
               {tab === "meals" && <MealsView />}
               {tab === "lists" && <ListsView />}
-              {tab === "settings" && <SettingsView onScreensaver={() => { setSaverAlbum(undefined); setSaver(true); }} />}
-              {tab === "photos" && <PhotosView onSlideshow={(album) => { setSaverAlbum(album); setSaver(true); }} />}
+              {tab === "settings" && <SettingsView onScreensaver={() => setSaver(true)} />}
             </>}
           </div>
         </main>
         {pinReq && <PinPad why={pinReq.why} error={pinReq.error} onDone={onPin} />}
         <div className="toasts">{toasts.map((t) => <div key={t.id} className="toast">{t.msg}</div>)}</div>
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
-        {saver && ready && <Screensaver album={saverAlbum} onWake={() => setSaver(false)} />}
+        {saver && ready && <Screensaver onWake={() => setSaver(false)} />}
       </div>
     </AppProvider>
   );

@@ -29,7 +29,6 @@ h1, h2 { margin: 0; }
 .rail-item { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; width: 100%; padding: 0.7rem 0.2rem; border-radius: 0.9rem; color: var(--muted); font-size: 0.78rem; font-weight: 700; transition: background 0.15s, color 0.15s; }
 .rail-item.on { background: #eef0fe; color: var(--accent); }
 .rail-item:active { background: var(--surface-2); }
-.rail-photos { margin-top: auto; }
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .topbar { display: flex; align-items: baseline; gap: 1.1rem; padding: 0.9rem 1.6rem 0.4rem; }
 .tb-time { font-size: 2.3rem; font-weight: 800; letter-spacing: -0.02em; }
@@ -440,7 +439,7 @@ h1, h2 { margin: 0; }
 /* ---------- phone (HA Companion panel) ---------- */
 .layout-phone { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
 .layout-phone .rail { grid-row: 2; flex-direction: row; width: auto; padding: 0.3rem 0.3rem calc(0.3rem + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); gap: 0; overflow-x: auto; }
-.layout-phone .rail-logo, .layout-phone .rail-photos { display: none; }
+.layout-phone .rail-logo { display: none; }
 .layout-phone .rail-item { padding: 0.4rem 0.1rem; font-size: 0.66rem; min-width: 3.4rem; }
 .layout-phone .main { grid-row: 1; }
 .layout-phone .topbar { padding: 0.8rem 1rem 0.2rem; flex-wrap: wrap; row-gap: 0; }
@@ -482,7 +481,7 @@ h1, h2 { margin: 0; }
   .pv-name { display: none; }
 }
 
-/* ===================== screens (pairing) + photos ===================== */
+/* ===================== screens (pairing) + photo screensaver settings ===================== */
 /* pairing screen on an unpaired LAN display */
 .pair-screen { height: 100%; display: grid; place-items: center; padding: 1.5rem; background: radial-gradient(120% 90% at 20% 0%, #2a2f5a 0%, #141831 55%, #0d1022 100%); color: #eef0fb; font-family: "Nunito", ui-rounded, system-ui, sans-serif; text-align: center; overflow: auto; }
 .pair-card { max-width: 46rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
@@ -526,44 +525,14 @@ h1, h2 { margin: 0; }
 .set-col .segmented { max-width: 100%; overflow-x: auto; }
 .set-col .segmented button { white-space: nowrap; flex: none; }
 
-/* Photos view */
-.photos-view { position: relative; }
-.album-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0 1.6rem 0.9rem; }
-.album-tabs .chip-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
-.album-tabs .chip-btn span { font-size: 0.8em; opacity: 0.65; }
-.album-tabs .chip-btn.add { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line); color: var(--muted); }
-.album-tabs .chip-btn.danger { margin-left: auto; background: transparent; color: var(--danger); }
-.btn.busy { opacity: 0.6; pointer-events: none; }
-label.btn { cursor: pointer; }
-.upload-bar { position: relative; margin: 0 1.6rem 0.8rem; padding: 0.6rem 1rem; border-radius: 0.8rem; background: #eef0fe; color: var(--accent); font-weight: 800; overflow: hidden; }
-.upload-bar span { position: relative; z-index: 1; }
-.upload-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(108, 123, 240, 0.18); transition: width 0.3s; }
-.photo-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 0 1.6rem 1.6rem; }
-.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.6rem; }
-.photo-tile { aspect-ratio: 1; border-radius: 0.9rem; overflow: hidden; background: var(--surface-2); box-shadow: var(--shadow); }
-.photo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
-.photo-tile:active img { transform: scale(0.97); }
-.photo-big { display: grid; place-items: center; background: #111; border-radius: 1rem; overflow: hidden; height: min(62vh, 44rem); }
-.photo-big img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-.photo-meta { margin-left: auto; align-self: center; color: var(--muted); font-weight: 700; font-size: 0.9rem; text-align: right; }
-.layout-kitchen .album-tabs, .layout-kitchen .photo-grid-wrap { padding-left: 1rem; padding-right: 1rem; }
-.layout-kitchen .upload-bar { margin: 0 1rem 0.6rem; }
-.layout-kitchen .photo-grid { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.45rem; }
-.layout-hallway .photo-grid { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.8rem; }
-.layout-phone .album-tabs { padding: 0 0.8rem 0.6rem; flex-wrap: nowrap; overflow-x: auto; }
-.layout-phone .album-tabs .chip-btn { flex: none; }
-.layout-phone .album-tabs .chip-btn.danger { margin-left: 0; }
-.layout-phone .photo-grid-wrap { padding: 0 0.8rem 0.8rem; }
-.layout-phone .upload-bar { margin: 0 0.8rem 0.6rem; }
-.layout-phone .photo-grid { grid-template-columns: repeat(3, 1fr); gap: 0.25rem; }
-.layout-phone .photo-tile { border-radius: 0.3rem; box-shadow: none; }
-.layout-phone .photo-big { height: 55vh; }
-.layout-phone .photo-meta { font-size: 0.75rem; }
-/* The phone gets the Photos tab in its bottom bar (that's where most uploads come from). */
-.layout-phone .rail-photos { display: flex; margin-top: 0; }
+/* Settings > Photo screensaver (Immich) */
+.immich-panel .acct { margin-bottom: 0.2rem; }
+.immich-albums .chip-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
+.immich-albums .chip-btn span { font-size: 0.8em; opacity: 0.65; }
+.immich-ok { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 0.8rem; background: rgba(47, 181, 138, 0.12); color: #1d7f60; font-weight: 800; }
 .layout-phone .rail-item { min-width: 3rem; }
 
-/* Screensaver with uploaded photos: crossfade + slow Ken Burns zoom */
+/* Screensaver with Immich photos: crossfade + slow Ken Burns zoom */
 .ss-photos { position: absolute; inset: 0; overflow: hidden; }
 .ss-photo { position: absolute; inset: 0; overflow: hidden; background: #000; }
 .ss-photo.top { animation: ss-in 1.6s ease both; }

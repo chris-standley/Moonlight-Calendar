@@ -15,7 +15,7 @@ from ..common import (
     person_exists, req_str, require_pin,
 )
 from ..recurrence import expand_event, normalize_repeat
-from . import photos
+from . import immich as immich_routes
 
 router = APIRouter(prefix="/api")
 
@@ -55,7 +55,7 @@ async def patch_settings(body: dict = Body(...)):
             if not isinstance(body["chore_approval"], bool):
                 raise bad("chore_approval must be a boolean")
             db.set_setting(c, "chore_approval", body["chore_approval"])
-        photos.apply_settings(c, body)  # screensaver_album, screensaver_seconds, idle_minutes
+        immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes
         tz_changed = False
         if "timezone" in body:
             try:
