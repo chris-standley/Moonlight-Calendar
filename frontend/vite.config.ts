@@ -7,5 +7,5 @@ export default defineConfig(({ mode }) => ({
   base: "./",
   plugins: [react(), ...(mode === "demo" ? [viteSingleFile()] : [])],
   build: { outDir: mode === "demo" ? "dist-demo" : "dist", assetsInlineLimit: mode === "demo" ? 100_000_000 : 4096 },
-  server: { proxy: { "/api": { target: "http://localhost:8099", ws: true } } },
+  server: { proxy: { "/api": { target: "http://localhost:8091", ws: true } } },
 }));

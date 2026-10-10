@@ -38,7 +38,7 @@ export function ScreensPanel() {
         <button className="btn small" onClick={() => setPairing(true)}>Pair a new screen</button>
       </div>
       <p className="muted screens-help">
-        Wall screens open <code>http://&lt;home-assistant&gt;:8099/display/kitchen</code> and show a 6-digit code.
+        Wall screens open <code>http://&lt;home-assistant&gt;:8091/display/kitchen</code> and show a 6-digit code.
         Phones using the Home Assistant app don't need pairing. The Moonlight integration in Home Assistant shows
         a code to enter here too.
       </p>

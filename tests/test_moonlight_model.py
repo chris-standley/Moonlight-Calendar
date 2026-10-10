@@ -83,13 +83,13 @@ def test_health_and_urls():
     assert model.health_version({"ok": True, "version": "0.1.0"}) == "0.1.0"
     with pytest.raises(ValueError):
         model.health_version({"detail": "Not found"})
-    assert model.base_url("local-moonlight", 8099) == "http://local-moonlight:8099"
-    assert model.base_url(" 192.168.1.5/ ", 8099) == "http://192.168.1.5:8099"
-    assert model.base_url("fd00::5", 8099) == "http://[fd00::5]:8099"
+    assert model.base_url("local-moonlight", 8091) == "http://local-moonlight:8091"
+    assert model.base_url(" 192.168.1.5/ ", 8091) == "http://192.168.1.5:8091"
+    assert model.base_url("fd00::5", 8091) == "http://[fd00::5]:8091"
     assert model.base_url("https://moon.example.com", 443) == "https://moon.example.com:443"
-    assert model.base_url("http://moon:9000", 8099) == "http://moon:9000"
-    assert model.ws_url("http://moon:8099") == "ws://moon:8099/api/ws"
-    assert model.ws_url("https://moon:8099") == "wss://moon:8099/api/ws"
+    assert model.base_url("http://moon:9000", 8091) == "http://moon:9000"
+    assert model.ws_url("http://moon:8091") == "ws://moon:8091/api/ws"
+    assert model.ws_url("https://moon:8091") == "wss://moon:8091/api/ws"
 
 
 def test_ws_messages_and_backoff():

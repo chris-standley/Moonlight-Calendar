@@ -129,18 +129,18 @@ jobs:
           # TZ needs the zone files (tzdata) under musl.
           test "$(docker run --rm --platform "$PLATFORM" --entrypoint date -e TZ=America/Chicago "$IMG" +%Z)" != "UTC"
           mkdir -p "$RUNNER_TEMP/data"
-          docker run -d --name moonlight --platform "$PLATFORM" -p 8099:8099 -v "$RUNNER_TEMP/data:/data" \
+          docker run -d --name moonlight --platform "$PLATFORM" -p 8091:8091 -v "$RUNNER_TEMP/data:/data" \
             -e MOONLIGHT_DEMO=1 -e MOONLIGHT_AUTH=off \
             -e TZ=America/Chicago -e MOONLIGHT_TIMEZONE=America/Chicago \
             --entrypoint python3 "$IMG" -m moonlight
           for _ in $(seq 1 60); do
-            if curl -fsS http://localhost:8099/api/health; then break; fi
+            if curl -fsS http://localhost:8091/api/health; then break; fi
             sleep 2
           done
-          curl -fsS http://localhost:8099/api/health | grep -F "\"version\":\"${VERSION}\""
-          curl -fsS http://localhost:8099/display/kitchen | grep -F '<div id="root">'
-          curl -fsS http://localhost:8099/api/settings | grep -F '"timezone":"America/Chicago"'
-          curl -fsS http://localhost:8099/api/people | grep -F '"name"'
+          curl -fsS http://localhost:8091/api/health | grep -F "\"version\":\"${VERSION}\""
+          curl -fsS http://localhost:8091/display/kitchen | grep -F '<div id="root">'
+          curl -fsS http://localhost:8091/api/settings | grep -F '"timezone":"America/Chicago"'
+          curl -fsS http://localhost:8091/api/people | grep -F '"name"'
 
       - name: Container logs
         if: always()

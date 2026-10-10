@@ -15,5 +15,5 @@ configuration:
   require_pairing:
     name: Require pairing
     description: >-
-      Wall screens on port 8099 must be paired in Moonlight (Settings > Screens) before they can use Moonlight.
+      Wall screens on port 8091 must be paired in Moonlight (Settings > Screens) before they can use Moonlight.
       Moonlight in the Home Assistant sidebar is always signed in.
