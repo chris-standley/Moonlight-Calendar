@@ -18,7 +18,7 @@ New versions show up as an update on the app page.
   Empty = a built-in demo forecast.
 - `media_player_entity` (optional, e.g. `media_player.kitchen`): the speaker the kitchen screen shows and controls
   (see Music below). Other screens can be given one in Moonlight's Settings > Music.
-- `require_pairing` (default `true`): wall screens on port 8099 must be paired before they can use Moonlight.
+- `require_pairing` (default `true`): wall screens on port 8091 must be paired before they can use Moonlight.
   Moonlight in the Home Assistant sidebar is always signed in.
 
 The household timezone defaults to Home Assistant's (Settings > System > General) and can be changed in
@@ -26,7 +26,7 @@ Moonlight's Settings.
 
 ## Wall screens
 
-On the screen's browser open `http://<ha-host>:8099/display/hallway` (or `kitchen`, `phone`). It shows a 6-digit
+On the screen's browser open `http://<ha-host>:8091/display/hallway` (or `kitchen`, `phone`). It shows a 6-digit
 code: in Moonlight (sidebar or phone) go to Settings > Screens > Pair a new screen and enter the code and the PIN.
 The screen remembers its pairing; revoke it in the same place.
 

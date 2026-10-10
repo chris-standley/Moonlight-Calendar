@@ -10,7 +10,7 @@
         },
         "data_description": {
           "host": "Hostname or IP address of Moonlight, e.g. local-moonlight or 192.168.1.20.",
-          "port": "Moonlight's HTTP port (8099 by default)."
+          "port": "Moonlight's HTTP port (8091 by default)."
         }
       },
       "reconfigure": {
@@ -21,7 +21,7 @@
         },
         "data_description": {
           "host": "Hostname or IP address of Moonlight.",
-          "port": "Moonlight's HTTP port (8099 by default)."
+          "port": "Moonlight's HTTP port (8091 by default)."
         }
       },
       "pair": {
