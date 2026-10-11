@@ -25,7 +25,14 @@ Moonlight's Settings. The weather comes from a Home Assistant weather entity you
 
 On the screen's browser open `http://<ha-host>:8091/display/hallway` (or `kitchen`, `phone`). It shows a 6-digit
 code: in Moonlight (sidebar or phone) go to Settings > Screens > Pair a new screen and enter the code and the PIN.
-The screen remembers its pairing; revoke it in the same place.
+The screen remembers its pairing; rename or remove it in the same place. Each kind of screen (hallway, kitchen,
+phones) has a Set up button there: which sections its menu shows, which one it opens on, which speaker it shows and
+when the photo screensaver starts.
+
+For Home Assistant automations and entities, install the Moonlight integration through HACS (custom repository
+`https://github.com/chris-standley/Moonlight-Calendar`, type Integration) and restart Home Assistant. The add-on
+announces itself, so Moonlight appears under Settings > Devices & services as discovered: select Configure. No pairing
+code is needed.
 
 ## Music
 
@@ -41,7 +48,7 @@ put the album art on the screensaver. Moonlight drives the speaker through Home 
    automatically; otherwise Add integration > Music Assistant. It creates a `media_player` entity for each Music
    Assistant player (e.g. `media_player.kitchen`). Use that entity rather than the one from Home Assistant's own Sonos
    integration: it knows Music Assistant's queue, and Moonlight can then offer your Music Assistant favourites.
-3. Pick it: in Moonlight go to Settings > Music and choose a speaker for the kitchen (Music Assistant players are marked). The hallway and phones can get one too; they show a small
+3. Pick it: in Moonlight go to Settings > Screens > Kitchen screen > Set up and choose its speaker (Music Assistant players are marked). The hallway and phones can get one too; they show a small
    player in the top bar.
 
 Moonlight follows the speaker over Home Assistant's WebSocket API, so changes made in the Sonos or Music Assistant

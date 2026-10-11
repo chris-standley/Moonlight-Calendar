@@ -1,4 +1,4 @@
-// "Now playing" for the speaker set for this screen (Settings > Music): a compact card on Today (kitchen), a pill in
+// "Now playing" for the speaker set for this screen (Settings > Screens > Set up): a compact card on Today (kitchen), a pill in
 // the top bar elsewhere, a big sheet with album art, and a corner card on the screensaver.
 import { createContext, CSSProperties, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Api, ApiError, Layout, MediaAction, MediaFavourite, NowPlaying } from "../api/types";

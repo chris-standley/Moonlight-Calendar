@@ -17,7 +17,17 @@ export interface Settings {
   media_players?: Partial<Record<"hallway" | "kitchen" | "phone", string>>;
   /** Home Assistant weather entity the screens show; "" = built-in demo forecast. */
   weather_entity?: string;
+  /** Per kind of screen: the sections its menu shows (Settings always) and the one it opens on. */
+  screens?: Partial<Record<"hallway" | "kitchen" | "phone", ScreenSetup>>;
 }
+export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists";
+export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "lists"];
+export interface ScreenSetup { start: Section; sections: Section[] }
+export const DEFAULT_SCREENS: Record<"hallway" | "kitchen" | "phone", ScreenSetup> = {
+  hallway: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "lists"] },
+  kitchen: { start: "today", sections: [...SECTIONS] },
+  phone: { start: "today", sections: [...SECTIONS] },
+};
 
 export type Freq = "daily" | "weekly" | "monthly";
 export interface Repeat { freq: Freq; interval: number; byday?: string[]; until?: string | null }
@@ -169,7 +179,7 @@ export interface Api {
   subscribe(fn: (topic: Topic) => void): () => void;
   settings(): Promise<Settings>;
   /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
-  updateSettings(patch: Partial<Settings> & { pin: string; new_pin?: string }): Promise<Settings>;
+  updateSettings(patch: Partial<Omit<Settings, "screens">> & { screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
   verifyPin(pin: string): Promise<boolean>;
   people(): Promise<Person[]>;
   createPerson(p: PersonIn): Promise<Person>;
@@ -192,9 +202,14 @@ export interface Api {
   adjustPoints(personId: string, change: number, reason: string, pin: string): Promise<number>;
   rewards(): Promise<Reward[]>;
   createReward(r: Omit<Reward, "id">): Promise<Reward>;
+  updateReward(id: string, patch: Partial<Omit<Reward, "id">>): Promise<Reward>;
+  deleteReward(id: string): Promise<void>;
   redeem(rewardId: string, personId: string, pin: string): Promise<number>;
   lists(): Promise<TaskList[]>;
   createList(l: Pick<TaskList, "name" | "emoji" | "color" | "kind">): Promise<TaskList>;
+  updateList(id: string, patch: Partial<Pick<TaskList, "name" | "emoji" | "color" | "kind" | "sort">>): Promise<TaskList>;
+  /** Deletes the list and all its items. */
+  deleteList(id: string): Promise<void>;
   items(listId: string): Promise<Item[]>;
   addItem(listId: string, title: string, personId?: string | null, due?: string | null): Promise<Item>;
   updateItem(id: string, patch: Partial<Pick<Item, "title" | "done" | "person_id" | "due">>): Promise<Item>;
@@ -220,6 +235,7 @@ export interface Api {
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;
   revokeDisplay(id: string, pin: string): Promise<void>;
+  renameDisplay(id: string, name: string, pin: string): Promise<Display>;
   // Photo screensaver (Immich; see API.md "Photo screensaver")
   immich(): Promise<ImmichConfig>;
   saveImmich(c: ImmichIn): Promise<ImmichConfig>;

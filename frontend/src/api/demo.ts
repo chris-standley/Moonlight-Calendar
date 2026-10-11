@@ -3,7 +3,7 @@
 import seed from "../../../seed/demo.json";
 import {
   Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
-  Person, PersonIn, Recipe, RecipeIn, Reward, Settings, TaskList, Topic, Weather,
+  DEFAULT_SCREENS, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
@@ -298,7 +298,7 @@ export function demoApi(): Api {
   const mediaPlayers = () => ({ hallway: "", kitchen: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
-    return { weather_entity: "", ...rest, media_players: mediaPlayers(), pin_set: !!pin };
+    return { weather_entity: "", ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
   };
 
   return {
@@ -308,7 +308,7 @@ export function demoApi(): Api {
     async updateSettings({ pin, new_pin, ...patch }) {
       checkPin(pin);
       if (new_pin != null && new_pin !== "" && !/^\d{4}$/.test(new_pin)) throw new ApiError(400, "new_pin must be 4 digits");
-      const { media_players, ...rest } = patch;
+      const { media_players, idle_minutes, screens, ...rest } = patch;
       if (rest.weather_entity != null && rest.weather_entity !== "" && !/^weather\.[a-z0-9_]+$/.test(rest.weather_entity))
         throw new ApiError(400, "weather_entity must be a weather entity id like weather.home, or empty for demo weather");
       if (rest.weather_entity === null) rest.weather_entity = "";
@@ -317,6 +317,21 @@ export function demoApi(): Api {
         if (Object.entries(media_players).some(([k, v]) => !["hallway", "kitchen", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
           throw new ApiError(400, "media_players must map hallway/kitchen/phone to a media_player entity id or empty");
         st.settings.media_players = { ...st.settings.media_players, ...media_players };
+      }
+      if (idle_minutes) st.settings.idle_minutes = { ...st.settings.idle_minutes, ...idle_minutes };
+      if (screens) {
+        const cur = { ...DEFAULT_SCREENS, ...st.settings.screens };
+        for (const [k, conf] of Object.entries(screens) as [Layout, Partial<ScreenSetup>][]) {
+          const next = { ...cur[k], ...conf };
+          next.sections = SECTIONS.filter((x) => next.sections.includes(x));
+          if (!next.sections.length) throw new ApiError(400, `screens.${k}.sections must not be empty`);
+          if (!next.sections.includes(next.start)) {
+            if (conf.start) throw new ApiError(400, `screens.${k}.start must be one of its sections`);
+            next.start = next.sections[0];
+          }
+          cur[k] = next;
+        }
+        st.settings.screens = cur;
       }
       if (new_pin) st.settings.pin = new_pin;
       emit("settings", "media");
@@ -417,6 +432,13 @@ export function demoApi(): Api {
     },
     rewards: () => ok(st.rewards),
     async createReward(r) { const rw = { ...r, id: uid("rw") }; st.rewards.push(rw); emit("rewards"); return clone(rw); },
+    async updateReward(id, patch) {
+      const rw = find(st.rewards, id);
+      if (patch.title !== undefined && !patch.title.trim()) throw new ApiError(400, "title is required");
+      if (patch.cost !== undefined && !(patch.cost >= 0)) throw new ApiError(400, "cost must be >= 0");
+      Object.assign(rw, patch); emit("rewards"); return clone(rw);
+    },
+    async deleteReward(id) { find(st.rewards, id); st.rewards = st.rewards.filter((r) => r.id !== id); emit("rewards"); },
     async redeem(rid, pid, pin) {
       checkPin(pin);
       const r = find(st.rewards, rid);
@@ -436,6 +458,18 @@ export function demoApi(): Api {
       const nl = { ...l, id: uid("ls"), sort: st.lists.length };
       st.lists.push(nl); emit("lists");
       return { ...clone(nl), open_count: 0, done_count: 0 };
+    },
+    async updateList(id, patch) {
+      const l = find(st.lists, id);
+      if (patch.name !== undefined && !patch.name.trim()) throw new ApiError(400, "name is required");
+      Object.assign(l, patch); emit("lists");
+      return (await this.lists()).find((x) => x.id === id)!;
+    },
+    async deleteList(id) {
+      find(st.lists, id);
+      st.lists = st.lists.filter((l) => l.id !== id);
+      st.items = st.items.filter((i) => i.list_id !== id);
+      emit("lists");
     },
     async items(lid) {
       const its = st.items.filter((i) => i.list_id === lid);

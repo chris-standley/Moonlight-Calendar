@@ -3,7 +3,7 @@ import { ApiError, Person, Reward } from "../api/types";
 import { fmtDayMonth, fmtTime, relativeDay, diffDays, today } from "../dates";
 import { useApp, useData } from "../state";
 import { Avatar, Sheet, tint } from "../components/ui";
-import { IconPlus, IconStar } from "../components/icons";
+import { IconPlus, IconStar, IconTrash } from "../components/icons";
 import { FamilyPrompt } from "./FamilySettings";
 
 export function RewardsView() {
@@ -38,6 +38,7 @@ function KidRewards({ kid, balance, rewards }: { kid: Person; balance: number; r
   const { api, askPin, toast, celebrate } = useApp();
   const [ledger] = useData((a) => a.ledger(kid.id), ["points"], [kid.id]);
   const [bonus, setBonus] = useState(false);
+  const [editing, setEditing] = useState<Reward | null>(null);
   async function redeem(r: Reward, ev: React.MouseEvent) {
     const { clientX, clientY } = ev;
     const pin = await askPin(`${kid.name} wants “${r.title}” for ${r.cost} stars`);
@@ -61,9 +62,9 @@ function KidRewards({ kid, balance, rewards }: { kid: Person; balance: number; r
           const can = balance >= r.cost;
           return (
             <div key={r.id} className={"reward" + (can ? " can" : "")}>
-              <span className="rw-emoji">{r.emoji}</span>
+              <button className="rw-emoji" onClick={() => setEditing(r)} aria-label={`Edit ${r.title}`}>{r.emoji}</button>
               <div className="rw-main">
-                <span className="rw-title">{r.title}</span>
+                <button className="rw-title" onClick={() => setEditing(r)}>{r.title}</button>
                 <div className="rw-bar"><i style={{ width: `${pct * 100}%` }} /></div>
                 <span className="rw-cost"><IconStar size={14} filled /> {can ? `${r.cost}` : `${balance} / ${r.cost}`}</span>
               </div>
@@ -83,6 +84,7 @@ function KidRewards({ kid, balance, rewards }: { kid: Person; balance: number; r
         ))}
       </div>
       {bonus && <BonusSheet kid={kid} onClose={() => setBonus(false)} />}
+      {editing && <RewardForm reward={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }
@@ -113,18 +115,47 @@ function BonusSheet({ kid, onClose }: { kid: Person; onClose: () => void }) {
 }
 
 const REWARD_EMOJI = ["🎁", "📱", "🍦", "🎬", "🌙", "🧱", "⛺", "🎮", "🍕", "🎨", "⚽", "🛝", "🍫", "🎟️"];
-function RewardForm({ onClose }: { onClose: () => void }) {
-  const { api, people, toast } = useApp();
-  const [title, setTitle] = useState("");
-  const [emoji, setEmoji] = useState("🎁");
-  const [cost, setCost] = useState(20);
-  const [pid, setPid] = useState<string | null>(null);
+/** New reward, or edit / delete one (tap a reward's name). Changing or deleting needs the PIN. */
+function RewardForm({ reward, onClose }: { reward?: Reward; onClose: () => void }) {
+  const { api, people, askPin, toast } = useApp();
+  const [title, setTitle] = useState(reward?.title ?? "");
+  const [emoji, setEmoji] = useState(reward?.emoji || "🎁");
+  const [cost, setCost] = useState(reward?.cost ?? 20);
+  const [pid, setPid] = useState<string | null>(reward?.person_id ?? null);
+  const [confirm, setConfirm] = useState(false);
+  const emojis = REWARD_EMOJI.includes(emoji) ? REWARD_EMOJI : [emoji, ...REWARD_EMOJI];
+  async function save() {
+    try {
+      const fields = { title: title.trim(), emoji, cost, person_id: pid };
+      if (reward) {
+        const pin = await askPin(`Change “${reward.title}”`);
+        if (!pin) return;
+        await api.updateReward(reward.id, fields);
+        toast("Reward saved");
+      } else {
+        await api.createReward(fields);
+        toast("Reward added");
+      }
+      onClose();
+    } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
+  }
+  async function remove() {
+    if (!reward) return;
+    if (!confirm) { setConfirm(true); return; }
+    const pin = await askPin(`Delete “${reward.title}”?`);
+    if (!pin) return;
+    try { await api.deleteReward(reward.id); toast("Reward deleted"); onClose(); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't delete"); }
+  }
   return (
-    <Sheet title="New reward" onClose={onClose} footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><span style={{ flex: 1 }} />
-      <button className="btn" disabled={!title.trim()} onClick={async () => { await api.createReward({ title: title.trim(), emoji, cost, person_id: pid }); toast("Reward added"); onClose(); }}>Add reward</button></>}>
+    <Sheet title={reward ? "Edit reward" : "New reward"} onClose={onClose} footer={<>
+      {reward ? <button className="btn ghost danger" onClick={remove}><IconTrash size={18} /> {confirm ? "Tap again to delete" : "Delete"}</button>
+        : <button className="btn ghost" onClick={onClose}>Cancel</button>}
+      <span style={{ flex: 1 }} />
+      <button className="btn" disabled={!title.trim()} onClick={save}>{reward ? "Save" : "Add reward"}</button></>}>
       <div className="form">
-        <input className="input big" placeholder="e.g. Trip to the park" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-        <div className="emoji-grid">{REWARD_EMOJI.map((e) => <button key={e} className={e === emoji ? "on" : ""} onClick={() => setEmoji(e)}>{e}</button>)}</div>
+        <input className="input big" placeholder="e.g. Trip to the park" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!reward} />
+        <div className="emoji-grid">{emojis.map((e) => <button key={e} className={e === emoji ? "on" : ""} onClick={() => setEmoji(e)}>{e}</button>)}</div>
         <label className="field-label">Cost</label>
         <div className="stepper">
           <button className="icon-btn" onClick={() => setCost(Math.max(1, cost - 5))}>−</button>

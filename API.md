@@ -13,16 +13,21 @@ implementation of the same contract, used for the published preview). Keep them 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone},
-  media_players: {hallway, kitchen, phone}}`
+  media_players: {hallway, kitchen, phone}, screens: {hallway, kitchen, phone}}`
   `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
   (default `{hallway: 5, kitchen: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each layout shows; the kitchen defaults to
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
+  `screens` = per layout `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
+  chores, rewards, meals, lists` (Settings is always shown), and the one it opens on (default hallway
+  `{start: "calendar", sections: all but today}`, kitchen and phone `{start: "today", sections: all}`).
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, media_players, weather_entity`, plus `pin` (required) -> settings. `media_players` may be partial
+  screensaver_seconds, idle_minutes, media_players, screens, weather_entity`, plus `pin` (required) -> settings.
+  `screens` may be partial (`{kitchen: {start: "meals"}}`, merged per layout); `sections` must not be empty and `start`
+  must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
   (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
   merged) or one number (applies to hallway and kitchen). `new_pin` (4 digits) replaces the parent PIN; with no PIN set
   yet, the first `pin` sent becomes it.
@@ -162,14 +167,16 @@ Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon
 - `GET /api/points/{person_id}/ledger` -> `[{id, person_id, change, reason, at}]` newest first, max 100
 - `POST /api/points/adjust` `{person_id, change, reason, pin}` -> `{balance}`
 Reward = `{id, title, emoji, cost, person_id: id|null (null = any child)}`
-- `GET /api/rewards`; `POST /api/rewards`; `DELETE /api/rewards/{id}`
+- `GET /api/rewards`; `POST /api/rewards`; `PATCH /api/rewards/{id}` (any of title, emoji, cost, person_id);
+  `DELETE /api/rewards/{id}`
 - `POST /api/rewards/{id}/redeem` `{person_id, pin}` -> `{balance}`; 403 bad PIN, 400 if balance < cost;
   ledger `-cost`, reason `"<emoji> <title>"`.
 
 ## Lists
 List = `{id, name, emoji, color, kind: "grocery"|"todo", sort, open_count, done_count}`
 Item = `{id, list_id, title, done, person_id|null, due: date|null, created_at, sort}`
-- `GET /api/lists`; `POST /api/lists` `{name, emoji, color, kind}`; `DELETE /api/lists/{id}`
+- `GET /api/lists`; `POST /api/lists` `{name, emoji, color, kind}`; `PATCH /api/lists/{id}` (any of name, emoji,
+  color, kind, sort) -> List; `DELETE /api/lists/{id}` (and its items)
 - `GET /api/lists/{id}/items` -> open items first (by sort), then done items (by done time desc)
 - `POST /api/lists/{id}/items` `{title, person_id?, due?}` -> Item
 - `PATCH /api/items/{id}` `{title?, done?, person_id?, due?}`; `DELETE /api/items/{id}`
@@ -270,7 +277,14 @@ Display = `{id, name, layout: "hallway"|"kitchen"|"phone"|"service", created_at,
   `layout` defaults to what the screen asked for; `name` to the suggested name, else "<Layout> screen". A `service`
   pairing always stays `service` (the approver's `layout` is ignored), and a screen can't be approved as `service`.
 - `GET /api/displays` -> `[Display]` (not revoked)
+- `PATCH /api/displays/{id}` `{name, pin}` -> Display (rename).
 - `DELETE /api/displays/{id}` `{pin}` -> `{ok: true}`; that token stops working on its next request.
+
+Home Assistant discovery: inside the add-on (`SUPERVISOR_TOKEN` set, `discovery: [moonlight]` in config.yaml) Moonlight
+POSTs `{service: "moonlight", config: {host, port: 8091, token}}` to the Supervisor's `/discovery` on start (retrying
+while HA starts). `host` is the add-on's hostname (`/addons/self/info`), `token` a `service` display named "Home
+Assistant", kept in the settings table (never returned) and reused while it isn't revoked; after a revoke the next start
+makes a new one. HA then offers the Moonlight integration under Devices & services. `MOONLIGHT_HA_DISCOVERY=0` turns it off.
 Tokens are 256-bit random strings, stored as SHA-256 hashes.
 
 ## Photo screensaver (Immich)

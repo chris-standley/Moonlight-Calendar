@@ -16,6 +16,7 @@ from ..common import (
     person_exists, req_str, require_pin,
 )
 from ..recurrence import expand_event, normalize_repeat
+from . import displays as displays_routes
 from . import immich as immich_routes
 
 router = APIRouter(prefix="/api")
@@ -64,6 +65,7 @@ async def patch_settings(body: dict = Body(...)):
             db.set_setting(c, "chore_approval", body["chore_approval"])
         immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes
         media_changed = media.apply_settings(c, body)  # media_players
+        displays_routes.apply_settings(c, body)  # screens
         if "weather_entity" in body:
             wx = "" if body["weather_entity"] is None else body["weather_entity"]
             if not isinstance(wx, str) or (wx.strip() and not ha_client.ENTITY_RE.match(wx.strip())):

@@ -228,20 +228,45 @@ def list_rewards():
         return [reward_out(r) for r in db.rows(c, "SELECT * FROM rewards ORDER BY cost, title")]
 
 
+def _apply_reward(c, rw: dict, body: dict, creating: bool) -> dict:
+    if creating or "person_id" in body:
+        pid = body.get("person_id")
+        if pid is not None and (not isinstance(pid, str) or not person_exists(c, pid)):
+            raise bad("person_id must be an existing person or null")
+        rw["person_id"] = pid
+    if creating or "cost" in body:
+        rw["cost"] = as_int(body.get("cost"), "cost")
+        if rw["cost"] < 0:
+            raise bad("cost must be >= 0")
+    if creating or "title" in body:
+        rw["title"] = req_str(body, "title")
+    if creating or "emoji" in body:
+        rw["emoji"] = opt_str(body, "emoji")
+    return rw
+
+
 @router.post("/rewards")
 async def create_reward(body: dict = Body(...)):
     body = body_dict(body)
     with db.connect() as c:
-        pid = body.get("person_id")
-        if pid is not None and (not isinstance(pid, str) or not person_exists(c, pid)):
-            raise bad("person_id must be an existing person or null")
-        cost = as_int(body.get("cost"), "cost")
-        if cost < 0:
-            raise bad("cost must be >= 0")
-        rw = {"id": db.new_id("r"), "title": req_str(body, "title"), "emoji": opt_str(body, "emoji"),
-              "cost": cost, "person_id": pid}
+        rw = _apply_reward(c, {"id": db.new_id("r")}, body, creating=True)
         c.execute("INSERT INTO rewards(id, title, emoji, cost, person_id) VALUES(?,?,?,?,?)",
                   (rw["id"], rw["title"], rw["emoji"], rw["cost"], rw["person_id"]))
+    await hub.broadcast("rewards")
+    return reward_out(rw)
+
+
+@router.patch("/rewards/{reward_id}")
+async def update_reward(reward_id: str, body: dict = Body(...)):
+    """Any of title, emoji, cost, person_id (null = any child)."""
+    body = body_dict(body)
+    with db.connect() as c:
+        r = db.row(c, "SELECT * FROM rewards WHERE id = ?", (reward_id,))
+        if not r:
+            raise not_found("Reward not found")
+        rw = _apply_reward(c, reward_out(r), body, creating=False)
+        c.execute("UPDATE rewards SET title=?, emoji=?, cost=?, person_id=? WHERE id=?",
+                  (rw["title"], rw["emoji"], rw["cost"], rw["person_id"], reward_id))
     await hub.broadcast("rewards")
     return rw
 

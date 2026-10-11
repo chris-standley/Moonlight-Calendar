@@ -1,6 +1,7 @@
 """FastAPI app: JSON API under /api, WebSocket at /api/ws, SPA everywhere else."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import date
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, media
+from . import __version__, auth, caldav_sync, db, ha_discovery, media
 from . import immich as immich_source
 from .common import hub, log
 from .routes import accounts, calendar, chores, displays, immich, lists, meals
@@ -98,6 +99,19 @@ def create_app(
 
     app.router.on_startup.append(start_media)
     app.router.on_shutdown.append(stop_media)
+
+    # Inside the add-on: offer the Moonlight integration in Home Assistant (Devices & services > Discovered).
+    async def start_discovery():
+        if ha_discovery.enabled():
+            app.state.discovery = asyncio.get_running_loop().create_task(ha_discovery.announce())
+
+    async def stop_discovery():
+        task = getattr(app.state, "discovery", None)
+        if task:
+            task.cancel()
+
+    app.router.on_startup.append(start_discovery)
+    app.router.on_shutdown.append(stop_discovery)
 
     if sync:
         async def start_sync():

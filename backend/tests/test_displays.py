@@ -190,3 +190,13 @@ def test_auth_off_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("MOONLIGHT_AUTH", "off")
     app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x")
     assert lan(app).get("/api/people").status_code == 200
+
+
+def test_rename_screen(app_on, ha):
+    _, d = pair(ha, lan(app_on), name="Kitchen")
+    r = ha.patch(f"/api/displays/{d['id']}", json={"name": "Kitchen wall", "pin": PIN})
+    assert r.status_code == 200 and r.json()["name"] == "Kitchen wall"
+    assert [x["name"] for x in ha.get("/api/displays").json()] == ["Kitchen wall"]
+    assert ha.patch(f"/api/displays/{d['id']}", json={"name": "x", "pin": "0000"}).status_code == 403
+    assert ha.patch(f"/api/displays/{d['id']}", json={"name": " ", "pin": PIN}).status_code == 400
+    assert ha.patch("/api/displays/nope", json={"name": "x", "pin": PIN}).status_code == 404

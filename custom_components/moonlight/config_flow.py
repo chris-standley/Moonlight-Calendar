@@ -1,4 +1,10 @@
-"""Config flow: enter Moonlight's host and port (checked with GET /api/health), then pair if Moonlight asks for it.
+"""Config flow: discovered from the Moonlight add-on, or enter Moonlight's host and port and pair if asked.
+
+The add-on announces itself through the Supervisor (service "moonlight": host, port and a token it made for
+Home Assistant), so Settings > Devices & services shows Moonlight as discovered: one click, no code. A later
+announcement (e.g. a new token after the connection was removed in Moonlight) updates the entry.
+
+Manual setup:
 
 With the add-on's `require_pairing` on (the default), Moonlight's LAN port only answers paired clients. Home
 Assistant then pairs itself like a wall screen: it asks for a 6-digit code (POST /api/pair/start), the user enters
@@ -16,6 +22,7 @@ import voluptuous as vol
 from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE, ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 
 from .api import MoonlightApiError, MoonlightClient, MoonlightConnectionError, MoonlightError
 from .const import CONF_TOKEN, DEFAULT_HOST, DEFAULT_PORT, DOMAIN, LOGGER
@@ -38,6 +45,8 @@ class MoonlightConfigFlow(ConfigFlow, domain=DOMAIN):
         self._data: dict[str, Any] = {}  # host + port being set up
         self._pair_id: str | None = None
         self._code: str | None = None
+        self._token: str | None = None  # from the add-on's discovery
+        self._addon = "Moonlight"
 
     def _client(self, token: str | None = None) -> MoonlightClient:
         return MoonlightClient(async_get_clientsession(self.hass), self._data[CONF_HOST], self._data[CONF_PORT],
@@ -115,6 +124,39 @@ class MoonlightConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={"addon_host": DEFAULT_HOST, "port": str(DEFAULT_PORT)},
         )
+
+    async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
+        """The Moonlight add-on announced itself (see backend/moonlight/ha_discovery.py)."""
+        cfg = discovery_info.config
+        try:
+            self._data = {CONF_HOST: str(cfg["host"]), CONF_PORT: int(cfg["port"])}
+        except (KeyError, TypeError, ValueError):
+            return self.async_abort(reason="not_moonlight")
+        self._token = cfg.get("token") or None
+        updates = {**self._data, **({CONF_TOKEN: self._token} if self._token else {})}
+        await self.async_set_unique_id(f"addon_{discovery_info.slug}")
+        self._abort_if_unique_id_configured(updates=updates)
+        # Set up by hand before the add-on announced itself: adopt that entry instead of offering a second one.
+        for entry in self._async_current_entries(include_ignore=False):
+            if (entry.data.get(CONF_HOST), entry.data.get(CONF_PORT)) == (self._data[CONF_HOST], self._data[CONF_PORT]):
+                self.hass.config_entries.async_update_entry(entry, unique_id=self.unique_id, data={**entry.data, **updates})
+                self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                return self.async_abort(reason="already_configured")
+        self._addon = discovery_info.name or "Moonlight"
+        self.context["title_placeholders"] = {"name": self._addon}
+        return await self.async_step_hassio_confirm()
+
+    async def async_step_hassio_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            pair, errors = await self._check(self._token)
+            if not errors:
+                if not pair:
+                    return await self._finish(self._token)
+                errors = {"base": "discovery_rejected"}
+        self._set_confirm_only()
+        return self.async_show_form(step_id="hassio_confirm", errors=errors,
+                                    description_placeholders={"addon": self._addon})
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         entry = self._get_reconfigure_entry()

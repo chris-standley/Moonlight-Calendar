@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Api, Person, Settings } from "./api/types";
+import { Api, DEFAULT_SCREENS, Person, Section, Settings } from "./api/types";
 import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
@@ -35,7 +35,7 @@ interface Burst { id: number; x: number; y: number; color: string }
 const EMBEDDED = (() => { try { return window.self !== window.top; } catch { return true; } })();
 
 export function App({ api, layout }: { api: Api; layout: Layout }) {
-  const [tab, setTab] = useState<Tab>(layout === "hallway" ? "calendar" : "today");
+  const [tab, setTab] = useState<Tab>(DEFAULT_SCREENS[layout].start);
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -91,7 +91,16 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   }, []);
   const personById = useCallback((id: string | null | undefined) => people.find((p) => p.id === id), [people]);
 
-  const nav = layout === "hallway" ? NAV.filter((n) => n.key !== "today") : NAV;
+  // Sections chosen for this kind of screen (Settings > Screens); Settings itself is always there.
+  const setup = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+  const nav = NAV.filter((n) => n.key === "settings" || setup.sections.includes(n.key as Section));
+  // Open on the chosen start section once settings arrive, and leave a section that was just hidden.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!settings) return;
+    if (!opened.current) { opened.current = true; setTab(setup.start); return; }
+    setTab((t) => (t === "settings" || setup.sections.includes(t as Section) ? t : setup.start));
+  }, [settings, setup.start, setup.sections]);
   // A new install has nobody yet: still show every view (they point to Settings > Family).
   const ready = peopleLoaded && settings;
   const go = useCallback((t: string) => setTab(t as Tab), []);

@@ -1,5 +1,5 @@
 name: Moonlight
-version: "0.3.5"
+version: "0.3.6"
 slug: moonlight
 description: Family wall calendar, chores, lists and meal planner for kiosk displays
 url: https://github.com/chris-standley/Moonlight-Calendar
@@ -22,6 +22,8 @@ ports_description:
 map:
   - data:rw
 homeassistant_api: true
+discovery:
+  - moonlight
 options:
   demo: true
   require_pairing: true

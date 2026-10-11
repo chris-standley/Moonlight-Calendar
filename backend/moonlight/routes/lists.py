@@ -69,6 +69,24 @@ async def create_list(body: dict = Body(...)):
     return out
 
 
+@router.patch("/lists/{list_id}")
+async def update_list(list_id: str, body: dict = Body(...)):
+    """Rename or restyle a list (any of name, emoji, color, kind, sort)."""
+    body = body_dict(body)
+    with db.connect() as c:
+        lst = _list_or_404(c, list_id)
+        name = req_str(body, "name") if "name" in body else lst["name"]
+        emoji = opt_str(body, "emoji") if "emoji" in body else lst["emoji"]
+        color = opt_str(body, "color") if "color" in body else lst["color"]
+        kind = choice(body["kind"], "kind", KINDS) if "kind" in body else lst["kind"]
+        sort = as_int(body["sort"], "sort") if "sort" in body else lst["sort"]
+        c.execute("UPDATE lists SET name=?, emoji=?, color=?, kind=?, sort=? WHERE id=?",
+                  (name, emoji, color, kind, sort, list_id))
+        out = _list_or_404(c, list_id)
+    await hub.broadcast("lists")
+    return out
+
+
 @router.delete("/lists/{list_id}")
 async def delete_list(list_id: str):
     with db.connect() as c:

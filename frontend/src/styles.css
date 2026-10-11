@@ -206,7 +206,8 @@ h1, h2 { margin: 0; }
 .reward { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 0.8rem; background: var(--surface); border-radius: 0.9rem; box-shadow: var(--shadow); }
 .rw-emoji { font-size: 1.8rem; width: 2.6rem; text-align: center; }
 .rw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
-.rw-title { font-weight: 800; }
+.rw-title { font-weight: 800; text-align: left; align-self: flex-start; }
+button.rw-emoji, button.rw-title { cursor: pointer; }
 .rw-bar { height: 0.45rem; border-radius: 1rem; background: var(--surface-2); overflow: hidden; }
 .rw-bar i { display: block; height: 100%; border-radius: 1rem; background: var(--pc); transition: width 0.5s; }
 .rw-cost { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.8rem; font-weight: 800; color: var(--muted); }
@@ -545,6 +546,18 @@ h1, h2 { margin: 0; }
 .screen-main span { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
 .screen-this { margin-left: 0.5rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: #eef0fe; color: var(--accent); font-style: normal; font-size: 0.75rem; font-weight: 800; vertical-align: 0.1em; }
 .btn.ghost.danger { color: var(--danger); }
+.screen-kind { border-top: 1px solid var(--line); padding: 0.7rem 0 0.3rem; }
+.screen-kind-head { display: flex; align-items: center; gap: 0.8rem; }
+.screen-kind .screen-list { margin-left: 3.4rem; }
+.screen-kind .screen-row { border-top: none; padding: 0.35rem 0; }
+.screen-note { font-size: 0.85rem; font-weight: 700; padding: 0.35rem 0 0.35rem 3.4rem; }
+.screens-sub { margin: 1rem 0 0.2rem; font-size: 1rem; font-weight: 800; }
+.screens-sub + .screen-list .screen-note { padding-left: 0; }
+.section-toggles .set-row { padding: 0.35rem 0; }
+.section-toggles .toggle:disabled { opacity: 0.5; }
+.layout-phone .screen-kind .screen-list, .layout-phone .screen-note { margin-left: 0; padding-left: 0; }
+.layout-phone .screen-kind .screen-row { flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+.layout-phone .screen-kind .screen-row .screen-main { flex-basis: 100%; }
 .pair-code-input { letter-spacing: 0.5em; font-variant-numeric: tabular-nums; text-align: center; font-size: 2rem; }
 .form-error { margin-top: 0.4rem; padding: 0.6rem 0.8rem; border-radius: 0.7rem; background: #fdecee; color: var(--danger); font-weight: 700; }
 .set-col { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); font-weight: 700; }

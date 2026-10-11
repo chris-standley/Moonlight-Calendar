@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { ApiError, Display, ImmichAlbum, ImmichConfig, Layout, Settings } from "../api/types";
+import { ApiError, DEFAULT_SCREENS, Display, ImmichAlbum, ImmichConfig, Layout, MediaPlayerOption, SECTIONS, Section, Settings } from "../api/types";
 import { useApp, useData, useNow } from "../state";
 import { Segmented, Sheet } from "../components/ui";
 import { IconPhotos } from "../components/icons";
 
-const LAYOUT_LABEL: Record<Display["layout"], string> = { hallway: "Hallway 27in", kitchen: "Kitchen 10in", phone: "Phone", service: "Integration" };
 
 export function ago(isoTime: string | null, now: Date): string {
   if (!isoTime) return "Not seen yet";
@@ -17,19 +16,47 @@ export function ago(isoTime: string | null, now: Date): string {
   return d === 1 ? "Yesterday" : `${d} days ago`;
 }
 
-/** Settings > Screens: paired wall screens, revoke, pair a new one with its 6-digit code. */
+const KINDS: { layout: Layout; title: string; note: string }[] = [
+  { layout: "hallway", title: "Hallway screen", note: "Big wall screen" },
+  { layout: "kitchen", title: "Kitchen screen", note: "10in touch screen" },
+  { layout: "phone", title: "Phones", note: "Home Assistant app and phone browsers; no pairing needed" },
+];
+const SECTION_LABEL: Record<Section, string> = {
+  today: "Today", calendar: "Calendar", chores: "Chores", rewards: "Rewards", meals: "Meals", lists: "Lists",
+};
+const SPEAKER_WHERE: Record<Layout, string> = {
+  kitchen: "Card on Today, album art on the screensaver",
+  hallway: "Small player in the top bar",
+  phone: "Small player in the top bar",
+};
+const IDLE_OPTS = [0, 1, 3, 5, 10, 30].map((v) => ({ value: String(v), label: v === 0 ? "Never" : `${v} min` }));
+const DEFAULT_IDLE: Record<Layout, number> = { hallway: 5, kitchen: 3, phone: 0 };
+
+/** Settings > Screens: each kind of screen (its sections, start page, speaker, screensaver and the paired
+ *  devices showing it), plus connections such as the Home Assistant integration. */
 export function ScreensPanel() {
-  const { api, askPin, toast } = useApp();
+  const { api, settings, askPin, toast } = useApp();
   const [screens] = useData((a) => a.displays(), ["displays"], []);
+  const [players, setPlayers] = useState<MediaPlayerOption[] | null>(null);
+  const [playersError, setPlayersError] = useState<string | null>(null);
   const [pairing, setPairing] = useState(false);
+  const [setting, setSetting] = useState<Layout | null>(null);
+  const [renaming, setRenaming] = useState<Display | null>(null);
   const now = useNow(30_000);
+  useEffect(() => {
+    api.mediaPlayers().then((p) => { setPlayers(p); setPlayersError(null); })
+      .catch((e) => setPlayersError(e instanceof ApiError ? e.message : "Couldn't reach Home Assistant"));
+  }, [api]);
 
   async function revoke(d: Display) {
-    const pin = await askPin(`Revoke ${d.name}? It will need pairing again.`);
+    const pin = await askPin(d.layout === "service" ? `Disconnect ${d.name}? It stops getting Moonlight's data.`
+      : `Remove ${d.name}? It will need pairing again.`);
     if (!pin) return;
-    try { await api.revokeDisplay(d.id, pin); toast(`${d.name} revoked`); }
-    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't revoke"); }
+    try { await api.revokeDisplay(d.id, pin); toast(`${d.name} removed`); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't remove"); }
   }
+  const speakerName = (id: string) => players?.find((p) => p.entity_id === id)?.name ?? id;
+  const services = (screens ?? []).filter((d) => d.layout === "service");
 
   return (
     <section className="panel screens-panel">
@@ -38,25 +65,171 @@ export function ScreensPanel() {
         <button className="btn small" onClick={() => setPairing(true)}>Pair a new screen</button>
       </div>
       <p className="muted screens-help">
-        Wall screens open <code>http://&lt;home-assistant&gt;:8091/display/kitchen</code> and show a 6-digit code.
-        Phones using the Home Assistant app don't need pairing. The Moonlight integration in Home Assistant shows
-        a code to enter here too.
+        A wall screen opens <code>http://&lt;home-assistant&gt;:8091/display/kitchen</code> (or <code>/display/hallway</code>)
+        and shows a 6-digit code to enter here.
       </p>
-      {screens && screens.length === 0 && <div className="screens-empty">No screens paired yet.</div>}
-      <div className="screen-list">
-        {(screens ?? []).map((d) => (
-          <div key={d.id} className="screen-row">
-            <span className={`screen-ico ${d.layout}`} aria-hidden />
-            <div className="screen-main">
-              <b>{d.name}{d.current && <em className="screen-this">This screen</em>}</b>
-              <span>{LAYOUT_LABEL[d.layout]} · {ago(d.last_seen, now)}</span>
+      {KINDS.map(({ layout, title, note }) => {
+        const setup = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+        const speaker = settings?.media_players?.[layout] ?? "";
+        const idle = settings?.idle_minutes?.[layout] ?? DEFAULT_IDLE[layout];
+        const devices = (screens ?? []).filter((d) => d.layout === layout);
+        return (
+          <div key={layout} className="screen-kind">
+            <div className="screen-kind-head">
+              <span className={`screen-ico ${layout}`} aria-hidden />
+              <div className="screen-main">
+                <b>{title}</b>
+                <span>
+                  Opens on {SECTION_LABEL[setup.start]} · {setup.sections.length} section{setup.sections.length === 1 ? "" : "s"}
+                  {" · "}{speaker ? speakerName(speaker) : "No speaker"}
+                  {" · "}{idle ? `Screensaver after ${idle} min` : "No screensaver"}
+                </span>
+              </div>
+              <button className="btn ghost small" onClick={() => setSetting(layout)}>Set up</button>
             </div>
-            <button className="btn ghost small danger" onClick={() => revoke(d)}>Revoke</button>
+            {layout === "phone" ? <div className="screen-note muted">{note}</div> : (
+              <div className="screen-list">
+                {devices.map((d) => (
+                  <div key={d.id} className="screen-row">
+                    <div className="screen-main">
+                      <b>{d.name}{d.current && <em className="screen-this">This screen</em>}</b>
+                      <span>Paired · seen {ago(d.last_seen, now).toLowerCase()}</span>
+                    </div>
+                    <button className="btn ghost small" onClick={() => setRenaming(d)}>Rename</button>
+                    <button className="btn ghost small danger" onClick={() => revoke(d)}>Remove</button>
+                  </div>
+                ))}
+                {screens && devices.length === 0 && <div className="screen-note muted">No {title.toLowerCase()} paired yet.</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <h3 className="screens-sub">Connections</h3>
+      <div className="screen-list">
+        {services.map((d) => (
+          <div key={d.id} className="screen-row">
+            <span className="screen-ico service" aria-hidden />
+            <div className="screen-main">
+              <b>{d.name}</b>
+              <span>Moonlight integration · seen {ago(d.last_seen, now).toLowerCase()}</span>
+            </div>
+            <button className="btn ghost small danger" onClick={() => revoke(d)}>Disconnect</button>
           </div>
         ))}
+        {screens && services.length === 0 && (
+          <div className="screen-note muted">
+            Install the Moonlight integration in Home Assistant (HACS) and it finds the add-on by itself under
+            Settings › Devices &amp; services.
+          </div>
+        )}
       </div>
       {pairing && <PairSheet onClose={() => setPairing(false)} />}
+      {setting && <ScreenSetupSheet layout={setting} title={KINDS.find((k) => k.layout === setting)!.title}
+        players={players} playersError={playersError} onClose={() => setSetting(null)} />}
+      {renaming && <RenameSheet display={renaming} onClose={() => setRenaming(null)} />}
     </section>
+  );
+}
+
+/** One kind of screen: which sections its menu shows, the one it opens on, its speaker and screensaver delay. */
+function ScreenSetupSheet({ layout, title, players, playersError, onClose }: {
+  layout: Layout; title: string; players: MediaPlayerOption[] | null; playersError: string | null; onClose: () => void;
+}) {
+  const { api, settings, askPin, toast } = useApp();
+  const setup = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+  const [sections, setSections] = useState<Section[]>(setup.sections);
+  const [start, setStart] = useState<Section>(setup.start);
+  const [speaker, setSpeaker] = useState(settings?.media_players?.[layout] ?? "");
+  const [idle, setIdle] = useState(settings?.idle_minutes?.[layout] ?? DEFAULT_IDLE[layout]);
+  const [saving, setSaving] = useState(false);
+  const shown = SECTIONS.filter((x) => sections.includes(x));
+  const opensOn = shown.includes(start) ? start : shown[0];
+  function toggle(x: Section) {
+    if (sections.includes(x)) { if (sections.length > 1) setSections(sections.filter((y) => y !== x)); }
+    else setSections([...sections, x]);
+  }
+  async function save() {
+    const pin = await askPin(`Change the ${title.toLowerCase()}`);
+    if (!pin) return;
+    setSaving(true);
+    try {
+      await api.updateSettings({
+        pin, screens: { [layout]: { sections: shown, start: opensOn } },
+        media_players: { [layout]: speaker }, idle_minutes: { [layout]: idle },
+      });
+      toast("Saved");
+      onClose();
+    } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
+    finally { setSaving(false); }
+  }
+  return (
+    <Sheet title={title} onClose={onClose} footer={<>
+      <button className="btn ghost" onClick={onClose}>Cancel</button>
+      <span style={{ flex: 1 }} />
+      <button className="btn" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
+    </>}>
+      <div className="form">
+        <label className="field-label">Sections in the menu</label>
+        <div className="section-toggles">
+          {SECTIONS.map((x) => (
+            <div key={x} className="set-row"><span>{SECTION_LABEL[x]}</span>
+              <button className={"toggle" + (sections.includes(x) ? " on" : "")} aria-pressed={sections.includes(x)}
+                aria-label={`Show ${SECTION_LABEL[x]}`} disabled={sections.includes(x) && sections.length === 1}
+                onClick={() => toggle(x)}><span /></button>
+            </div>
+          ))}
+          <div className="set-row muted"><span>Settings</span><span>Always shown</span></div>
+        </div>
+        <label className="field-label">Opens on</label>
+        <div className="chip-row">
+          {shown.map((x) => (
+            <button key={x} type="button" className={"chip-btn" + (opensOn === x ? " on" : "")} onClick={() => setStart(x)}>{SECTION_LABEL[x]}</button>
+          ))}
+        </div>
+        <label className="field-label">Speaker</label>
+        <p className="muted connect-note">{SPEAKER_WHERE[layout]}. Speakers come from Home Assistant; with Music Assistant, Sonos and others appear here.</p>
+        {playersError && <div className="form-error">{playersError}</div>}
+        {!players && !playersError && <div className="screens-empty">Asking Home Assistant…</div>}
+        <div className="player-list">
+          <button type="button" className={"player-row" + (speaker === "" ? " on" : "")} onClick={() => setSpeaker("")}>
+            <span className="player-main"><b>None</b><span>No Now playing on this screen</span></span>
+          </button>
+          {(players ?? []).map((p) => (
+            <button type="button" key={p.entity_id} className={"player-row" + (speaker === p.entity_id ? " on" : "")} onClick={() => setSpeaker(p.entity_id)}>
+              <span className="player-main"><b>{p.name}</b><span>{p.entity_id} · {p.state}</span></span>
+              {p.music_assistant && <span className="tag ma">Music Assistant</span>}
+            </button>
+          ))}
+        </div>
+        <label className="field-label">Photo screensaver starts after</label>
+        <Segmented value={String(idle)} options={IDLE_OPTS} onChange={(v) => setIdle(Number(v))} />
+      </div>
+    </Sheet>
+  );
+}
+
+function RenameSheet({ display, onClose }: { display: Display; onClose: () => void }) {
+  const { api, askPin, toast } = useApp();
+  const [name, setName] = useState(display.name);
+  async function save() {
+    if (!name.trim()) return;
+    const pin = await askPin(`Rename ${display.name}`);
+    if (!pin) return;
+    try { await api.renameDisplay(display.id, name.trim(), pin); toast("Renamed"); onClose(); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't rename"); }
+  }
+  return (
+    <Sheet title={`Rename ${display.name}`} onClose={onClose} footer={<>
+      <button className="btn ghost" onClick={onClose}>Cancel</button>
+      <span style={{ flex: 1 }} />
+      <button className="btn" disabled={!name.trim()} onClick={save}>Save</button>
+    </>}>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); save(); }}>
+        <label className="field-label">Name</label>
+        <input className="input" value={name} maxLength={60} autoFocus onChange={(e) => setName(e.target.value)} />
+      </form>
+    </Sheet>
   );
 }
 
@@ -149,8 +322,6 @@ export function ScreensaverPanel({ onScreensaver }: { onScreensaver: () => void 
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't disconnect"); }
   }
   const secs = settings?.screensaver_seconds ?? 10;
-  const idle = { hallway: 5, kitchen: 3, phone: 0, ...settings?.idle_minutes };
-  const idleOpts = [0, 1, 3, 5, 10, 30].map((v) => ({ value: String(v), label: v === 0 ? "Never" : `${v} min` }));
   return (
     <section className="panel immich-panel">
       <div className="cal-panel-head">
@@ -183,12 +354,7 @@ export function ScreensaverPanel({ onScreensaver }: { onScreensaver: () => void 
         <Segmented value={String(secs)} onChange={(v) => save({ screensaver_seconds: Number(v) }, "Change photo timing")}
           options={[5, 10, 20, 30, 60].map((v) => ({ value: String(v), label: `${v}s` }))} />
       </div>
-      {(["hallway", "kitchen"] as const).map((l) => (
-        <div key={l} className="set-col"><span>{l === "hallway" ? "Hallway" : "Kitchen"} starts after</span>
-          <Segmented value={String(idle[l])} options={idleOpts}
-            onChange={(v) => save({ idle_minutes: { [l]: Number(v) } }, "Change screensaver timing")} />
-        </div>
-      ))}
+      <p className="muted connect-note">When each screen starts the screensaver is set per screen under Screens.</p>
       <div className="set-row"><span>Try it</span><button className="btn ghost" onClick={onScreensaver}>Show now</button></div>
       {editing && cfg && <ImmichSheet cfg={cfg} onClose={() => setEditing(false)} />}
     </section>

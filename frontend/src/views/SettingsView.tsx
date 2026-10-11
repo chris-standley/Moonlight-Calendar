@@ -6,7 +6,6 @@ import { WeatherIcon } from "../components/icons";
 import { ScreensaverPanel, ScreensPanel } from "./DisplaysSettings";
 import { CalendarsPanel } from "./CalendarsSettings";
 import { FamilyPanel } from "./FamilySettings";
-import { MusicPanel } from "./MusicSettings";
 import { WeatherPicker } from "./WeatherSettings";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
@@ -63,7 +62,6 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
         <SampleDataPanel />
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />
-        <MusicPanel />
         {api.mode === "demo" && api.resetDemo && (
           <section className="panel">
             <h2 className="panel-title">Demo</h2>

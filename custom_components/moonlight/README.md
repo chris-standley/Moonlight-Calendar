@@ -12,23 +12,15 @@ WebSocket, so a chore ticked off on the wall shows up in HA within a second or t
 1. HACS -> the three-dot menu -> **Custom repositories** -> add
    `https://github.com/chris-standley/Moonlight-Calendar`, category **Integration**.
 2. Install **Moonlight** from HACS and restart Home Assistant.
-3. **Settings -> Devices & services -> Add integration -> Moonlight**, then enter:
-   - **Host**: where Moonlight runs. For the Moonlight add-on this is usually `local-moonlight` when the
-     add-on was installed from a local add-on folder, `<repo-hash>-moonlight` when installed from an add-on
-     repository (shown as *Hostname* on the add-on's Info page), or simply your Home Assistant host's IP address.
-   - **Port**: `8091`.
-
-   Setup checks `GET /api/health`. You can change host/port later with **Reconfigure**.
-4. **Pairing.** The add-on's LAN port only answers paired clients (add-on option `require_pairing`, on by
-   default), so Home Assistant pairs itself like a wall screen: the next step shows a 6-digit code. In Moonlight
-   (HA sidebar or a paired screen) go to **Settings > Screens > Pair a new screen**, enter the code and the
-   parent PIN, then select **Submit** in Home Assistant. The token is stored in the config entry and sent as
-   `Authorization: Bearer` on every request and on the WebSocket. Home Assistant then shows in Moonlight's screen
-   list as "Home Assistant" (Integration). If pairing is off, this step is skipped.
-
-   If the token stops working (you revoked Home Assistant in Moonlight, or turned pairing on after setup), the
-   integration asks you to **Reconfigure/Re-authenticate** from the notification and shows a new code. Reconfigure
-   keeps the existing token if Moonlight still accepts it.
+3. **With the Moonlight add-on:** Settings -> Devices & services shows **Moonlight** under *Discovered*. Select
+   **Configure** and submit. The add-on announced itself with its address and a token it made for Home Assistant,
+   so there is no code to enter. It appears in Moonlight under **Settings > Screens > Connections**, where it can be
+   disconnected; restarting the add-on afterwards offers it again.
+4. **Without the add-on** (Moonlight running elsewhere): **Add integration -> Moonlight**, enter its host and port
+   (`8091`). Setup checks `GET /api/health`. If Moonlight requires pairing, the next step shows a 6-digit code: enter
+   it in Moonlight under **Settings > Screens > Pair a new screen** with the parent PIN, then select **Submit**. If the
+   token stops working, the integration asks you to re-authenticate and shows a new code. You can change host/port
+   later with **Reconfigure**. A manual entry for the add-on's own address is adopted when the add-on announces itself.
 
 The add-on itself can also show HA weather on the displays: pick an entity in Moonlight's Settings > Display > Weather.
 
