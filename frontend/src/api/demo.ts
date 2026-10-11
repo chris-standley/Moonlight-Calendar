@@ -117,6 +117,12 @@ function buildSeed(): State {
 
 const WORK_CAL = "cal_work";
 /** Free/busy blocks as an Outlook "Can view when I'm busy" feed publishes them (titles are just the status). */
+const HA_CALENDARS: [string, string][] = [
+  ["calendar.bin_collections", "Bin collections"],
+  ["calendar.free_electricity_sessions", "Free electricity sessions"],
+  ["calendar.workday_alex", "Workday Alex"],
+];
+
 function busyBlocks(calendarId: string, mon: string): CalEvent[] {
   const B: [number, string, string, BusyStatus][] = [
     [0, "10:30", "11:30", "busy"], [0, "14:00", "15:30", "busy"], [1, "09:00", "10:30", "busy"], [1, "13:00", "14:00", "tentative"],
@@ -509,7 +515,7 @@ export function demoApi(): Api {
       await wait(900); // "checking with iCloud"
       if (!a.username.trim() || !a.password.trim()) throw new ApiError(400, "Enter the Apple ID and app-specific password");
       if (accts().some((x) => x.username === a.username && x.kind === a.kind)) throw new ApiError(400, "That account is already connected");
-      const first = !accts().some((x) => x.kind !== "ics");
+      const first = !accts().some((x) => x.kind !== "ics" && x.kind !== "ha");
       const acct = {
         id: uid("acct"), kind: a.kind, label: a.label || a.username, username: a.username, password: a.password,
         server_url: a.kind === "icloud" ? "https://caldav.icloud.com/" : a.server_url ?? "",
@@ -557,7 +563,7 @@ export function demoApi(): Api {
       const mine = new Set(cals().filter((c) => c.account_id === id).map((c) => c.id));
       // A real removal forgets the cached iCloud events; the demo keeps them as local events instead
       // (except a calendar link's, which are dropped like the real thing).
-      if (find(accts(), id).kind === "ics") st.events = st.events.filter((e) => !e.calendar_id || !mine.has(e.calendar_id));
+      if (["ics", "ha"].includes(find(accts(), id).kind)) st.events = st.events.filter((e) => !e.calendar_id || !mine.has(e.calendar_id));
       for (const e of st.events) if (e.calendar_id && mine.has(e.calendar_id)) e.calendar_id = null;
       st.calendars = cals().filter((c) => !mine.has(c.id));
       st.accounts = accts().filter((a) => a.id !== id);
@@ -568,6 +574,38 @@ export function demoApi(): Api {
       await wait(600);
       if (acct.status !== "auth_failed") { acct.last_sync = nowDT(); acct.status = "ok"; acct.last_error = null; }
       emit("accounts");
+      return acctOut(acct);
+    },
+    // A pretend Home Assistant with a few calendar integrations.
+    haCalendars: async () => {
+      await wait(400);
+      const added = new Set(accts().filter((a) => a.kind === "ha").map((a) => a.username));
+      return HA_CALENDARS.map(([entity_id, name]) => ({ entity_id, name, added: added.has(entity_id) }));
+    },
+    async addHaCalendar(f) {
+      checkPin(f.pin);
+      const found = HA_CALENDARS.find(([id]) => id === f.entity_id);
+      if (!found) throw new ApiError(400, `Home Assistant has no calendar called ${f.entity_id}`);
+      if (accts().some((a) => a.kind === "ha" && a.username === f.entity_id)) throw new ApiError(400, "That calendar is already added");
+      await wait(600);
+      const label = f.label?.trim() || found[1];
+      const acct = { id: uid("acct"), kind: "ha" as const, label, username: f.entity_id, password: "", server_url: f.entity_id, status: "ok" as const, last_error: null, last_sync: nowDT(), calendar_count: 1 };
+      const person = st.people.find((x) => x.id === f.person_ids[0]);
+      const cal: SyncCalendar = {
+        id: uid("cal"), account_id: acct.id, name: label, color: f.color ?? person?.color ?? "#8A94A6", person_ids: f.person_ids, visible: true,
+        read_only: true, busy_blocks: false, busy_blocks_auto: false, busy_blocks_set: false,
+      };
+      accts().push(acct); cals().push(cal);
+      const mon = weekStart(today(), "monday");
+      const allDay = (d: string, title: string) => ({ id: uid("ev"), title, person_ids: [], start: `${d}T00:00`, end: `${addDays(d, 1)}T00:00`, all_day: true, location: "", notes: "", repeat: null, calendar_id: cal.id });
+      if (f.entity_id === "calendar.bin_collections") {
+        for (let w = 0; w < 8; w++) st.events.push(allDay(addDays(mon, 1 + w * 7), w % 2 ? "General waste" : "Recycling and garden"));
+      } else if (f.entity_id.startsWith("calendar.workday")) {
+        for (let d = 0; d < 21; d++) if (d % 7 < 5) st.events.push(allDay(addDays(mon, d), "Workday"));
+      } else {
+        [2, 9].forEach((d) => st.events.push({ ...allDay(addDays(mon, d), "Free electricity"), start: `${addDays(mon, d)}T13:00`, end: `${addDays(mon, d)}T15:00`, all_day: false }));
+      }
+      emit("accounts", "events");
       return acctOut(acct);
     },
     async previewFeed(raw) {

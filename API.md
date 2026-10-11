@@ -131,6 +131,19 @@ dropped.
   placeholder; `busy_blocks` = the household's choice (`busy_blocks_set`) or the automatic value. On such
   calendars events carry `busy` and screens show "Alex – busy" blocks; free ones are not returned.
 
+## Home Assistant calendars (read-only)
+An account of `kind: "ha"` is one read-only calendar from a Home Assistant calendar entity (bin collections,
+Workday, energy saving sessions). `username` and `server_url` are the entity id. Events come from HA's
+`GET /api/calendars/{entity}` (already expanded into occurrences) over the same connection as the weather
+(Supervisor token in the add-on, or `MOONLIGHT_HA_URL` + `MOONLIGHT_HA_TOKEN`), are stored like a calendar
+link's (same window, only changed events rewritten, `source: "ha"`) and polled every `MOONLIGHT_FEED_SECONDS`.
+Errors set `status: "error"` and keep the cached events.
+- `GET /api/ha/calendars` -> `[{entity_id, name, added: bool}]`, sorted by name. Moonlight's own entities
+  (`calendar.moonlight_*`) are left out. 409 when Moonlight isn't connected to Home Assistant, 502 when HA errors.
+- `POST /api/accounts` `{kind: "ha", entity_id, label?, person_ids?, color?, pin}` -> Account. `label` defaults
+  to the entity's name. 400 not a `calendar.` entity, unknown to HA, or already added; 403 wrong PIN.
+- `PATCH /api/accounts/{id}` `{pin, label}` renames it (and its calendar); `DELETE` and `/sync` work as for links.
+
 ## Chores
 Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon"|"evening"|"anytime", schedule, sort}`
 `schedule` = `{type: "daily"}` | `{type: "weekly", days: ["MO",..]}` | `{type: "once", date}`

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Account, AccountKind, ApiError, FeedPreview, SyncCalendar } from "../api/types";
+import { useEffect, useState } from "react";
+import { Account, AccountKind, ApiError, FeedPreview, HaCalendar, SyncCalendar } from "../api/types";
 import { useApp, useData } from "../state";
 import { Avatar, PersonPicker, Sheet } from "../components/ui";
 
@@ -13,6 +13,9 @@ export const IconAlert = ({ size }: IconProps) => (
 );
 const IconLink = ({ size }: IconProps) => (
   <svg {...svg(size)}><path d="M10 14a4.5 4.5 0 006.4 0l3-3a4.5 4.5 0 00-6.4-6.4l-1 1" /><path d="M14 10a4.5 4.5 0 00-6.4 0l-3 3a4.5 4.5 0 006.4 6.4l1-1" /></svg>
+);
+const IconHome = ({ size }: IconProps) => (
+  <svg {...svg(size)}><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 9.5V20h13V9.5" /><path d="M10 20v-5.5h4V20" /></svg>
 );
 const IconSync = ({ size }: IconProps) => (
   <svg {...svg(size)}><path d="M20 11a8 8 0 00-14.3-4.2L4 9M4 4v5h5M4 13a8 8 0 0014.3 4.2L20 15m0 5v-5h-5" /></svg>
@@ -34,11 +37,13 @@ function ago(iso: string | null): string {
 
 function statusText(a: Account): string {
   if (a.status === "auth_failed") return "Sign-in stopped working · reconnect to keep syncing";
-  if (a.status === "error") return `Couldn't ${a.kind === "ics" ? "refresh" : "sync"}${a.last_error ? `: ${a.last_error}` : ""} · retrying`;
-  return `${a.kind === "ics" ? "Checked" : "Synced"} ${ago(a.last_sync)}`;
+  if (a.status === "error") return `Couldn't ${single(a.kind) ? "refresh" : "sync"}${a.last_error ? `: ${a.last_error}` : ""} · retrying`;
+  return `${single(a.kind) ? "Checked" : "Synced"} ${ago(a.last_sync)}`;
 }
 
-const kindName = (k: AccountKind) => (k === "icloud" ? "iCloud" : k === "ics" ? "Calendar link" : "CalDAV");
+const kindName = (k: AccountKind) => (k === "icloud" ? "iCloud" : k === "ics" ? "Calendar link" : k === "ha" ? "Home Assistant" : "CalDAV");
+/** One read-only calendar, refreshed every 15 minutes (a published link or a Home Assistant calendar). */
+const single = (k: AccountKind) => k === "ics" || k === "ha";
 
 export function CalendarsPanel() {
   const { api, people, askPin, toast } = useApp();
@@ -46,6 +51,7 @@ export function CalendarsPanel() {
   const [calendars] = useData((a) => a.calendars(), ["accounts"], []);
   const [connect, setConnect] = useState<{ account?: Account } | null>(null);
   const [feed, setFeed] = useState<{ account?: Account } | null>(null);
+  const [haOpen, setHaOpen] = useState(false);
   const [editing, setEditing] = useState<SyncCalendar | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
 
@@ -53,12 +59,12 @@ export function CalendarsPanel() {
     setSyncing(a.id);
     try {
       const r = await api.syncAccount(a.id);
-      toast(r.status === "ok" ? "Calendars up to date" : r.status === "auth_failed" ? "iCloud needs reconnecting" : r.kind === "ics" ? "Couldn't refresh that link right now" : "Couldn't sync right now");
+      toast(r.status === "ok" ? "Calendars up to date" : r.status === "auth_failed" ? "iCloud needs reconnecting" : r.kind === "ics" ? "Couldn't refresh that link right now" : r.kind === "ha" ? "Couldn't reach Home Assistant right now" : "Couldn't sync right now");
     } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't sync"); }
     finally { setSyncing(null); }
   }
   async function remove(a: Account) {
-    const pin = await askPin(a.kind === "ics" ? `Remove the calendar link ${a.label}? Its events leave this screen.`
+    const pin = await askPin(single(a.kind) ? `Remove ${a.kind === "ics" ? "the calendar link " : ""}${a.label}? Its events leave this screen.`
       : `Disconnect ${a.label}? Its events leave this screen (nothing is deleted in ${kindName(a.kind)}).`);
     if (!pin) return;
     try { await api.removeAccount(a.id, pin); toast("Disconnected"); }
@@ -74,15 +80,17 @@ export function CalendarsPanel() {
       <div className="cal-panel-head">
         <h2 className="panel-title">Calendars</h2>
         <div className="cal-head-btns">
+          <button className="btn ghost small" onClick={() => setHaOpen(true)}><IconHome size={20} /> Home Assistant</button>
           <button className="btn ghost small" onClick={() => setFeed({})}><IconLink size={20} /> Add calendar link</button>
           <button className="btn small" onClick={() => setConnect({})}><IconCloud size={20} /> Connect iCloud</button>
         </div>
       </div>
-      {accounts && !accounts.some((a) => a.kind !== "ics") && (
+      {accounts && !accounts.some((a) => !single(a.kind)) && (
         <p className="muted cal-intro">
           Connect each adult's iCloud calendar. iCloud stays the master copy: changes made on phones appear here
           within a couple of minutes, and events added here go straight to iCloud. To show a calendar you can only
-          read (a work calendar, school term dates, bin days), add its published link instead.
+          read (a work calendar, school term dates), add its published link instead. Home Assistant calendars
+          (bin days, Workday, energy sessions) can be shown too.
           {api.mode === "demo" && " (Demo: any Apple ID works; the password “wrong” shows a failed sign-in.)"}
         </p>
       )}
@@ -92,13 +100,13 @@ export function CalendarsPanel() {
             <span className={`status-dot s-${a.status}`} aria-label={a.status} />
             <div className="acct-name">
               <b>{a.label}</b>
-              <span className={a.status !== "ok" ? `s-${a.status}` : undefined}>{kindName(a.kind)}{a.kind === "ics" ? ` · ${a.server_url}` : ""} · {statusText(a)}</span>
+              <span className={a.status !== "ok" ? `s-${a.status}` : undefined}>{kindName(a.kind)}{single(a.kind) ? ` · ${a.server_url}` : ""} · {statusText(a)}</span>
             </div>
             <div className="acct-actions">
               {a.status === "auth_failed" && <button className="btn small" onClick={() => setConnect({ account: a })}>Reconnect</button>}
               {a.kind === "ics" && a.status === "error" && <button className="btn small" onClick={() => setFeed({ account: a })}>Paste new link</button>}
               <button className="btn ghost small" disabled={syncing === a.id} onClick={() => syncNow(a)}>
-                <IconSync size={18} /> {syncing === a.id ? (a.kind === "ics" ? "Refreshing…" : "Syncing…") : a.kind === "ics" ? "Refresh" : "Sync now"}
+                <IconSync size={18} /> {syncing === a.id ? (single(a.kind) ? "Refreshing…" : "Syncing…") : single(a.kind) ? "Refresh" : "Sync now"}
               </button>
               <button className="btn ghost small danger" onClick={() => remove(a)}>Remove</button>
             </div>
@@ -126,6 +134,7 @@ export function CalendarsPanel() {
       ))}
       {connect && <ConnectSheet account={connect.account} onClose={() => setConnect(null)} />}
       {feed && <FeedSheet account={feed.account} onClose={() => setFeed(null)} />}
+      {haOpen && <HaCalendarSheet onClose={() => setHaOpen(false)} />}
       {editing && <CalendarSheet cal={editing} feed={accounts?.find((a) => a.id === editing.account_id)?.kind === "ics"} onClose={() => setEditing(null)} />}
     </section>
   );
@@ -331,6 +340,67 @@ function FeedSheet({ account, onClose }: { account?: Account; onClose: () => voi
         </p>
         <button type="submit" hidden />
       </form>
+    </Sheet>
+  );
+}
+
+/** Show a Home Assistant calendar entity (bin collections, Workday, energy sessions): read-only, refreshed every 15 minutes. */
+function HaCalendarSheet({ onClose }: { onClose: () => void }) {
+  const { api, people, askPin, toast } = useApp();
+  const [found, setFound] = useState<HaCalendar[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pick, setPick] = useState<HaCalendar | null>(null);
+  const [label, setLabel] = useState("");
+  const [who, setWho] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api.haCalendars().then((f) => { setFound(f); setError(null); })
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Couldn't reach Home Assistant"));
+  }, [api]);
+  async function submit() {
+    if (!pick || saving) return;
+    const name = label.trim() || pick.name;
+    const pin = await askPin(`Add ${name}`);
+    if (!pin) return;
+    setSaving(true); setError(null);
+    try {
+      await api.addHaCalendar({ entity_id: pick.entity_id, label: label.trim() || undefined, person_ids: who, pin });
+      toast(`Added ${name}`);
+      onClose();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't add that calendar");
+    } finally { setSaving(false); }
+  }
+  return (
+    <Sheet title="Home Assistant calendar" onClose={onClose} footer={<>
+      <button className="btn ghost" onClick={onClose}>Cancel</button>
+      <span style={{ flex: 1 }} />
+      <button className="btn" disabled={!pick || saving} onClick={submit}>{saving ? "Adding…" : "Add calendar"}</button>
+    </>}>
+      <p className="muted connect-note">
+        Shows a calendar from Home Assistant, such as bin collections, Workday or energy saving sessions. Its events
+        can't be changed here, and it's checked every 15 minutes.
+      </p>
+      {!found && !error && <div className="screens-empty">Asking Home Assistant…</div>}
+      <div className="player-list">
+        {(found ?? []).map((c) => (
+          <button key={c.entity_id} className={"player-row" + (pick?.entity_id === c.entity_id ? " on" : "")}
+            disabled={c.added} onClick={() => setPick(c)} aria-pressed={pick?.entity_id === c.entity_id}>
+            <span className="player-main"><b>{c.name}</b><span>{c.added ? "Already on Moonlight" : c.entity_id}</span></span>
+          </button>
+        ))}
+        {found && found.length === 0 && <div className="screens-empty">Home Assistant has no calendars yet.</div>}
+      </div>
+      {error && <div className="connect-error" role="alert">{error}</div>}
+      {pick && (
+        <div className="form">
+          <label className="field-label">Name</label>
+          <input className="input" placeholder={pick.name} value={label} onChange={(e) => setLabel(e.target.value)} />
+          <label className="field-label">Whose calendar is it?</label>
+          <PersonPicker people={people} value={who} onChange={setWho} />
+          <p className="muted connect-note">Pick everyone for household things like bin day. Leave it empty to show the events in the calendar's own colour.</p>
+        </div>
+      )}
     </Sheet>
   );
 }

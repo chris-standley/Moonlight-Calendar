@@ -195,6 +195,21 @@ async def test_services(hass: HomeAssistant, moonlight_server) -> None:
     gid = next(l["id"] for l in lists if l["name"] == "Groceries")
     items = await hass.async_add_executor_job(http, moonlight_server, "GET", f"/api/lists/{gid}/items")
     assert any(i["title"] == "Bananas" for i in items)
+
+    # add_chore: a one-off chore for today; firing twice adds it once.
+    call = {"person": ["Mia", "leo"], "title": "Empty the dishwasher", "emoji": "🍽️", "points": 2,
+            "time_of_day": "evening"}
+    resp = await hass.services.async_call(DOMAIN, "add_chore", call, blocking=True, return_response=True)
+    assert resp["date"] == today and sorted(a["person"] for a in resp["added"]) == ["Leo", "Mia"]
+    resp = await hass.services.async_call(DOMAIN, "add_chore", {**call, "title": "empty the DISHWASHER"},
+                                          blocking=True, return_response=True)
+    assert resp["added"] == [] and len(resp["already_there"]) == 2
+    chores = await hass.async_add_executor_job(http, moonlight_server, "GET", f"/api/chores?date={today}")
+    new = [c for c in chores if c["title"] == "Empty the dishwasher"]
+    assert len(new) == 2 and all(c["schedule"] == {"type": "once", "date": today} and c["points"] == 2
+                                 and c["time_of_day"] == "evening" for c in new)
+    with pytest.raises(ServiceValidationError, match="No person"):
+        await hass.services.async_call(DOMAIN, "add_chore", {"person": "Nobody", "title": "x"}, blocking=True)
     await unload(hass, entry)
 
 

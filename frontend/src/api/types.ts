@@ -130,10 +130,11 @@ export type MediaAction = "play_pause" | "play" | "pause" | "next" | "previous" 
 export interface MediaPlayerOption { entity_id: string; name: string; state: string; music_assistant: boolean }
 export interface MediaFavourite { uri: string; name: string; media_type: string }
 
-// Calendar sync (iCloud / CalDAV / published calendar links). Passwords and link URLs are write-only.
-export type AccountKind = "icloud" | "caldav" | "ics";
+// Calendar sync (iCloud / CalDAV / published calendar links / Home Assistant calendars). Passwords and link URLs are write-only.
+export type AccountKind = "icloud" | "caldav" | "ics" | "ha";
 export type AccountStatus = "ok" | "auth_failed" | "error";
-/** For kind "ics" `server_url` is a masked form of the link (host/…/calendar.ics) and `username` is "". */
+/** For kind "ics" `server_url` is a masked form of the link (host/…/calendar.ics) and `username` is "".
+ *  For kind "ha" both are the Home Assistant entity id (calendar.bins). */
 export interface Account {
   id: string; kind: AccountKind; label: string; username: string; server_url: string;
   status: AccountStatus; last_error: string | null; last_sync: string | null; calendar_count: number;
@@ -146,6 +147,9 @@ export interface SyncCalendar {
 }
 /** A published ICS link (webcal:// or https://); read-only, polled every 15 minutes. */
 export interface FeedIn { url: string; label?: string; person_ids: string[]; color?: string; pin: string }
+/** A Home Assistant calendar entity (bin days, Workday, energy sessions); read-only, polled every 15 minutes. */
+export interface HaCalendar { entity_id: string; name: string; added: boolean }
+export interface HaCalendarIn { entity_id: string; label?: string; person_ids: string[]; color?: string; pin: string }
 export interface FeedPreview { event_count: number; name: string; busy_only: boolean; masked_url: string }
 
 /** Default calendar for a new event (mirrors the server): the first person's own visible, writable calendar before shared ones. */
@@ -232,6 +236,9 @@ export interface Api {
   /** Test a calendar link: how many events it has (nothing is saved). */
   previewFeed(url: string): Promise<FeedPreview>;
   addFeed(f: FeedIn): Promise<Account>;
+  /** Home Assistant's calendar entities (409 when Moonlight isn't connected to Home Assistant). */
+  haCalendars(): Promise<HaCalendar[]>;
+  addHaCalendar(f: HaCalendarIn): Promise<Account>;
   /** Paste a new link (verified first) and/or rename. */
   updateFeed(id: string, patch: { url?: string; label?: string; pin: string }): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;

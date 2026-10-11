@@ -2,7 +2,7 @@
 
 A custom integration that brings your [Moonlight](https://github.com/chris-standley/Moonlight-Calendar) family
 wall calendar into Home Assistant: stars, chores, tonight's dinner, the next event, every list as a to-do
-entity and a calendar per person, plus services to tick off chores, award stars and add list items.
+entity and a calendar per person, plus services to add and tick off chores, award stars and add list items.
 
 It talks to Moonlight's local HTTP API (port 8091), polls every 60 seconds and also listens to Moonlight's
 WebSocket, so a chore ticked off on the wall shows up in HA within a second or two.
@@ -53,11 +53,23 @@ Calendar times are Moonlight's household-local times interpreted in Home Assista
 
 ## Services
 
-All three accept a person or list by **name or id** (case-insensitive; first name works if unique; emoji in
+All four accept a person or list by **name or id** (case-insensitive; first name works if unique; emoji in
 list names can be left out) and an optional `config_entry_id` if you run more than one Moonlight. Each can
 return a response (`response_variable`).
 
 ```yaml
+# Add a one-off chore for today (or `date`). `person` can be a list; each gets their own. If the same chore is
+# already waiting for that person that day (title compared without emoji or case), it isn't added again, so an
+# automation that fires twice adds it once. Once it's done, a later call adds a new one.
+action: moonlight.add_chore
+data:
+  person: Chris
+  title: Empty the dishwasher
+  emoji: "🍽️"            # optional
+  points: 0               # optional stars, default 0
+  time_of_day: anytime    # morning | afternoon | evening | anytime
+  # date: "2026-10-10"   # optional, defaults to today
+
 # Tick off a chore (stars are awarded as on the wall). If two chores share a title, e.g. morning and evening
 # "Brush teeth", the next one not yet done is ticked.
 action: moonlight.complete_chore
@@ -85,6 +97,48 @@ The `todo.*` entities also work with HA's own `todo.add_item`, `todo.update_item
 with Assist ("add milk to my groceries").
 
 ## Example automations
+
+Put the bins out the night before collection. Add the bin calendar to Moonlight first (Settings > Calendars >
+Home Assistant, pick everyone) so collection day shows on the shared calendar; this adds the chore at 7pm the
+evening before. A calendar trigger with a negative offset fires that long before each all-day event starts at
+midnight. Use your own calendar entity:
+
+```yaml
+alias: Moonlight - bins out the night before
+triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.bins
+    offset: "-5:00:00"
+actions:
+  - action: moonlight.add_chore
+    data:
+      person: Chris
+      title: "Put the bins out: {{ trigger.calendar_event.summary }}"
+      emoji: "🗑️"
+      time_of_day: evening
+```
+
+Add a chore when the washing machine or dishwasher finishes. Use whichever entity and state your appliance
+reports when it is done (a status sensor going to "finished", or a power-based binary sensor going "off"):
+
+```yaml
+alias: Moonlight - appliance finished
+triggers:
+  - trigger: state
+    entity_id: sensor.washing_machine_status
+    to: finished
+    id: washer
+  - trigger: state
+    entity_id: sensor.dishwasher_status
+    to: finished
+    id: dishwasher
+actions:
+  - action: moonlight.add_chore
+    data:
+      person: Chris
+      title: "{{ 'Hang out the washing' if trigger.id == 'washer' else 'Empty the dishwasher' }}"
+      emoji: "{{ '🧺' if trigger.id == 'washer' else '🍽️' }}"
 
 Announce when a child finishes all their chores:
 
