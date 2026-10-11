@@ -119,7 +119,7 @@ struct PairingView: View {
         let api = APIClient(baseURL: server, token: nil)
         while !Task.isCancelled {
             do {
-                let start = try await api.pairStart(name: "Apple TV")
+                let start = try await api.pairStart(layout: "hallway", name: "Apple TV")
                 code = start.code
                 expires = Date().addingTimeInterval(TimeInterval(start.expires_in))
                 error = nil

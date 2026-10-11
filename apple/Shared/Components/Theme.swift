@@ -26,8 +26,14 @@ enum Theme {
     static let radius: CGFloat = 24
     static let gutter: CGFloat = 80 // tvOS safe area is 80pt left/right, 60pt top/bottom
 
+    /// Fixed sizes for the TV, which is always 1920x1080 points at ten feet.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
         .system(size: size, weight: weight, design: .rounded)
+    }
+
+    /// Text styles for iPhone and iPad, so Dynamic Type scales them.
+    static func text(_ style: Font.TextStyle, _ weight: Font.Weight = .bold) -> Font {
+        .system(style, design: .rounded, weight: weight)
     }
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {

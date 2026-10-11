@@ -1,30 +1,5 @@
 import SwiftUI
 
-/// Colours for an event, as the wall screens draw them: tinted card, person-coloured stripe (split for several people).
-struct EventColors {
-    let main: Color
-    let stripe: [Color]
-    let busy: Bool
-
-    init(_ o: Occurrence, people: [Person]) {
-        let colors = o.person_ids.compactMap { id in people.first { $0.id == id }?.color }
-        let hex = (o.busy != nil ? o.color : nil) ?? colors.first ?? o.color ?? Theme.fallbackEvent
-        main = Color(hex: hex)
-        busy = o.busy != nil
-        stripe = colors.count > 1 && !busy ? colors.map(Color.init(hex:)) : [main]
-    }
-}
-
-extension Occurrence {
-    /// Free/busy blocks read "Alex – busy" (the feed's own "Busy" says nothing).
-    func displayTitle(_ people: [Person]) -> String {
-        guard let busy else { return title }
-        let names = person_ids.compactMap { id in people.first { $0.id == id }?.name }
-        let label = ["busy": "busy", "tentative": "tentative", "away": "away", "elsewhere": "working elsewhere"][busy] ?? busy
-        return names.isEmpty ? label.capitalized : "\(names.joined(separator: " & ")) – \(label)"
-    }
-}
-
 /// One event, focusable; select opens its details.
 struct EventCard: View {
     @Environment(AppModel.self) private var model

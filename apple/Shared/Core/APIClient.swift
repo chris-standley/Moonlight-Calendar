@@ -87,8 +87,8 @@ struct APIClient: Sendable {
 
     func health() async throws -> Health { try await get("/api/health") }
     func authStatus() async throws -> AuthStatus { try await get("/api/auth/status") }
-    func pairStart(name: String) async throws -> PairStart {
-        try await send("POST", "/api/pair/start", ["layout": "hallway", "name": name])
+    func pairStart(layout: String, name: String) async throws -> PairStart {
+        try await send("POST", "/api/pair/start", ["layout": layout, "name": name])
     }
     func pairPoll(_ id: String) async throws -> PairPoll { try await get("/api/pair/\(id)") }
 
@@ -126,6 +126,55 @@ struct APIClient: Sendable {
         try await send("POST", "/api/media/command", ["layout": layout, "action": action])
     }
     func photos() async throws -> PhotoList { try await get("/api/screensaver/photos") }
+
+    // MARK: Editing (phone and tablet; the TV only ticks things off)
+
+    func verifyPin(_ pin: String) async throws -> Bool {
+        let r: [String: Bool] = try await send("POST", "/api/pin/verify", ["pin": pin])
+        return r["ok"] ?? false
+    }
+    func saveEvent(id: String?, _ body: [String: Any]) async throws {
+        let _: Ignored = try await send(id == nil ? "POST" : "PATCH", id.map { "/api/events/\($0)" } ?? "/api/events", body)
+    }
+    func deleteEvent(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/events/\(id)")
+    }
+    func saveChore(id: String?, _ body: [String: Any]) async throws {
+        let _: Ignored = try await send(id == nil ? "POST" : "PATCH", id.map { "/api/chores/\($0)" } ?? "/api/chores", body)
+    }
+    func deleteChore(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/chores/\(id)")
+    }
+    func adjustPoints(_ personId: String, change: Int, reason: String, pin: String) async throws {
+        let _: Ignored = try await send("POST", "/api/points/adjust", ["person_id": personId, "change": change, "reason": reason, "pin": pin])
+    }
+    func createReward(title: String, emoji: String, cost: Int, personId: String?) async throws {
+        let _: Ignored = try await send("POST", "/api/rewards", ["title": title, "emoji": emoji, "cost": cost, "person_id": personId.map { $0 as Any } ?? NSNull()])
+    }
+    func deleteReward(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/rewards/\(id)")
+    }
+    func createList(name: String, emoji: String, color: String, kind: String) async throws {
+        let _: Ignored = try await send("POST", "/api/lists", ["name": name, "emoji": emoji, "color": color, "kind": kind])
+    }
+    func deleteList(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/lists/\(id)")
+    }
+    func addItem(_ listId: String, title: String) async throws {
+        let _: Ignored = try await send("POST", "/api/lists/\(listId)/items", ["title": title])
+    }
+    func deleteItem(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/items/\(id)")
+    }
+    func clearDone(_ listId: String) async throws {
+        let _: Ignored = try await send("POST", "/api/lists/\(listId)/clear-done")
+    }
+    func saveMeal(id: String?, _ body: [String: Any]) async throws {
+        let _: Ignored = try await send(id == nil ? "POST" : "PATCH", id.map { "/api/meals/\($0)" } ?? "/api/meals", body)
+    }
+    func deleteMeal(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/meals/\(id)")
+    }
 
     /// `/api/ws` with the token in the query (the WebSocket can't send an Authorization header everywhere).
     func webSocketURL() -> URL {

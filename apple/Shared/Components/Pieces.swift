@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Small building blocks used by the TV and the iPhone/iPad apps alike.
+
 struct Avatar: View {
     let person: Person
     var size: CGFloat = 56
@@ -99,74 +101,50 @@ struct ProgressRing: View {
     }
 }
 
-/// Top row on every screen: clock, date, today's weather and the family name.
-struct Header: View {
-    @Environment(AppModel.self) private var model
+
+/// Colours for an event, as the wall screens draw them: tinted card, person-coloured stripe (split for several people).
+struct EventColors {
+    let main: Color
+    let stripe: [Color]
+    let busy: Bool
+
+    init(_ o: Occurrence, people: [Person]) {
+        let colors = o.person_ids.compactMap { id in people.first { $0.id == id }?.color }
+        let hex = (o.busy != nil ? o.color : nil) ?? colors.first ?? o.color ?? Theme.fallbackEvent
+        main = Color(hex: hex)
+        busy = o.busy != nil
+        stripe = colors.count > 1 && !busy ? colors.map(Color.init(hex:)) : [main]
+    }
+}
+
+extension Occurrence {
+    /// Free/busy blocks read "Alex – busy" (the feed's own "Busy" says nothing).
+    func displayTitle(_ people: [Person]) -> String {
+        guard let busy else { return title }
+        let names = person_ids.compactMap { id in people.first { $0.id == id }?.name }
+        let label = ["busy": "busy", "tentative": "tentative", "away": "away", "elsewhere": "working elsewhere"][busy] ?? busy
+        return names.isEmpty ? label.capitalized : "\(names.joined(separator: " & ")) – \(label)"
+    }
+}
+
+/// The crescent mark from the wall screens' rail.
+struct LogoMark: View {
+    var size: CGFloat = 80
 
     var body: some View {
-        TimelineView(.everyMinute) { ctx in
-            HStack(alignment: .firstTextBaseline, spacing: 28) {
-                Text(model.dates.clock(ctx.date))
-                    .font(Theme.font(64, .heavy))
-                    .foregroundStyle(Theme.text)
-                Text(model.dates.longDate(ctx.date))
-                    .font(Theme.font(32, .bold))
-                    .foregroundStyle(Theme.muted)
-                if let w = model.weather {
-                    HStack(spacing: 10) {
-                        WeatherGlyph(condition: w.current.condition, size: 34)
-                        Text("\(w.current.temp)°").font(Theme.font(34, .heavy)).foregroundStyle(Theme.text)
-                    }
-                }
-                Spacer()
-                Text(model.settings?.family_name ?? "")
-                    .font(Theme.font(30, .heavy))
-                    .foregroundStyle(Theme.muted)
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous).fill(Theme.logoGradient)
+            Canvas { ctx, sz in
+                let s = sz.width / 32
+                // Crescent: a disc with an offset disc cut out (path from the web logo, M19.5 7.5a9 9 0 100 17 7.2 7.2 0 010-17z).
+                var moon = Path(ellipseIn: CGRect(x: 6.5 * s, y: 7.5 * s, width: 17 * s, height: 17 * s))
+                moon = moon.subtracting(Path(ellipseIn: CGRect(x: 12.3 * s, y: 7.5 * s, width: 14.4 * s, height: 17 * s)))
+                ctx.fill(moon, with: .color(.white))
+                ctx.fill(Path(ellipseIn: CGRect(x: 21.7 * s, y: 8.7 * s, width: 2.6 * s, height: 2.6 * s)), with: .color(.white.opacity(0.85)))
+                ctx.fill(Path(ellipseIn: CGRect(x: 24.6 * s, y: 14.1 * s, width: 1.8 * s, height: 1.8 * s)), with: .color(.white.opacity(0.7)))
             }
         }
-    }
-}
-
-struct EmptyNote: View {
-    let text: String
-    var body: some View {
-        Text(text)
-            .font(Theme.font(26, .bold))
-            .foregroundStyle(Theme.muted)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(32)
-    }
-}
-
-/// Shown when there's nobody in the family yet (a new install with demo data off).
-struct FamilyPrompt: View {
-    var text = "Add your family in Moonlight Settings › Family on your phone or wall screen, and they'll appear here."
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("👋").font(.system(size: 80))
-            Text(text)
-                .font(Theme.font(32, .bold))
-                .foregroundStyle(Theme.muted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 1000)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// A Moonlight screen: safe-area padding, the header, then content.
-struct Screen<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Header()
-            content
-        }
-        .padding(.horizontal, Theme.gutter)
-        .padding(.top, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.bg.ignoresSafeArea())
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

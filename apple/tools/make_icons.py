@@ -1,6 +1,6 @@
-"""Draws the Apple TV app icon (two parallax layers) and Top Shelf images into Assets.xcassets.
+"""Draws the Apple TV app icon (two parallax layers) and Top Shelf images, and the iPhone/iPad icon.
 
-Run from the repo root: python3 appletv/tools/make_icons.py   (needs Pillow)
+Run from the repo root: python3 apple/tools/make_icons.py   (needs Pillow)
 The artwork is the wall screens' crescent logo: a lilac gradient with a white crescent and two stars.
 """
 import json
@@ -9,7 +9,8 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-ROOT = os.path.join(os.path.dirname(__file__), "..", "Moonlight", "Assets.xcassets")
+ROOT = os.path.join(os.path.dirname(__file__), "..", "TV", "Assets.xcassets")
+IOS_ROOT = os.path.join(os.path.dirname(__file__), "..", "iOS", "Assets.xcassets")
 BRAND = os.path.join(ROOT, "App Icon & Top Shelf Image.brandassets")
 INFO = {"author": "xcode", "version": 1}
 TOP, BOTTOM = (124, 140, 248), (179, 140, 240)  # #7C8CF8 -> #B38CF0
@@ -90,6 +91,29 @@ def icon_stack(name, w, h, scales):
         save_imageset(os.path.join(folder, "Content.imageset"), imgs)
 
 
+def ios_icon():
+    """1024x1024 single-size icon (iOS rounds the corners itself), plus dark and tinted variants."""
+    W = 1024
+    back = gradient_fast(W, W).convert("RGBA")
+    moon = crescent(W, W, W * 0.47, W * 0.5, W * 0.3)
+    light = Image.alpha_composite(back, moon).convert("RGB")
+    dark = Image.alpha_composite(Image.new("RGBA", (W, W), (0, 0, 0, 0)), moon)  # transparent: iOS draws the dark backdrop
+    tinted = Image.alpha_composite(Image.new("RGBA", (W, W), (0, 0, 0, 255)), moon).convert("L")
+    folder = os.path.join(IOS_ROOT, "AppIcon.appiconset")
+    os.makedirs(folder, exist_ok=True)
+    light.save(os.path.join(folder, "icon.png"))
+    dark.save(os.path.join(folder, "icon-dark.png"))
+    tinted.save(os.path.join(folder, "icon-tinted.png"))
+    base = {"idiom": "universal", "platform": "ios", "size": "1024x1024"}
+    write(os.path.join(folder, "Contents.json"), {"images": [
+        dict(base, filename="icon.png"),
+        dict(base, filename="icon-dark.png", appearances=[{"appearance": "luminosity", "value": "dark"}]),
+        dict(base, filename="icon-tinted.png", appearances=[{"appearance": "luminosity", "value": "tinted"}]),
+    ], "info": INFO})
+    write(os.path.join(IOS_ROOT, "Contents.json"), {"info": INFO})
+    write(os.path.join(IOS_ROOT, "AccentColor.colorset", "Contents.json"), ACCENT)
+
+
 def top_shelf(name, w, h):
     imgs = []
     for k in (1, 2):
@@ -103,6 +127,11 @@ def top_shelf(name, w, h):
     save_imageset(os.path.join(BRAND, name + ".imageset"), imgs)
 
 
+ACCENT = {
+    "colors": [{"color": {"color-space": "srgb", "components": {
+        "red": "0x6C", "green": "0x7B", "blue": "0xF0", "alpha": "1.000"}}, "idiom": "universal"}],
+    "info": INFO}
+
 FONT = next((p for p in [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/System/Library/Fonts/SFNSRounded.ttf",
@@ -113,10 +142,7 @@ if __name__ == "__main__":
     if FONT is None:
         sys.exit("No bold font found for the Top Shelf wordmark")
     write(os.path.join(ROOT, "Contents.json"), {"info": INFO})
-    write(os.path.join(ROOT, "AccentColor.colorset", "Contents.json"), {
-        "colors": [{"color": {"color-space": "srgb", "components": {
-            "red": "0x6C", "green": "0x7B", "blue": "0xF0", "alpha": "1.000"}}, "idiom": "universal"}],
-        "info": INFO})
+    write(os.path.join(ROOT, "AccentColor.colorset", "Contents.json"), ACCENT)
     write(os.path.join(BRAND, "Contents.json"), {"assets": [
         {"filename": "App Icon - App Store.imagestack", "idiom": "tv", "role": "primary-app-icon", "size": "1280x768"},
         {"filename": "App Icon.imagestack", "idiom": "tv", "role": "primary-app-icon", "size": "400x240"},
@@ -127,4 +153,5 @@ if __name__ == "__main__":
     icon_stack("App Icon - App Store", 1280, 768, ["1x"])
     top_shelf("Top Shelf Image", 1920, 720)
     top_shelf("Top Shelf Image Wide", 2320, 720)
-    print("wrote", ROOT)
+    ios_icon()
+    print("wrote", ROOT, "and", IOS_ROOT)

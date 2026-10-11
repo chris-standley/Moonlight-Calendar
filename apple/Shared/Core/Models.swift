@@ -45,8 +45,11 @@ struct Occurrence: Codable, Identifiable, Hashable {
     let custom_repeat: Bool?
     let color: String?
     let busy: String?
+    let read_only: Bool?
+    let calendar_id: String?
 
     var key: String { occurrence_id }
+    var editable: Bool { read_only != true && busy == nil }
     var startDay: String { String(start.prefix(10)) }
 }
 
@@ -58,9 +61,24 @@ struct ChoreDay: Codable, Identifiable, Hashable {
     let points: Int
     let time_of_day: String
     let sort: Int
+    let schedule: ChoreSchedule
     let date: String
     var completed: Bool
     let streak: Int
+}
+
+/// `{type: "daily"}` | `{type: "weekly", days: ["MO",..]}` | `{type: "once", date}`
+struct ChoreSchedule: Codable, Hashable {
+    var type: String
+    var days: [String]?
+    var date: String?
+
+    var json: [String: Any] {
+        var out: [String: Any] = ["type": type]
+        if type == "weekly" { out["days"] = days ?? [] }
+        if type == "once", let date { out["date"] = date }
+        return out
+    }
 }
 
 struct Balance: Codable, Hashable {

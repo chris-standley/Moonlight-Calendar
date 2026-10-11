@@ -35,17 +35,26 @@ jobs:
       - run: npm run build
       - run: npm run build:demo
 
-  appletv:
+  apple:
     runs-on: macos-15
     defaults:
       run:
-        working-directory: appletv
+        working-directory: apple
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scheme: Moonlight
+            destination: generic/platform=iOS Simulator
+          - scheme: Moonlight TV
+            destination: generic/platform=tvOS Simulator
+    name: apple (${{ matrix.scheme }})
     steps:
       - uses: actions/checkout@v4
-      - name: Build for the Apple TV simulator (unsigned)
+      - name: Build for the simulator (unsigned)
         run: |
           xcodebuild -version
-          xcodebuild -project Moonlight.xcodeproj -scheme Moonlight -configuration Debug \
-            -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E "error:|warning:|BUILD" || true
+          xcodebuild -project Moonlight.xcodeproj -scheme "${{ matrix.scheme }}" -configuration Debug \
+            -destination "${{ matrix.destination }}" CODE_SIGNING_ALLOWED=NO build \
+            | tee build.log | grep -E "error:|warning:|BUILD" || true
           grep -q "BUILD SUCCEEDED" build.log
