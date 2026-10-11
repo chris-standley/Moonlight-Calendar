@@ -31,6 +31,9 @@ const IDLE_MS = { hallway: 5 * 60_000, kitchen: 3 * 60_000, phone: 0 };
 
 interface Burst { id: number; x: number; y: number; color: string }
 
+/** Inside Home Assistant (ingress panel iframe): HA's own frame already keeps clear of the iPhone home indicator. */
+const EMBEDDED = (() => { try { return window.self !== window.top; } catch { return true; } })();
+
 export function App({ api, layout }: { api: Api; layout: Layout }) {
   const [tab, setTab] = useState<Tab>(layout === "hallway" ? "calendar" : "today");
   const [people, setPeople] = useState<Person[]>([]);
@@ -95,7 +98,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
 
   return (
     <AppProvider value={{ api, layout, people, settings, personById, askPin, toast, celebrate, go }}>
-      <div className={`app layout-${layout}`} ref={root}>
+      <div className={`app layout-${layout}` + (EMBEDDED ? " embedded" : "")} ref={root}>
        <MediaProvider api={api} layout={layout}>
         <nav className="rail">
           <div className="rail-logo"><Logo size={layout === "hallway" ? 44 : 34} /></div>

@@ -460,7 +460,8 @@ h1, h2 { margin: 0; }
 /* Compact tab bar; the home-indicator inset replaces the bottom padding rather than adding to it. */
 .layout-phone .rail { grid-row: 2; flex-direction: row; width: auto; padding: 0.15rem 0.2rem max(0.15rem, env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); gap: 0; overflow-x: auto; }
 .layout-phone .rail-logo { display: none; }
-.layout-phone .rail-item { padding: 0.25rem 0.1rem 0.2rem; gap: 0.1rem; font-size: 0.62rem; min-width: 3.4rem; border-radius: 0.7rem; }
+.layout-phone .rail-item { padding: 0.2rem 0.1rem 0.15rem; gap: 0.05rem; font-size: 0.62rem; min-width: 3.4rem; border-radius: 0.7rem; }
+.layout-phone.embedded .rail { padding-bottom: 0.15rem; }
 .layout-phone .main { grid-row: 1; }
 .layout-phone .topbar { padding: 0.8rem 1rem 0.2rem; flex-wrap: wrap; row-gap: 0; }
 .layout-phone .tb-time { font-size: 1.8rem; }
@@ -473,9 +474,9 @@ h1, h2 { margin: 0; }
 .layout-phone .week, .layout-phone .chore-cols, .layout-phone .reward-cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 0.8rem 0.8rem; gap: 0.6rem; }
 .layout-phone .week-col { flex: 0 0 46%; scroll-snap-align: start; }
 .layout-phone .chore-col, .layout-phone .kid-rewards { flex: 0 0 88%; scroll-snap-align: center; }
-.layout-phone .today-view { grid-template-columns: 1fr; grid-auto-rows: max-content; align-content: start; overflow-y: auto; padding: 0 0.8rem 0.8rem; }
+.layout-phone .today-view { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-x: hidden; align-content: start; overflow-y: auto; padding: 0 0.8rem 0.8rem; }
 /* One scrolling column: every card at its natural height (the wide screens squeeze them to fit instead). */
-.layout-phone .today-view .panel, .layout-phone .today-mid, .layout-phone .today-right { overflow: visible; min-height: auto; flex: none; }
+.layout-phone .today-view .panel, .layout-phone .today-mid, .layout-phone .today-right { overflow: visible; min-height: auto; min-width: 0; flex: none; }
 .layout-phone .lists-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); padding: 0 0.8rem 0.8rem; }
 /* Tabs scroll sideways edge to edge; the ::after spacer keeps the last one clear of the edge (Safari ignores
    end padding in a scrolling flex row). */
@@ -550,6 +551,7 @@ h1, h2 { margin: 0; }
 .set-col > span { color: var(--muted); }
 .set-col .segmented { max-width: 100%; overflow-x: auto; }
 .set-col .segmented button { white-space: nowrap; flex: none; }
+.layout-phone .set-col .segmented { flex-wrap: wrap; overflow: visible; border-radius: 1.2rem; }
 
 /* Settings > Photo screensaver (Immich) */
 .immich-panel .acct { margin-bottom: 0.2rem; }
