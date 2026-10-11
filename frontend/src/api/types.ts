@@ -15,6 +15,8 @@ export interface Settings {
   timezone?: string;
   /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
   media_players?: Partial<Record<"hallway" | "kitchen" | "phone", string>>;
+  /** Home Assistant weather entity the screens show; "" = built-in demo forecast. */
+  weather_entity?: string;
 }
 
 export type Freq = "daily" | "weekly" | "monthly";
@@ -63,12 +65,19 @@ export interface Item { id: string; list_id: string; title: string; done: boolea
 
 export type Slot = "breakfast" | "lunch" | "dinner" | "snack";
 export interface Meal { id: string; date: string; slot: Slot; title: string; notes: string; recipe_id: string | null }
-export interface Recipe { id: string; title: string; emoji: string; minutes: number; ingredients: string[]; url: string | null }
+export interface Recipe { id: string; title: string; emoji: string; minutes: number | null; ingredients: string[]; url: string | null }
+export type RecipeIn = Omit<Recipe, "id">;
 
+export interface WeatherEntity {
+  entity_id: string; name: string; available: boolean;
+  condition: string | null; temperature: number | null; unit: "C" | "F"; attribution: string | null;
+}
 export interface Weather {
-  /** "homeassistant" when read from the add-on's weather_entity, else the built-in demo forecast. */
+  /** "homeassistant" when read from the chosen weather entity (Settings > Weather), else the built-in demo forecast. */
   source?: "homeassistant" | "demo";
   entity?: string | null;
+  /** The entity's friendly name, when from Home Assistant. */
+  name?: string;
   unit?: "C" | "F";
   current: { temp: number; condition: string };
   daily: { date: string; high: number; low: number; condition: string }[];
@@ -192,7 +201,16 @@ export interface Api {
   deleteMeal(id: string): Promise<void>;
   recipes(): Promise<Recipe[]>;
   recipeToList(recipeId: string, listId: string): Promise<number>;
+  createRecipe(r: RecipeIn): Promise<Recipe>;
+  /** Rows of the demo family seeded on first start that are still present (see API.md "Settings"). */
+  sampleData(): Promise<{ remaining: number }>;
+  removeSampleData(pin: string): Promise<number>;
+  updateRecipe(id: string, patch: Partial<RecipeIn>): Promise<Recipe>;
+  /** Meals planned from it keep their title and lose the link. */
+  deleteRecipe(id: string): Promise<void>;
   weather(): Promise<Weather>;
+  /** Home Assistant's weather entities with current conditions (Settings > Weather). */
+  weatherEntities(): Promise<WeatherEntity[]>;
   // Wall screens (see API.md "Screens")
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;

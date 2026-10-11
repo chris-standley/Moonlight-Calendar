@@ -101,7 +101,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
           <div className="rail-logo"><Logo size={layout === "hallway" ? 44 : 34} /></div>
           {nav.map((n) => (
             <button key={n.key} className={"rail-item" + (tab === n.key ? " on" : "")} onClick={() => setTab(n.key)}>
-              <n.icon size={layout === "hallway" ? 30 : 24} />
+              <n.icon size={layout === "hallway" ? 30 : layout === "phone" ? 21 : 24} />
               <span>{n.label}</span>
             </button>
           ))}
@@ -135,8 +135,8 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
 function TopBar({ familyName, music }: { familyName: string; music: boolean }) {
   const now = useNow(10_000);
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
-  const { api } = useApp();
-  useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api]);
+  const { api, settings } = useApp();
+  useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api, settings?.weather_entity, settings?.temp_unit]);
   const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
   return (
     <header className="topbar">

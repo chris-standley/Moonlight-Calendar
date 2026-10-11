@@ -116,3 +116,65 @@ def seed(data: dict, today: date | None = None) -> None:
 def seed_file(path: str | Path, today: date | None = None) -> None:
     with open(path, encoding="utf-8") as f:
         seed(json.load(f), today)
+
+
+def _sample_ids(data: dict) -> dict[str, list[str]]:
+    """Ids `seed()` gives the demo family's rows, per table."""
+    lists = data.get("lists", [])
+    return {
+        "people": [p["id"] for p in data.get("people", [])],
+        "events": [e["id"] for e in data.get("events", [])],
+        "chores": [ch["id"] for ch in data.get("chores", [])],
+        "rewards": [r["id"] for r in data.get("rewards", [])],
+        "items": [f"{lst['id']}_i{i}" for lst in lists for i in range(len(lst.get("items", [])))],
+        "lists": [lst["id"] for lst in lists],
+        "recipes": [r["id"] for r in data.get("recipes", [])],
+        "meals": [f"m_{i}" for i in range(len(data.get("meals", [])))],
+    }
+
+
+def _marks(ids: list[str]) -> str:
+    return ",".join("?" * len(ids)) or "NULL"
+
+
+def count_sample(c, data: dict) -> int:
+    """How many of the demo family's rows are still in the database."""
+    total = 0
+    all_ids = _sample_ids(data)
+    for table, ids in all_ids.items():
+        if not ids:
+            continue
+        sql = f"SELECT COUNT(*) FROM {table} WHERE id IN ({_marks(ids)})"
+        args = list(ids)
+        if table == "lists":  # a demo list the family put their own items on is theirs now
+            items = all_ids["items"]
+            sql += f" AND NOT EXISTS (SELECT 1 FROM items WHERE items.list_id = lists.id AND items.id NOT IN ({_marks(items)}))"
+            args += items
+        total += c.execute(sql, args).fetchone()[0]
+    return total
+
+
+def remove_sample(c, data: dict) -> int:
+    """Delete what `seed()` added (people, events, chores, stars, rewards, list items, recipes, meals), leaving
+    anything the family made themselves. A demo list is kept if the family added their own items to it.
+    Settings (family name, PIN, ...) are left alone. Returns the number of rows removed."""
+    ids = _sample_ids(data)
+    removed = count_sample(c, data)
+    people, chores = ids["people"], ids["chores"]
+    if people:
+        c.execute(f"DELETE FROM ledger WHERE person_id IN ({_marks(people)})", people)
+        c.execute(f"UPDATE items SET person_id = NULL WHERE person_id IN ({_marks(people)})", people)
+        for ev in db.rows(c, "SELECT id, person_ids FROM events"):
+            kept = [p for p in json.loads(ev["person_ids"]) if p not in people]
+            c.execute("UPDATE events SET person_ids = ? WHERE id = ?", (json.dumps(kept), ev["id"]))
+    if chores:
+        c.execute(f"DELETE FROM completions WHERE chore_id IN ({_marks(chores)})", chores)
+    if ids["recipes"]:
+        c.execute(f"UPDATE meals SET recipe_id = NULL WHERE recipe_id IN ({_marks(ids['recipes'])})", ids["recipes"])
+    for table in ("people", "events", "chores", "rewards", "items", "recipes", "meals"):
+        if ids[table]:
+            c.execute(f"DELETE FROM {table} WHERE id IN ({_marks(ids[table])})", ids[table])
+    for list_id in ids["lists"]:
+        if not c.execute("SELECT 1 FROM items WHERE list_id = ?", (list_id,)).fetchone():
+            c.execute("DELETE FROM lists WHERE id = ?", (list_id,))
+    return removed

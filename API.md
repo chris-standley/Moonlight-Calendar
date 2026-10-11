@@ -18,13 +18,19 @@ implementation of the same contract, used for the published preview). Keep them 
   (default `{hallway: 5, kitchen: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each layout shows; the kitchen defaults to
-  the add-on option `media_player_entity`, the others to none.
+  `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
+  `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
+  until one is saved).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, media_players`, plus `pin` (required) -> settings. `media_players` may be partial
+  screensaver_seconds, idle_minutes, media_players, weather_entity`, plus `pin` (required) -> settings. `media_players` may be partial
   (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
   merged) or one number (applies to hallway and kitchen). `new_pin` (4 digits) replaces the parent PIN; with no PIN set
   yet, the first `pin` sent becomes it.
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
+- `GET /api/sample-data` -> `{remaining: int}`: rows of the demo family (seeded on first start) still present.
+- `POST /api/sample-data/remove` `{pin}` -> `{removed: int}`: deletes the demo family's people, events, chores, stars,
+  rewards, list items, recipes and meals; keeps anything added since (a demo list the family added items to stays)
+  and leaves settings alone.
 
 ## People
 - `GET /api/people` -> `[Person]` sorted by `sort`
@@ -160,17 +166,22 @@ Item = `{id, list_id, title, done, person_id|null, due: date|null, created_at, s
 Meal = `{id, date, slot: "breakfast"|"lunch"|"dinner"|"snack", title, notes, recipe_id|null}`
 - `GET /api/meals?start&end` (end exclusive); `POST /api/meals`; `PATCH /api/meals/{id}`; `DELETE /api/meals/{id}`
 Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
-- `GET /api/recipes`; `POST /api/recipes`
+- `GET /api/recipes`; `POST /api/recipes` `{title, emoji?, minutes?, ingredients?, url?}` -> Recipe
+- `PATCH /api/recipes/{id}` (any of those fields) -> Recipe; `DELETE /api/recipes/{id}` -> `{ok: true}`. Meals planned
+  from a deleted recipe keep their title and get `recipe_id: null`.
 - `POST /api/recipes/{id}/to-list` `{list_id}` -> `{added: int}` adds each ingredient as an item
 
 ## Weather
-- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`
+- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`
   up to 10 days from today. Temperatures are whole numbers in the settings' `temp_unit`.
   `condition` uses HA's names: `sunny, partlycloudy, cloudy, rainy, pouring, snowy, fog, windy, lightning-rainy, clear-night`
   (HA's `snowy-rainy`/`hail` -> `snowy`, `windy-variant` -> `windy`, `exceptional` -> `cloudy`).
-  With the add-on option `weather_entity` (env `MOONLIGHT_WEATHER_ENTITY`) set, read from that HA weather entity
+  With Settings `weather_entity` set (or env `MOONLIGHT_WEATHER_ENTITY` before one is saved), read from that HA weather entity
   (state + `weather.get_forecasts` daily) via the Supervisor API, cached 10 minutes; if HA can't be reached the
   last good forecast is kept for up to an hour, then it falls back to the deterministic demo forecast (`source: "demo"`).
+- `GET /api/weather/entities` -> `[{entity_id, name, available, condition|null, temperature|null, unit: "C"|"F",
+  attribution|null}]`, HA's `weather.*` entities (available first, then by name) for Settings > Weather.
+  409 when Moonlight has no Home Assistant connection, 502 when HA can't be reached.
 
 ## Music (now playing on a Home Assistant speaker)
 The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a

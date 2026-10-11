@@ -1,6 +1,7 @@
 """API tests: run from backend/ with `python -m pytest`."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 from datetime import date, timedelta
@@ -293,6 +294,26 @@ def test_meals_range(client):
     assert client.post("/api/meals", json={"date": "2026-10-05", "slot": "brunch", "title": "x"}).status_code == 400
 
 
+def test_recipe_edit_and_delete(client):
+    rc = client.post("/api/recipes", json={"title": "Chilli", "emoji": "🌶️", "minutes": 40,
+                                           "ingredients": ["Beans", " ", "Mince"]}).json()
+    assert rc["ingredients"] == ["Beans", "Mince"]
+    r = client.patch(f"/api/recipes/{rc['id']}", json={"title": "Veggie chilli", "ingredients": ["Beans", "Peppers"],
+                                                      "minutes": None, "url": "https://example.com/chilli"})
+    assert r.json() == {"id": rc["id"], "title": "Veggie chilli", "emoji": "🌶️", "minutes": None,
+                        "ingredients": ["Beans", "Peppers"], "url": "https://example.com/chilli"}
+    assert client.patch(f"/api/recipes/{rc['id']}", json={"title": " "}).status_code == 400
+    assert client.patch(f"/api/recipes/{rc['id']}", json={"minutes": -5}).status_code == 400
+    assert client.patch("/api/recipes/nope", json={"title": "x"}).status_code == 404
+    meal = client.post("/api/meals", json={"date": "2026-10-12", "slot": "dinner", "title": "Veggie chilli",
+                                           "recipe_id": rc["id"]}).json()
+    assert client.delete(f"/api/recipes/{rc['id']}").json() == {"ok": True}
+    assert client.delete(f"/api/recipes/{rc['id']}").status_code == 404
+    assert all(x["id"] != rc["id"] for x in client.get("/api/recipes").json())
+    kept = [m for m in client.get("/api/meals?start=2026-10-12&end=2026-10-13").json() if m["id"] == meal["id"]][0]
+    assert kept["title"] == "Veggie chilli" and kept["recipe_id"] is None
+
+
 def test_recipe_to_list(client):
     rc = client.post("/api/recipes", json={"title": "Tacos", "emoji": "🌮", "minutes": 25,
                                            "ingredients": ["Tortillas", "Lime"], "url": None}).json()
@@ -491,3 +512,29 @@ def test_demo_seed(tmp_path):
     # Re-opening a non-empty DB doesn't seed again.
     with TestClient(create_app(db_path=str(tmp_path / "d.db"), demo=True, seed_path=SEED, today=today)) as c:
         assert len(c.get("/api/people").json()) == 4
+
+
+def test_remove_sample_data(tmp_path):
+    from moonlight import seed as seed_mod
+    app = create_app(db_path=str(tmp_path / "s.db"), demo=True, static_dir=tmp_path / "no-dist")
+    with TestClient(app) as c:
+        pin = json.load(open(seed_mod.default_seed_path()))["settings"]["pin"]
+        total = c.get("/api/sample-data").json()["remaining"]
+        assert total > 50
+        # The family deleted the demo people already, added their own person, event and grocery item.
+        for p in c.get("/api/people").json():
+            assert c.request("DELETE", f"/api/people/{p['id']}", json={"pin": pin}).status_code == 200
+        me = c.post("/api/people", json={"name": "Chris", "color": "#5B8DEF", "role": "adult", "pin": pin}).json()
+        ev = c.post("/api/events", json={"title": "Dentist", "person_ids": [me["id"]], "start": "2026-10-14T09:00",
+                                         "end": "2026-10-14T09:30"}).json()
+        c.post("/api/lists/l_grocery/items", json={"title": "Coffee"})
+        assert c.post("/api/sample-data/remove", json={"pin": "0000"}).status_code == 403
+        assert c.post("/api/sample-data/remove", json={"pin": pin}).json()["removed"] > 40
+        assert c.get("/api/sample-data").json() == {"remaining": 0}
+        events = c.get("/api/events?start=2026-01-01&end=2027-12-31").json()
+        assert [e["id"] for e in events if not e.get("calendar_id")] == [ev["id"]]
+        assert [p["name"] for p in c.get("/api/people").json()] == ["Chris"]
+        assert c.get("/api/chores").json() == [] and c.get("/api/recipes").json() == []
+        lists = c.get("/api/lists").json()
+        assert [l["id"] for l in lists] == ["l_grocery"]
+        assert [i["title"] for i in c.get("/api/lists/l_grocery/items").json()] == ["Coffee"]

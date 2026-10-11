@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, media
+from .. import caldav_sync, db, ha_client, media, seed
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -26,6 +27,8 @@ def settings_out(c) -> dict:
     out = {k: db.get_setting(c, k, v) for k, v in db.default_settings().items()}
     out["pin_set"] = bool(db.get_setting(c, "pin_hash"))
     out["media_players"] = media.players_setting(c)
+    saved_wx = db.get_setting(c, "weather_entity", None)
+    out["weather_entity"] = ha_client.env_entity() if saved_wx is None else saved_wx
     return out
 
 
@@ -61,6 +64,11 @@ async def patch_settings(body: dict = Body(...)):
             db.set_setting(c, "chore_approval", body["chore_approval"])
         immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes
         media_changed = media.apply_settings(c, body)  # media_players
+        if "weather_entity" in body:
+            wx = "" if body["weather_entity"] is None else body["weather_entity"]
+            if not isinstance(wx, str) or (wx.strip() and not ha_client.ENTITY_RE.match(wx.strip())):
+                raise bad("weather_entity must be a weather entity id like weather.home, or empty for demo weather")
+            db.set_setting(c, "weather_entity", wx.strip())
         tz_changed = False
         if "timezone" in body:
             try:
@@ -80,6 +88,33 @@ async def patch_settings(body: dict = Body(...)):
         await hub.broadcast("media")
     await hub.broadcast("settings")
     return out
+
+
+def _sample_data() -> dict:
+    path = os.environ.get("MOONLIGHT_SEED") or seed.default_seed_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except OSError:
+        return {}
+
+
+@router.get("/sample-data")
+def sample_data():
+    """How much of the demo family (seeded on first start) is still here, for Settings > Sample data."""
+    with db.connect() as c:
+        return {"remaining": seed.count_sample(c, _sample_data())}
+
+
+@router.post("/sample-data/remove")
+async def remove_sample_data(body: dict = Body(...)):
+    body = body_dict(body)
+    with db.connect() as c:
+        require_pin(c, body.get("pin"))
+        removed = seed.remove_sample(c, _sample_data())
+    for topic in ("people", "events", "chores", "points", "rewards", "lists", "meals", "recipes"):
+        await hub.broadcast(topic)
+    return {"removed": removed}
 
 
 @router.post("/pin/verify")

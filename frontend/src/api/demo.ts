@@ -3,7 +3,7 @@
 import seed from "../../../seed/demo.json";
 import {
   Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
-  Person, PersonIn, Recipe, Reward, Settings, TaskList, Topic, Weather,
+  Person, PersonIn, Recipe, RecipeIn, Reward, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
@@ -211,6 +211,22 @@ export function demoApi(): Api {
   const emit = (...topics: Topic[]) => { save(); topics.forEach((t) => listeners.forEach((l) => l(t))); };
   const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
   const ok = async <T>(x: T): Promise<T> => clone(x);
+  // Same rules as the backend's recipe_fields (POST: all fields; PATCH: only those given).
+  const recipeFields = (b: Partial<RecipeIn>, partial = false): Partial<RecipeIn> => {
+    const out: Partial<RecipeIn> = {};
+    if (!partial || "title" in b) {
+      if (!b.title?.trim()) throw new ApiError(400, "title is required");
+      out.title = b.title.trim();
+    }
+    if (!partial || "emoji" in b) out.emoji = (b.emoji ?? "").trim();
+    if (!partial || "minutes" in b) {
+      if (b.minutes != null && (!Number.isInteger(b.minutes) || b.minutes < 0)) throw new ApiError(400, "minutes must be a whole number");
+      out.minutes = b.minutes ?? null;
+    }
+    if (!partial || "ingredients" in b) out.ingredients = (b.ingredients ?? []).map((i) => i.trim()).filter(Boolean);
+    if (!partial || "url" in b) out.url = b.url?.trim() || null;
+    return out;
+  };
   const find = <T extends { id: string }>(arr: T[], id: string): T => {
     const x = arr.find((a) => a.id === id);
     if (!x) throw new ApiError(404, "Not found");
@@ -276,7 +292,7 @@ export function demoApi(): Api {
   const mediaPlayers = () => ({ hallway: "", kitchen: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
-    return { ...rest, media_players: mediaPlayers(), pin_set: !!pin };
+    return { weather_entity: "", ...rest, media_players: mediaPlayers(), pin_set: !!pin };
   };
 
   return {
@@ -287,6 +303,9 @@ export function demoApi(): Api {
       checkPin(pin);
       if (new_pin != null && new_pin !== "" && !/^\d{4}$/.test(new_pin)) throw new ApiError(400, "new_pin must be 4 digits");
       const { media_players, ...rest } = patch;
+      if (rest.weather_entity != null && rest.weather_entity !== "" && !/^weather\.[a-z0-9_]+$/.test(rest.weather_entity))
+        throw new ApiError(400, "weather_entity must be a weather entity id like weather.home, or empty for demo weather");
+      if (rest.weather_entity === null) rest.weather_entity = "";
       Object.assign(st.settings, rest);
       if (media_players) {
         if (Object.entries(media_players).some(([k, v]) => !["hallway", "kitchen", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
@@ -431,6 +450,27 @@ export function demoApi(): Api {
     async updateMeal(id, patch) { const ml = find(st.meals, id); Object.assign(ml, patch); emit("meals"); return clone(ml); },
     async deleteMeal(id) { st.meals = st.meals.filter((m) => m.id !== id); emit("meals"); },
     recipes: () => ok(st.recipes),
+    // The preview is all sample data; it has its own Reset instead (Settings > Demo).
+    sampleData: async () => ({ remaining: 0 }),
+    removeSampleData: async () => 0,
+    async createRecipe(r) {
+      const rec = { id: uid("rc"), ...recipeFields(r) } as Recipe;
+      st.recipes.push(rec);
+      emit("recipes");
+      return clone(rec);
+    },
+    async updateRecipe(id, patch) {
+      const rec = find(st.recipes, id);
+      Object.assign(rec, recipeFields(patch, true));
+      emit("recipes");
+      return clone(rec);
+    },
+    async deleteRecipe(id) {
+      find(st.recipes, id);
+      st.recipes = st.recipes.filter((r) => r.id !== id);
+      for (const m of st.meals) if (m.recipe_id === id) m.recipe_id = null;
+      emit("recipes", "meals");
+    },
     async recipeToList(rid, lid) {
       const r = find(st.recipes, rid);
       for (const ing of r.ingredients) {
@@ -439,7 +479,21 @@ export function demoApi(): Api {
       emit("lists");
       return r.ingredients.length;
     },
-    weather: async () => demoWeather(),
+    async weather() {
+      const w = demoWeather();
+      const e = st.settings.weather_entity;
+      const names: Record<string, string> = { "weather.forecast_home": "Forecast Home", "weather.met_office_london": "Met Office London" };
+      return e ? { ...w, source: "homeassistant" as const, entity: e, name: names[e] ?? e } : w;
+    },
+    // A pretend Home Assistant with a few weather integrations (the forecast itself stays the demo one).
+    weatherEntities: async () => {
+      const now = demoWeather().current;
+      return [
+        { entity_id: "weather.forecast_home", name: "Forecast Home", available: true, condition: now.condition, temperature: now.temp, unit: "C", attribution: "Weather forecast from met.no" },
+        { entity_id: "weather.met_office_london", name: "Met Office London", available: true, condition: "rainy", temperature: now.temp - 1, unit: "C", attribution: "Met Office" },
+        { entity_id: "weather.openweathermap", name: "OpenWeatherMap", available: false, condition: null, temperature: null, unit: "C", attribution: null },
+      ];
+    },
     ...demoExtras(checkPin, emit), // screens + simulated Immich, kept in memory
     ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
     accounts: async () => accts().map(acctOut),

@@ -77,7 +77,7 @@ export function CalendarView({ defaultView }: { defaultView: CalView }) {
 
   const [events] = useData((api) => api.events(start, end), ["events"], [start, end]);
   const [meals] = useData((api) => api.meals(start, end), ["meals"], [start, end]);
-  const [weather] = useData((api) => api.weather(), [], []);
+  const [weather] = useData((api) => api.weather(), ["settings"], []);
   const visible = useMemo(
     () => (events ?? []).filter((e) => e.person_ids.length === 0 || e.person_ids.some((id) => !hidden.includes(id))),
     [events, hidden],

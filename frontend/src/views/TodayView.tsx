@@ -17,7 +17,7 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
   const t = today();
   const [events] = useData((api) => api.events(t, addDays(t, 2)), ["events"], [t]);
   const [meals] = useData((api) => api.meals(t, addDays(t, 7)), ["meals"], [t]);
-  const [weather] = useData((api) => api.weather(), [], []);
+  const [weather] = useData((api) => api.weather(), ["settings"], []);
   const [chores] = useData((api) => api.chores(t), ["chores"], [t]);
   const [points] = useData((api) => api.points(), ["points"], []);
   const [lists] = useData((api) => api.lists(), ["lists"], []);
