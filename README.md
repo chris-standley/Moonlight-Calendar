@@ -22,8 +22,8 @@ alongside the other apps there.
 
 1. Settings > Apps > App Store > ⋮ > Repositories, add `https://github.com/chris-standley/home-assistant-apps`.
 2. **Moonlight** > Install (⋮ > Check for updates if it is not listed yet), set the options, Start, Show in sidebar.
-3. Options: `demo` (seed the demo family into an empty database, default on), `weather_entity` (e.g. `weather.home`),
-   `media_player_entity` (the kitchen speaker, e.g. `media_player.kitchen` from Music Assistant), `require_pairing` (default on). The household timezone defaults to Home Assistant's.
+3. Options: `demo` (seed the demo family into an empty database, default on) and `require_pairing` (default on).
+   Weather and speakers are picked in Moonlight's Settings. The household timezone defaults to Home Assistant's.
 4. Pair wall screens on port 8091 (below) and connect iCloud in Settings > Calendars.
 
 The app page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
@@ -106,10 +106,11 @@ served by `httpx.MockTransport`).
 
 ## Home Assistant
 
-- Weather: set the add-on option `weather_entity` (e.g. `weather.home`) to show that entity's forecast; empty = demo forecast.
+- Weather: pick a Home Assistant weather entity in Settings > Display > Weather (it lists them with their current
+  conditions); until then the screens show a demo forecast.
 - Music: the kitchen screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
-  bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Set
-  the add-on option `media_player_entity` or pick a speaker per screen in Settings > Music. Works with any HA
+  bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Pick a
+  speaker per screen in Settings > Music. Works with any HA
   `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
   show a small player in the top bar only if given a speaker.
 - Entities and services: install the `moonlight` integration through HACS, see `custom_components/moonlight/README.md`.

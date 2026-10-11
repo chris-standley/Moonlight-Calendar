@@ -2,7 +2,7 @@
 Music Assistant's Home Assistant integration), through the same Supervisor proxy as the weather.
 
 Which player a screen controls: Settings `media_players` ({hallway, kitchen, phone} -> entity id, "" = none);
-the kitchen defaults to the add-on option `media_player_entity` (MOONLIGHT_MEDIA_ENTITY). Screens only ever name
+the kitchen defaults to MOONLIGHT_MEDIA_ENTITY when set (development; the add-on no longer has an option for it). Screens only ever name
 their layout, never an entity, so a screen can't read or drive any other Home Assistant entity.
 
 Live updates: one WebSocket to Home Assistant (ws://supervisor/core/websocket, authenticated with the Supervisor
@@ -72,10 +72,10 @@ class AuthFailed(Exception):
 # ---------------------------------------------------------------- configuration
 
 def default_entity() -> str:
-    """The add-on option `media_player_entity`, used by the kitchen screen unless Settings say otherwise."""
+    """MOONLIGHT_MEDIA_ENTITY, used by the kitchen screen unless Settings say otherwise."""
     raw = os.environ.get("MOONLIGHT_MEDIA_ENTITY", "").strip()
     if raw and not ENTITY_RE.match(raw):
-        log.warning("media_player_entity %r isn't a media_player entity id; ignoring it", raw)
+        log.warning("MOONLIGHT_MEDIA_ENTITY %r isn't a media_player entity id; ignoring it", raw)
         return ""
     return raw
 

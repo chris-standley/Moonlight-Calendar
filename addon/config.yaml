@@ -1,5 +1,5 @@
 name: Moonlight
-version: "0.3.1"
+version: "0.3.2"
 slug: moonlight
 description: Family wall calendar, chores, lists and meal planner for kiosk displays
 url: https://github.com/chris-standley/Moonlight-Calendar
@@ -27,6 +27,4 @@ options:
   require_pairing: true
 schema:
   demo: bool
-  weather_entity: str?
-  media_player_entity: str?
   require_pairing: bool

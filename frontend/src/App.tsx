@@ -36,7 +36,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [pinReq, setPinReq] = useState<{ why: string; resolve: (p: string | null) => void; error?: string } | null>(null);
+  const [pinReq, setPinReq] = useState<{ why: string; resolve: (p: string | null) => void; error?: string; check: boolean } | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [saver, setSaver] = useState(false);
@@ -64,11 +64,12 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
     return () => { clearTimeout(t); el.removeEventListener("pointerdown", reset); };
   }, [layout, idleMin]);
 
-  const askPin = useCallback((why: string) => new Promise<string | null>((resolve) => setPinReq({ why, resolve })), []);
+  const askPin = useCallback((why: string, opts?: { check?: boolean }) =>
+    new Promise<string | null>((resolve) => setPinReq({ why, resolve, check: opts?.check ?? true })), []);
   const onPin = useCallback(async (pin: string | null) => {
     if (!pinReq) return;
     if (pin === null) { pinReq.resolve(null); setPinReq(null); return; }
-    if (await api.verifyPin(pin)) { pinReq.resolve(pin); setPinReq(null); }
+    if (!pinReq.check || await api.verifyPin(pin)) { pinReq.resolve(pin); setPinReq(null); }
     else setPinReq({ ...pinReq, error: "Wrong PIN, try again" });
   }, [api, pinReq]);
   const toast = useCallback((msg: string) => {
@@ -100,7 +101,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
           <div className="rail-logo"><Logo size={layout === "hallway" ? 44 : 34} /></div>
           {nav.map((n) => (
             <button key={n.key} className={"rail-item" + (tab === n.key ? " on" : "")} onClick={() => setTab(n.key)}>
-              <n.icon size={layout === "hallway" ? 30 : 24} />
+              <n.icon size={layout === "hallway" ? 30 : layout === "phone" ? 21 : 24} />
               <span>{n.label}</span>
             </button>
           ))}
@@ -134,8 +135,8 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
 function TopBar({ familyName, music }: { familyName: string; music: boolean }) {
   const now = useNow(10_000);
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
-  const { api } = useApp();
-  useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api]);
+  const { api, settings } = useApp();
+  useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api, settings?.weather_entity, settings?.temp_unit]);
   const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
   return (
     <header className="topbar">

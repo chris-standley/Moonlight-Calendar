@@ -14,15 +14,12 @@ New versions show up as an update on the app page.
 
 - `demo` (default `true`): seed the demo family (people, events, chores, lists, meals) into an **empty** database
   on first start. Turn it off before the first start for a blank household; it does nothing once data exists.
-- `weather_entity` (optional, e.g. `weather.home`): show that Home Assistant weather entity and its daily forecast.
-  Empty = a built-in demo forecast.
-- `media_player_entity` (optional, e.g. `media_player.kitchen`): the speaker the kitchen screen shows and controls
-  (see Music below). Other screens can be given one in Moonlight's Settings > Music.
 - `require_pairing` (default `true`): wall screens on port 8091 must be paired before they can use Moonlight.
   Moonlight in the Home Assistant sidebar is always signed in.
 
 The household timezone defaults to Home Assistant's (Settings > System > General) and can be changed in
-Moonlight's Settings.
+Moonlight's Settings. The weather comes from a Home Assistant weather entity you pick in Moonlight
+(Settings > Display > Weather, which lists them with their current conditions); until then it shows a demo forecast.
 
 ## Wall screens
 
@@ -44,8 +41,7 @@ put the album art on the screensaver. Moonlight drives the speaker through Home 
    automatically; otherwise Add integration > Music Assistant. It creates a `media_player` entity for each Music
    Assistant player (e.g. `media_player.kitchen`). Use that entity rather than the one from Home Assistant's own Sonos
    integration: it knows Music Assistant's queue, and Moonlight can then offer your Music Assistant favourites.
-3. Pick it: set the add-on option `media_player_entity`, or in Moonlight go to Settings > Music and choose a speaker
-   for the kitchen (Music Assistant players are marked). The hallway and phones can get one too; they show a small
+3. Pick it: in Moonlight go to Settings > Music and choose a speaker for the kitchen (Music Assistant players are marked). The hallway and phones can get one too; they show a small
    player in the top bar.
 
 Moonlight follows the speaker over Home Assistant's WebSocket API, so changes made in the Sonos or Music Assistant

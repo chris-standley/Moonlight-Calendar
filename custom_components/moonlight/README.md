@@ -30,7 +30,7 @@ WebSocket, so a chore ticked off on the wall shows up in HA within a second or t
    integration asks you to **Reconfigure/Re-authenticate** from the notification and shows a new code. Reconfigure
    keeps the existing token if Moonlight still accepts it.
 
-The add-on itself can also show HA weather on the displays: set its `weather_entity` option (e.g. `weather.home`).
+The add-on itself can also show HA weather on the displays: pick an entity in Moonlight's Settings > Display > Weather.
 
 ## Entities
 

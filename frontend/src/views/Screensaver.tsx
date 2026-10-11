@@ -48,7 +48,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const usePhotos = photos.length > 0 && broken !== listKey;
   const t = today();
   const [events] = useData((api) => api.events(t, addDays(t, 2)), ["events"], [t]);
-  const [weather] = useData((api) => api.weather(), [], []);
+  const [weather] = useData((api) => api.weather(), ["settings"], []);
   const nowS = isoDT(now);
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
   const { np } = useMedia();

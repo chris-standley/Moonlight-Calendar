@@ -49,6 +49,15 @@ class FakeHA:
             return httpx.Response(502, json={"message": "Bad gateway"})
         if request.headers.get("authorization") != "Bearer tok":
             return httpx.Response(401, json={"message": "Unauthorized"})
+        if request.method == "GET" and request.url.path == "/core/api/states":
+            return httpx.Response(200, json=[
+                self.state,
+                {"entity_id": "weather.forecast_garden", "state": "unavailable", "attributes": {"friendly_name": "Garden"}},
+                {"entity_id": "weather.met_office", "state": "rainy",
+                 "attributes": {"temperature": 9.04, "temperature_unit": "°C", "friendly_name": "Met Office",
+                                "attribution": "Met Office"}},
+                {"entity_id": "sensor.outside", "state": "12", "attributes": {}},
+            ])
         if request.method == "GET" and request.url.path == f"/core/api/states/{ENTITY}":
             return httpx.Response(200, json=self.state)
         if request.method == "POST" and request.url.path == "/core/api/services/weather/get_forecasts":
@@ -177,3 +186,45 @@ def test_weather_endpoint_uses_ha_and_settings_unit(tmp_path):
     with TestClient(app) as c:
         w = c.get("/api/weather").json()
         assert w["source"] == "demo" and w["entity"] is None and w["unit"] == "F"
+
+
+def test_weather_entities_and_choosing_one(tmp_path, monkeypatch):
+    monkeypatch.delenv("MOONLIGHT_WEATHER_ENTITY", raising=False)
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    monkeypatch.delenv("MOONLIGHT_HA_TOKEN", raising=False)
+    monkeypatch.delenv("MOONLIGHT_HA_URL", raising=False)
+    fake = FakeHA()
+    ha_client.set_transport(httpx.MockTransport(fake.handler))
+    app = create_app(db_path=str(tmp_path / "e.db"), demo=False, static_dir=tmp_path / "none", auth_enabled=False)
+    with TestClient(app) as c:
+        ents = c.get("/api/weather/entities").json()
+        assert [e["entity_id"] for e in ents] == ["weather.home", "weather.met_office", "weather.forecast_garden"]
+        assert ents[1] == {"entity_id": "weather.met_office", "name": "Met Office", "available": True,
+                           "condition": "rainy", "temperature": 9.0, "unit": "C", "attribution": "Met Office"}
+        assert ents[2]["available"] is False and ents[2]["condition"] is None
+        # Nothing chosen yet: demo weather.
+        assert c.get("/api/settings").json()["weather_entity"] == ""
+        assert c.get("/api/weather").json()["source"] == "demo"
+        assert c.patch("/api/settings", json={"pin": "1111", "weather_entity": "sensor.outside"}).status_code == 400
+        assert c.patch("/api/settings", json={"pin": "1111", "weather_entity": ENTITY}).json()["weather_entity"] == ENTITY
+        w = c.get("/api/weather").json()
+        assert w["source"] == "homeassistant" and w["entity"] == ENTITY
+        assert c.patch("/api/settings", json={"pin": "1111", "weather_entity": None}).json()["weather_entity"] == ""
+        assert c.get("/api/weather").json()["source"] == "demo"
+
+
+def test_weather_entities_without_home_assistant(tmp_path, monkeypatch):
+    for k in ("SUPERVISOR_TOKEN", "MOONLIGHT_HA_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+    app = create_app(db_path=str(tmp_path / "n.db"), demo=False, static_dir=tmp_path / "none", auth_enabled=False)
+    with TestClient(app) as c:
+        r = c.get("/api/weather/entities")
+        assert r.status_code == 409 and "Home Assistant" in r.json()["detail"]
+
+
+def test_saved_entity_overrides_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("MOONLIGHT_WEATHER_ENTITY", "weather.old")
+    app = create_app(db_path=str(tmp_path / "o.db"), demo=False, static_dir=tmp_path / "none", auth_enabled=False)
+    with TestClient(app) as c:
+        assert c.get("/api/settings").json()["weather_entity"] == "weather.old"
+        assert c.patch("/api/settings", json={"pin": "1111", "weather_entity": ""}).json()["weather_entity"] == ""
