@@ -1,15 +1,31 @@
 import Foundation
 import Security
 
-/// Where Moonlight lives and this Apple TV's display token. The token goes in the Keychain, the address in defaults.
+/// Where Moonlight lives and this device's display token. The token goes in the Keychain, the addresses in defaults.
 enum Credentials {
     private static let serverKey = "moonlight.server"
+    private static let remoteKey = "moonlight.remote"
     private static let account = "display-token"
     private static let service = "Moonlight"
 
     static var server: URL? {
         get { UserDefaults.standard.string(forKey: serverKey).flatMap(URL.init(string:)) }
         set { UserDefaults.standard.set(newValue?.absoluteString, forKey: serverKey) }
+    }
+
+    /// The add-on's public https address (its `external_url`), used when the home address doesn't answer.
+    static var remote: URL? {
+        get { UserDefaults.standard.string(forKey: remoteKey).flatMap(URL.init(string:)) }
+        set { UserDefaults.standard.set(newValue?.absoluteString, forKey: remoteKey) }
+    }
+
+    /// The address to use right now: home first, then the public one; the home one if neither answers.
+    static func reachableServer() async -> URL? {
+        guard let home = server else { return nil }
+        guard let remote, remote != home else { return home }
+        if await APIClient.answers(home, timeout: 3) { return home }
+        if await APIClient.answers(remote, timeout: 8) { return remote }
+        return home
     }
 
     static var token: String? {

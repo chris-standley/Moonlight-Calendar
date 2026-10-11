@@ -30,8 +30,11 @@ final class AppModel {
 
     // MARK: Session
 
+    /// True while talking to the add-on's public address rather than the home one.
+    var away: Bool { api != nil && api?.baseURL != Credentials.server }
+
     func start() async {
-        guard let server = Credentials.server, let token = Credentials.token else {
+        guard let server = await Credentials.reachableServer(), let token = Credentials.token else {
             phase = .setup
             return
         }
@@ -46,7 +49,22 @@ final class AppModel {
         self.api = api
         phase = .ready
         await loadBasics()
+        await rememberPublicAddress()
         connectLive()
+    }
+
+    /// Keep the add-on's public https address, so the app can carry on away from home.
+    private func rememberPublicAddress() async {
+        guard let health = await call({ try await $0.health() }) else { return }
+        let remote = health.external_url.flatMap(URL.init(string:)).flatMap { $0.scheme == "https" ? $0 : nil }
+        Credentials.remote = remote
+    }
+
+    /// After a dropped connection: switch between the home and public address if the other one is the one answering.
+    private func repickServer() async {
+        guard var current = api, let best = await Credentials.reachableServer(), best != current.baseURL else { return }
+        current.baseURL = best
+        api = current
     }
 
     func paired(server: URL, token: String) async {
@@ -55,11 +73,12 @@ final class AppModel {
         await start()
     }
 
-    /// Any 401: this Apple TV was removed in Settings › Screens. Back to pairing.
+    /// Any 401: this device was removed in Settings › Screens. Back to pairing.
     func forget() {
         liveTask?.cancel()
         socket?.cancel(with: .goingAway, reason: nil)
         Credentials.token = nil
+        Credentials.remote = nil
         api = nil
         people = []
         settings = nil
@@ -122,6 +141,7 @@ final class AppModel {
                 }
                 try? await Task.sleep(for: .seconds(delay))
                 delay = min(delay * 2, 60)
+                await self.repickServer()
                 // Catch up on anything missed while disconnected.
                 for topic in ["people", "events", "chores", "points", "rewards", "lists", "meals", "settings", "photos", "media"] {
                     self.bump(topic)

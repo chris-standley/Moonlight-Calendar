@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 
 /// First run: find Moonlight on the home network (or type its address), then pair with a 6-digit code that
@@ -78,35 +79,56 @@ struct SetupView: View {
         }
     }
 
-    /// Accepts "192.168.1.5", "homeassistant.local:8091" or a full http(s) URL.
+    /// Accepts "192.168.1.5", "homeassistant.local:8091", "moonlight.example.com" (its https address) or a full URL.
     private func connect() async {
-        var text = address.trimmingCharacters(in: .whitespaces)
-        if !text.contains("://") { text = "http://" + text }
-        guard var comps = URLComponents(string: text), comps.host != nil else {
+        let text = address.trimmingCharacters(in: .whitespaces)
+        let candidates = Self.candidates(text)
+        guard !candidates.isEmpty else {
             error = "That doesn't look like an address."
             return
         }
-        if comps.port == nil && comps.scheme == "http" { comps.port = Discovery.defaultPort }
-        comps.path = ""
-        guard let url = comps.url else { return }
         checking = true
         defer { checking = false }
-        if let h = try? await APIClient(baseURL: url, token: nil).health(), h.ok {
+        for url in candidates where await APIClient.answers(url, timeout: 6) {
             error = nil
             server = url
-        } else {
-            error = "No Moonlight answered at \(url.host ?? text):\(url.port.map { String($0) } ?? "443"). Check the address and port (add-on › Configuration › Network)."
+            return
         }
+        error = "No Moonlight answered at \(text). Check the address and port (add-on › Configuration › Network)."
+    }
+
+    /// The URLs to try for what was typed: a home address over http on 8091, a domain name over https first.
+    static func candidates(_ text: String) -> [URL] {
+        func url(_ scheme: String, _ rest: String, defaultPort: Int?) -> URL? {
+            guard var comps = URLComponents(string: "\(scheme)://\(rest)"), let host = comps.host, !host.isEmpty else { return nil }
+            if comps.port == nil, let defaultPort { comps.port = defaultPort }
+            comps.path = ""
+            comps.query = nil
+            return comps.url
+        }
+        if text.contains("://") {
+            let scheme = text.lowercased().hasPrefix("https://") ? "https" : "http"
+            let rest = String(text.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false).dropFirst(2).first ?? "")
+            return [url(scheme, rest, defaultPort: scheme == "http" ? Discovery.defaultPort : nil)].compactMap { $0 }
+        }
+        let host = text.split(separator: ":").first.map(String.init)?.lowercased() ?? ""
+        let home = host.hasSuffix(".local") || host.allSatisfy { $0.isNumber || $0 == "." } || !host.contains(".")
+        let https = url("https", text, defaultPort: nil)
+        let http = url("http", text, defaultPort: Discovery.defaultPort)
+        return (home ? [http, https] : [https, http]).compactMap { $0 }
     }
 }
 
 struct PairingCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.webAuthenticationSession) private var webAuth
     let server: URL
     let onBack: () -> Void
     @State private var code: String?
     @State private var expires = Date()
     @State private var error: String?
+    @State private var haLogin = false
+    @State private var signingIn = false
 
     var body: some View {
         VStack(spacing: 22) {
@@ -130,9 +152,44 @@ struct PairingCard: View {
                 Text(error ?? (code == nil ? "Getting a code…" : "New code in \(left / 60):\(String(format: "%02d", left % 60))"))
                     .font(Theme.text(.footnote)).foregroundStyle(error == nil ? Theme.muted : Theme.danger)
             }
+            if haLogin {
+                VStack(spacing: 8) {
+                    Text("or").font(Theme.text(.subheadline, .bold)).foregroundStyle(Theme.muted)
+                    Button { Task { await signInWithHomeAssistant() } } label: {
+                        Label("Sign in with Home Assistant", systemImage: "house.circle.fill").frame(maxWidth: 320)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(signingIn)
+                }
+            }
             Button("Choose another Moonlight", action: onBack).font(Theme.text(.subheadline, .bold))
         }
         .task(id: server) { await pairLoop() }
+        .task(id: server) { haLogin = (try? await APIClient(baseURL: server, token: nil).health())?.ha_login == true }
+    }
+
+    /// Home Assistant's own login page in a sign-in sheet; Moonlight hands this device a token when it's done.
+    private func signInWithHomeAssistant() async {
+        let name = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+        let api = APIClient(baseURL: server, token: nil)
+        let start = api.url("/api/auth/ha/start", query: ["layout": "phone", "name": name, "app": "1"])
+        signingIn = true
+        defer { signingIn = false }
+        do {
+            let back = try await webAuth.authenticate(using: start, callbackURLScheme: "moonlight",
+                                                      preferredBrowserSession: .ephemeral)
+            let items = URLComponents(url: back, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            guard let token = items.first(where: { $0.name == "token" })?.value else {
+                error = "Home Assistant didn't finish signing in."
+                return
+            }
+            await model.paired(server: server, token: token)
+        } catch let e as ASWebAuthenticationSessionError where e.code == .canceledLogin {
+            return
+        } catch {
+            self.error = "Couldn't sign in with Home Assistant."
+        }
     }
 
     private func pairLoop() async {

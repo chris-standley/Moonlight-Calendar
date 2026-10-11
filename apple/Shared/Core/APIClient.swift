@@ -19,9 +19,10 @@ enum APIError: LocalizedError {
     }
 }
 
-/// Talks to the Moonlight add-on on its direct LAN port (8091 by default) with this Apple TV's display token.
+/// Talks to the Moonlight add-on with this device's display token: on its home-network port (8091 by default), or
+/// away from home on its https address.
 struct APIClient: Sendable {
-    let baseURL: URL
+    var baseURL: URL
     let token: String?
     /// The screen layout this Apple TV was approved as; picks which speaker its Now playing card shows.
     var layout = "hallway"
@@ -33,6 +34,15 @@ struct APIClient: Sendable {
         config.httpCookieAcceptPolicy = .never
         return URLSession(configuration: config)
     }()
+
+    /// Whether a Moonlight answers at `url` within `timeout` seconds.
+    static func answers(_ url: URL, timeout: TimeInterval) async -> Bool {
+        var req = URLRequest(url: APIClient(baseURL: url, token: nil).url("/api/health"))
+        req.timeoutInterval = timeout
+        guard let (data, response) = try? await session.data(for: req),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
+        return (try? JSONDecoder().decode(Health.self, from: data))?.ok == true
+    }
 
     func url(_ path: String, query: [String: String] = [:]) -> URL {
         var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!

@@ -25,6 +25,32 @@ iPhone, a phone that unfolds, iPad Split View and Slide Over, Stage Manager wind
 
 Text uses the system's text styles in the rounded design, so Dynamic Type works.
 
+### Siri and Shortcuts
+
+Say these (or find them in the Shortcuts app and Spotlight). They use the app's pairing and run without opening it.
+
+| Say | Does |
+|---|---|
+| "What's on today in Moonlight" | Reads what's left on today's calendar |
+| "What's for dinner in Moonlight" | Tonight's dinner from the meal plan (or tomorrow's) |
+| "Add to the shopping list in Moonlight" | Asks what, then adds it; "milk, eggs and bread" adds three items. "Add to *list name* in Moonlight" picks a list |
+| "How many stars does *name* have in Moonlight" | Their stars, and how many more for the next reward |
+| "Tick off a chore in Moonlight" | Lists today's chores left; the one picked is ticked off and earns its stars |
+
+### Reminders
+
+Settings › Reminders: a notification a chosen time before each event (for everyone, or only chosen people), and an
+evening "chores left" nudge. They are worked out on the phone from the calendar, rescheduled whenever anything
+changes, and kept fresh by background app refresh, so no push server is needed. Widgets are planned separately (they
+need a paid developer account for the shared app group).
+
+### Away from home
+
+If the add-on has HTTPS and a public address (`external_url`, see the add-on's DOCS.md), the app learns it after
+pairing and switches to it whenever the home address doesn't answer, and back again at home. Setup also accepts the
+public address (e.g. `moonlight.example.com`), and offers **Sign in with Home Assistant** when the add-on knows Home
+Assistant's address: Home Assistant's login page opens in a sign-in sheet and the phone is paired straight away.
+
 ## Apple TV
 
 | Tab | What it shows | What you can do |
@@ -77,7 +103,8 @@ CI builds both apps for their simulators on every pull request (`.github/workflo
 - `Shared/`: in both targets. `Core/` is the API client (mirrors `API.md`), live updates, Bonjour discovery, Keychain
   and household-timezone dates. `Components/` has the palette (from `frontend/src/styles.css`, light and dark),
   avatars, star badges, progress rings, event colours and the logo.
-- `iOS/`: the iPhone/iPad screens (`Screens/`), the width-based layout helpers and editors (`Components/`), icon.
+- `iOS/`: the iPhone/iPad screens (`Screens/`), the width-based layout helpers and editors (`Components/`), Siri
+  (`Siri/`: App Intents and App Shortcuts), notifications (`Reminders/`), icon.
 - `TV/`: the Apple TV screens, focus styles, layered icon and Top Shelf images.
 - Folders are synchronized groups, so new Swift files are picked up without editing the project.
 - Icons are drawn by `tools/make_icons.py` (`python3 apple/tools/make_icons.py`, needs Pillow).

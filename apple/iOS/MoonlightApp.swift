@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct MoonlightApp: App {
     @State private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -11,6 +12,12 @@ struct MoonlightApp: App {
                 .task { await model.start() }
                 .tint(Theme.accent)
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .background, let api = model.api else { return }
+            Reminders.scheduleRefresh()
+            Task { await Reminders.reschedule(api) }
+        }
+        .backgroundTask(.appRefresh(Reminders.refreshTask)) { await Reminders.backgroundRefresh() }
     }
 }
 
@@ -55,5 +62,10 @@ struct MainTabs: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .task { await model.refreshWeatherPeriodically() }
+        // Keep reminders and Siri's list of people and lists in step with the family's data.
+        .task(id: model.rev("events", "chores", "people", "settings", "reminders")) {
+            if let api = model.api { await Reminders.reschedule(api) }
+        }
+        .task(id: model.rev("people", "lists")) { MoonlightShortcuts.updateAppShortcutParameters() }
     }
 }

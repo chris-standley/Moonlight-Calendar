@@ -196,6 +196,10 @@ struct PairPoll: Codable {
 struct Health: Codable {
     let ok: Bool
     let version: String?
+    /// Moonlight's https address from the internet (add-on option), if set.
+    let external_url: String?
+    /// Whether "Sign in with Home Assistant" is available.
+    let ha_login: Bool?
 }
 
 struct OkResponse: Codable { let ok: Bool? }
