@@ -41,3 +41,7 @@ export const pairStart = (base: string, layout: Layout) =>
   fetch(base + "/api/pair/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layout }) })
     .then((r) => json<{ pair_id: string; code: string; layout: Layout; expires_in: number }>(r));
 export const pairPoll = (base: string, pairId: string) => fetch(base + `/api/pair/${encodeURIComponent(pairId)}`).then((r) => json<PairPoll>(r));
+export interface Health { ok: boolean; version: string; external_url?: string | null; ha_login?: boolean }
+export const health = (base: string) => fetch(base + "/api/health").then((r) => json<Health>(r));
+/** Home Assistant's login page; it comes back to /display/<layout> already paired. */
+export const haLoginUrl = (base: string, layout: Layout) => `${base}/api/auth/ha/start?layout=${encodeURIComponent(layout)}`;

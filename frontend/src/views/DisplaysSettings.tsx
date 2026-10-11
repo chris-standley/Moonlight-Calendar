@@ -40,7 +40,8 @@ export function ScreensPanel() {
       <p className="muted screens-help">
         Wall screens open <code>http://&lt;home-assistant&gt;:8091/display/kitchen</code> and show a 6-digit code.
         Phones using the Home Assistant app don't need pairing. The Moonlight integration in Home Assistant shows
-        a code to enter here too.
+        a code to enter here too. Away from home, use Moonlight's https address; with Home Assistant's address set up,
+        the pairing screen also offers Sign in with Home Assistant.
       </p>
       {screens && screens.length === 0 && <div className="screens-empty">No screens paired yet.</div>}
       <div className="screen-list">

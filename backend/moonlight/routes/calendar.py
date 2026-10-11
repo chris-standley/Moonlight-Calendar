@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, media
+from .. import caldav_sync, db, media, security
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -83,7 +83,7 @@ async def patch_settings(body: dict = Body(...)):
 def verify_pin(body: dict = Body(...)):
     body = body_dict(body)
     with db.connect() as c:
-        return {"ok": db.verify_pin(c, body.get("pin"))}
+        return {"ok": security.check_pin(c, body.get("pin"))}
 
 
 # ---------------------------------------------------------------- people

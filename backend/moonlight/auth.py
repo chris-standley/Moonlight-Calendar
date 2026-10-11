@@ -6,7 +6,10 @@ Three ways in:
 - A paired wall screen: a long random display token, sent as the `moonlight_display` cookie,
   `Authorization: Bearer <token>`, or `?token=` (WebSocket, first TouchKio load).
 - Auth off (`MOONLIGHT_AUTH=off`): everyone. This is the default outside the add-on (no
-  `SUPERVISOR_TOKEN`), so local development and the tests need no pairing.
+  `SUPERVISOR_TOKEN`), so local development and the tests need no pairing. Never on the HTTPS port.
+
+The HTTPS port (see security.py) is the one meant for the internet: there auth is always on, ingress headers are
+ignored and the cookie is `Secure`. While HTTPS is on, the plain port refuses addresses outside the home network.
 
 Unauthenticated requests to `/api/*` get 401 (WebSocket: closed), except the endpoints a screen needs to
 pair itself. HTML and assets are always served, so the pairing screen can load.
@@ -22,13 +25,13 @@ from http.cookies import SimpleCookie
 from typing import Any
 from urllib.parse import parse_qs
 
-from . import db
+from . import db, security
 
 COOKIE = "moonlight_display"
 COOKIE_MAX_AGE = 10 * 365 * 24 * 3600
 DEFAULT_INGRESS_IPS = ("172.30.32.2",)
 OPEN_PATHS = ("/api/health", "/api/auth/status")
-OPEN_PREFIXES = ("/api/pair/",)
+OPEN_PREFIXES = ("/api/pair/", "/api/auth/ha/")
 SCOPE_KEY = "moonlight.auth"
 _LAST_SEEN_EVERY = 60.0  # seconds between last_seen writes per screen
 _last_seen_written: dict[str, float] = {}
@@ -76,11 +79,17 @@ def forget_seen(display_id: str) -> None:
     _last_seen_written.pop(display_id, None)
 
 
-def cookie_header(token: str | None) -> str:
-    """Set-Cookie value storing (or, with None, clearing) the display token."""
+def cookie_header(token: str | None, secure: bool = False) -> str:
+    """Set-Cookie value storing (or, with None, clearing) the display token. `secure` on the HTTPS port."""
+    flags = "; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
     if token is None:
-        return f"{COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
-    return f"{COOKIE}={token}; Path=/; Max-Age={COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax"
+        return f"{COOKIE}=; Path=/; Max-Age=0{flags}"
+    return f"{COOKIE}={token}; Path=/; Max-Age={COOKIE_MAX_AGE}{flags}"
+
+
+def is_secure(request_or_scope: Any) -> bool:
+    scope = getattr(request_or_scope, "scope", request_or_scope)
+    return scope.get("scheme") in ("https", "wss")
 
 
 def current(request_or_scope: Any) -> dict:
@@ -96,10 +105,12 @@ def is_open_path(path: str) -> bool:
 class AuthMiddleware:
     """Pure ASGI middleware so it covers the WebSocket as well as HTTP."""
 
-    def __init__(self, app, enabled: bool = False, ingress_ips: set[str] | None = None) -> None:
+    def __init__(self, app, enabled: bool = False, ingress_ips: set[str] | None = None,
+                 lan_only_http: bool = False) -> None:
         self.app = app
         self.enabled = enabled
         self.ingress_ips = set(ingress_ips or DEFAULT_INGRESS_IPS)
+        self.lan_only_http = lan_only_http  # HTTPS is on: plain http is for the home network only
 
     async def __call__(self, scope, receive, send):
         if scope["type"] not in ("http", "websocket"):
@@ -107,7 +118,15 @@ class AuthMiddleware:
 
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
         client_ip = (scope.get("client") or ("", 0))[0]
-        ingress = "x-ingress-path" in headers and client_ip in self.ingress_ips
+        security.CLIENT_IP.set(client_ip)
+        secure = is_secure(scope)
+        path = scope.get("path", "")
+        if not secure and self.lan_only_http and not security.is_private(client_ip):
+            return await self._refuse(scope, receive, send, 403, "Use Moonlight's https address from outside the home")
+        if secure and path in security.HIDDEN_ON_HTTPS:
+            return await self._refuse(scope, receive, send, 404, "Not found")
+        ingress = not secure and "x-ingress-path" in headers and client_ip in self.ingress_ips
+        enabled = self.enabled or secure
 
         cookie_token = None
         if "cookie" in headers:
@@ -137,18 +156,17 @@ class AuthMiddleware:
             via = "ingress"
         elif display:
             via = "display"
-        elif not self.enabled:
+        elif not enabled:
             via = "open"
         else:
             via = None
         user = None
         if ingress:
             user = headers.get("x-remote-user-display-name") or headers.get("x-remote-user-name") or None
-        scope[SCOPE_KEY] = {"via": via, "display": display, "user": user, "enabled": self.enabled}
+        scope[SCOPE_KEY] = {"via": via, "display": display, "user": user, "enabled": enabled}
         if display:
             touch(display["id"])
 
-        path = scope.get("path", "")
         is_api = path == "/api" or path.startswith("/api/")
         if via is None and is_api and not is_open_path(path):
             if scope["type"] == "websocket":
@@ -158,7 +176,9 @@ class AuthMiddleware:
             body = json.dumps({"detail": "This screen is not paired", "pairing": True}).encode()
             hdrs = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
             if cookie_token:
-                hdrs.append((b"set-cookie", cookie_header(None).encode()))
+                hdrs.append((b"set-cookie", cookie_header(None, secure).encode()))
+            if secure:
+                hdrs.extend(security.SECURE_HEADERS)
             await send({"type": "http.response.start", "status": 401, "headers": hdrs})
             await send({"type": "http.response.body", "body": body})
             return
@@ -168,10 +188,10 @@ class AuthMiddleware:
         set_cookie = None
         if scope["type"] == "http":
             if display and cookie_token != token:
-                set_cookie = cookie_header(token)
+                set_cookie = cookie_header(token, secure)
             elif cookie_token and not display:
-                set_cookie = cookie_header(None)
-        if set_cookie is None:
+                set_cookie = cookie_header(None, secure)
+        if set_cookie is None and not (secure and scope["type"] == "http"):
             return await self.app(scope, receive, send)
 
         async def send_with_cookie(message):
@@ -179,9 +199,22 @@ class AuthMiddleware:
                 hdrs = list(message.get("headers", []))
                 route_sets_it = any(h[0].lower() == b"set-cookie" and h[1].startswith(COOKIE.encode() + b"=")
                                     for h in hdrs)
-                if not route_sets_it:  # e.g. a freshly approved pairing hands out a new token
+                if set_cookie and not route_sets_it:  # e.g. a freshly approved pairing hands out a new token
                     hdrs.append((b"set-cookie", set_cookie.encode()))
-                    message = {**message, "headers": hdrs}
+                if secure:
+                    hdrs.extend(security.SECURE_HEADERS)
+                message = {**message, "headers": hdrs}
             await send(message)
 
         return await self.app(scope, receive, send_with_cookie)
+
+    @staticmethod
+    async def _refuse(scope, receive, send, status: int, detail: str) -> None:
+        if scope["type"] == "websocket":
+            await receive()
+            await send({"type": "websocket.close", "code": 4403 if status == 403 else 4404})
+            return
+        body = json.dumps({"detail": detail}).encode()
+        await send({"type": "http.response.start", "status": status,
+                    "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
+        await send({"type": "http.response.body", "body": body})

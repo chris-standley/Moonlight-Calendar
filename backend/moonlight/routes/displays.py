@@ -12,7 +12,7 @@ import time
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .. import auth, db
+from .. import auth, db, security
 from ..common import body_dict, choice, hub, not_found, opt_str, require_pin
 
 router = APIRouter(prefix="/api")
@@ -37,6 +37,18 @@ def display_out(d: dict, current_id: str | None = None) -> dict:
     }
 
 
+def create_display(name: str, layout: str) -> tuple[str, dict]:
+    """Store a new paired screen; returns its token (shown once) and row."""
+    token = auth.new_token()
+    d = {"id": db.new_id("ds"), "name": name, "layout": layout, "token_hash": auth.hash_token(token),
+         "created_at": db.now_iso(), "last_seen": None, "revoked": 0}
+    with db.connect() as c:
+        c.execute(
+            "INSERT INTO displays(id, name, layout, token_hash, created_at, last_seen, revoked) "
+            "VALUES(:id, :name, :layout, :token_hash, :created_at, :last_seen, :revoked)", d)
+    return token, d
+
+
 @router.get("/auth/status")
 def auth_status(request: Request):
     a = auth.current(request)
@@ -51,6 +63,7 @@ def auth_status(request: Request):
 @router.post("/pair/start")
 def pair_start(body: dict | None = Body(None)):
     body = body_dict(body)
+    security.limit_pair_start()
     layout = body.get("layout") or "kitchen"
     choice(layout, "layout", LAYOUTS + (SERVICE,))
     name = opt_str(body, "name").strip()[:60]  # suggested name, used if the approver leaves it blank
@@ -69,7 +82,7 @@ def pair_start(body: dict | None = Body(None)):
 
 
 @router.get("/pair/{pair_id}")
-def pair_poll(pair_id: str):
+def pair_poll(pair_id: str, request: Request):
     now = time.time()
     with _lock:
         _purge(now)
@@ -81,7 +94,7 @@ def pair_poll(pair_id: str):
         del _pairings[pair_id]  # the token is handed out exactly once
     token = entry["token"]
     resp = JSONResponse({"status": "approved", "token": token, "display": entry["display"]})
-    resp.headers.append("set-cookie", auth.cookie_header(token))
+    resp.headers.append("set-cookie", auth.cookie_header(token, auth.is_secure(request)))
     return resp
 
 
@@ -115,13 +128,7 @@ async def approve(body: dict = Body(...)):
             choice(layout, "layout", LAYOUTS)
         name = (opt_str(body, "name").strip()[:60] or entry.get("name")
                 or ("Service" if layout == SERVICE else f"{layout.capitalize()} screen"))
-        token = auth.new_token()
-        d = {"id": db.new_id("ds"), "name": name, "layout": layout, "token_hash": auth.hash_token(token),
-             "created_at": db.now_iso(), "last_seen": None, "revoked": 0}
-        with db.connect() as c:
-            c.execute(
-                "INSERT INTO displays(id, name, layout, token_hash, created_at, last_seen, revoked) "
-                "VALUES(:id, :name, :layout, :token_hash, :created_at, :last_seen, :revoked)", d)
+        token, d = create_display(name, layout)
         entry["token"] = token
         entry["display"] = display_out(d, d["id"])
         entry["expires"] = now + 120  # the waiting screen polls every few seconds

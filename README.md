@@ -66,6 +66,12 @@ the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add
 turns this off. The Home Assistant integration (`custom_components/moonlight`) pairs the same way: its setup dialog
 shows a code to enter there, and it is listed as "Home Assistant" (Integration) so it can be revoked too.
 
+## Access from the internet
+
+Turn on the add-on's `ssl` option to serve Moonlight over HTTPS on its own port (8443) with the certificate from the
+Let's Encrypt app, set `external_url`, and forward that port on the router. Pairing is always required there, devices
+can also "Sign in with Home Assistant", and port 8091 then only answers the home network. Steps: [addon/DOCS.md](addon/DOCS.md#access-from-the-internet).
+
 ## Photo screensaver (Immich)
 
 The idle screensaver shows photos from your [Immich](https://immich.app) server (for example the Immich add-on on the

@@ -12,10 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, media
+from . import __version__, auth, caldav_sync, db, media, security
 from . import immich as immich_source
 from .common import hub, log
-from .routes import accounts, calendar, chores, displays, immich, lists, meals
+from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals
 from .routes import media as media_routes
 from .routes import summary as summary_routes
 from .auth import AuthMiddleware
@@ -66,9 +66,15 @@ def create_app(
             log.warning("MOONLIGHT_DEMO set but seed file %s not found", path)
 
     app = FastAPI(title="Moonlight", version=__version__)
+    security.pin_failures.reset()
+    security.pair_starts.reset()
+    https = security.https_enabled()
     # Paired screens / HA ingress only (see auth.py). Added before CORS so 401s still carry CORS headers.
-    app.add_middleware(AuthMiddleware, enabled=auth_enabled, ingress_ips=ingress_ips or auth.ingress_ips_from_env())
-    log.info("Screen pairing %s", "required on the LAN port" if auth_enabled else "off (MOONLIGHT_AUTH)")
+    app.add_middleware(AuthMiddleware, enabled=auth_enabled, ingress_ips=ingress_ips or auth.ingress_ips_from_env(),
+                       lan_only_http=https)
+    log.info("Screen pairing %s", "required on the LAN port" if auth_enabled else "off on the LAN port (MOONLIGHT_AUTH)")
+    if https:
+        log.info("HTTPS on: pairing always required there; plain http answers the home network only")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
     @app.exception_handler(RequestValidationError)
@@ -79,7 +85,7 @@ def create_app(
             msgs.append(f"{loc}: {e.get('msg')}" if loc else str(e.get("msg")))
         return JSONResponse({"detail": "; ".join(msgs) or "Invalid request"}, status_code=400)
 
-    for module in (calendar, chores, lists, meals, displays, immich, accounts):
+    for module in (calendar, chores, lists, meals, displays, ha_login, immich, accounts):
         app.include_router(module.router)
     app.include_router(summary_routes.router)
     app.include_router(media_routes.router)
@@ -113,8 +119,10 @@ def create_app(
         app.router.on_shutdown.append(stop_sync)
 
     @app.get("/api/health")
-    def health():
-        return {"ok": True, "version": __version__}
+    async def health():
+        # external_url: where the apps go when the home address doesn't answer; ha_login: offer "Sign in with HA".
+        return {"ok": True, "version": __version__, "external_url": security.external_url(),
+                "ha_login": bool(await ha_login.ha_login_url())}
 
     @app.websocket("/api/ws")
     async def ws_endpoint(ws: WebSocket):
