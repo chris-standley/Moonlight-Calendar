@@ -177,6 +177,12 @@ DEFAULT_SETTINGS = {
     # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
     "idle_minutes": {"hallway": 5, "kitchen": 3, "phone": 0},
+    # Per kind of screen: which sections the menu shows (Settings is always there) and which one it opens on.
+    "screens": {
+        "hallway": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]},
+        "kitchen": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
+        "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
+    },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
 }
 

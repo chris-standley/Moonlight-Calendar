@@ -538,3 +538,42 @@ def test_remove_sample_data(tmp_path):
         lists = c.get("/api/lists").json()
         assert [l["id"] for l in lists] == ["l_grocery"]
         assert [i["title"] for i in c.get("/api/lists/l_grocery/items").json()] == ["Coffee"]
+
+
+def test_list_and_reward_edit(client):
+    lst = client.post("/api/lists", json={"name": "Jobs", "emoji": "🔧", "kind": "todo"}).json()
+    r = client.patch(f"/api/lists/{lst['id']}", json={"name": "House jobs", "emoji": "🏠", "kind": "grocery"})
+    assert r.status_code == 200, r.text
+    assert (r.json()["name"], r.json()["emoji"], r.json()["kind"]) == ("House jobs", "🏠", "grocery")
+    assert client.patch(f"/api/lists/{lst['id']}", json={"name": ""}).status_code == 400
+    assert client.patch(f"/api/lists/{lst['id']}", json={"kind": "other"}).status_code == 400
+    assert client.patch("/api/lists/nope", json={"name": "x"}).status_code == 404
+
+    kid = person(client)["id"]
+    rw = client.post("/api/rewards", json={"title": "Film night", "emoji": "🎬", "cost": 20, "person_id": None}).json()
+    r = client.patch(f"/api/rewards/{rw['id']}", json={"title": "Cinema trip", "cost": 40, "person_id": kid})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"id": rw["id"], "title": "Cinema trip", "emoji": "🎬", "cost": 40, "person_id": kid}
+    assert client.get("/api/rewards").json()[0]["title"] == "Cinema trip"
+    assert client.patch(f"/api/rewards/{rw['id']}", json={"cost": -1}).status_code == 400
+    assert client.patch(f"/api/rewards/{rw['id']}", json={"person_id": "nobody"}).status_code == 400
+    assert client.patch(f"/api/rewards/{rw['id']}", json={"person_id": None}).json()["person_id"] is None
+    assert client.delete(f"/api/rewards/{rw['id']}").status_code == 200
+
+
+def test_screen_sections_setting(client):
+    s = client.get("/api/settings").json()["screens"]
+    assert s["hallway"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]}
+    r = client.patch("/api/settings", json={"pin": PIN, "screens": {
+        "kitchen": {"sections": ["lists", "today", "meals"], "start": "meals"}}})
+    assert r.status_code == 200, r.text
+    s = r.json()["screens"]
+    assert s["kitchen"] == {"start": "meals", "sections": ["today", "meals", "lists"]}
+    assert s["hallway"]["start"] == "calendar"  # untouched
+    # Hiding the start section moves the start to the first one still shown.
+    s = client.patch("/api/settings", json={"pin": PIN, "screens": {"kitchen": {"sections": ["lists", "today"]}}}).json()
+    assert s["screens"]["kitchen"] == {"start": "today", "sections": ["today", "lists"]}
+    for bad in ({"kitchen": {"sections": []}}, {"kitchen": {"sections": ["settings"]}}, {"tv": {}},
+                {"kitchen": {"start": "rewards"}}, {"kitchen": {"start": "nope"}}, []):
+        assert client.patch("/api/settings", json={"pin": PIN, "screens": bad}).status_code == 400, bad
+    assert client.patch("/api/settings", json={"pin": "0000", "screens": {}}).status_code == 403

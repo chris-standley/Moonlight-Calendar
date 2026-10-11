@@ -3,7 +3,7 @@
 import { Api, ApiError, Display, ImmichAlbum, ImmichConfig, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
-type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "immich" | "saveImmich" | "disconnectImmich" |
+type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "renameDisplay" | "immich" | "saveImmich" | "disconnectImmich" |
   "testImmich" | "immichAlbums" | "screensaverPhotos">;
 
 interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number }
@@ -71,6 +71,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   let displays: Display[] = [
     { id: "ds_hall", name: "Hallway", layout: "hallway", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
     { id: "ds_kitchen", name: "Kitchen", layout: "kitchen", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
+    { id: "ds_ha", name: "Home Assistant", layout: "service", created_at: ago(60 * 24 * 19), last_seen: ago(1), revoked: false, current: false },
   ];
   let n = 0;
   const uid = (p: string) => `${p}_${Date.now().toString(36)}${(n++).toString(36)}`;
@@ -128,6 +129,14 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
       displays = [...displays, d];
       emit("displays");
       return { ...d };
+    },
+    async renameDisplay(id, name, pin) {
+      checkPin(pin);
+      if (!name.trim()) throw new ApiError(400, "name is required");
+      const d = find(displays, id);
+      displays = displays.map((x) => (x.id === id ? { ...x, name: name.trim() } : x));
+      emit("displays");
+      return { ...d, name: name.trim() };
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
     immich: async () => out(),

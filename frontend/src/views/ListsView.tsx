@@ -1,5 +1,5 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import { Item, TaskList } from "../api/types";
+import { ApiError, Item, TaskList } from "../api/types";
 import { diffDays, fmtDayMonth, relativeDay, today } from "../dates";
 import { useApp, useData } from "../state";
 import { Avatar, Empty, Sheet, tint } from "../components/ui";
@@ -9,13 +9,17 @@ export function ListsView() {
   const [lists] = useData((api) => api.lists(), ["lists"], []);
   const [sel, setSel] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  useEffect(() => { if (!sel && lists?.length) setSel(lists[0].id); }, [lists, sel]);
+  const [editing, setEditing] = useState<TaskList | null>(null);
+  useEffect(() => { if ((!sel || !lists?.some((l) => l.id === sel)) && lists?.length) setSel(lists[0].id); }, [lists, sel]);
   const list = lists?.find((l) => l.id === sel);
   return (
     <div className="lists">
       <div className="toolbar">
         <div className="toolbar-l"><h1 className="toolbar-title">Lists</h1></div>
-        <div className="toolbar-r"><button className="btn ghost" onClick={() => setAdding(true)}><IconPlus size={20} /> New list</button></div>
+        <div className="toolbar-r">
+          {list && <button className="btn ghost" onClick={() => setEditing(list)}>Edit list</button>}
+          <button className="btn ghost" onClick={() => setAdding(true)}><IconPlus size={20} /> New list</button>
+        </div>
       </div>
       <div className="lists-body">
         <nav className="list-nav">
@@ -29,7 +33,8 @@ export function ListsView() {
         </nav>
         {list ? <ListPanel list={list} /> : <Empty>No lists yet</Empty>}
       </div>
-      {adding && <NewList onClose={() => setAdding(false)} onCreated={setSel} />}
+      {adding && <ListSheet onClose={() => setAdding(false)} onSaved={setSel} />}
+      {editing && <ListSheet list={editing} onClose={() => setEditing(null)} onSaved={setSel} onDeleted={() => setSel(null)} />}
     </div>
   );
 }
@@ -91,22 +96,49 @@ function ItemRow({ item, person }: { item: Item; person?: ReturnType<ReturnType<
 
 const COLORS = ["#2FB58A", "#4F7CEC", "#F5A524", "#F0679A", "#9B6BE0", "#14A3B8"];
 const LIST_EMOJI = ["📝", "🛒", "🏠", "🎁", "✈️", "📦", "🧳", "🎄", "🍂", "💡"];
-function NewList({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
-  const { api } = useApp();
-  const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("📝");
-  const [color, setColor] = useState(COLORS[1]);
-  const create = async () => {
-    const l = await api.createList({ name: name.trim(), emoji, color, kind: "todo" });
-    onCreated(l.id);
-    onClose();
+/** New list, or edit one (name, emoji, colour, shopping or to-do) and delete it with its items. */
+function ListSheet({ list, onClose, onSaved, onDeleted }: {
+  list?: TaskList; onClose: () => void; onSaved: (id: string) => void; onDeleted?: () => void;
+}) {
+  const { api, askPin, toast } = useApp();
+  const [name, setName] = useState(list?.name ?? "");
+  const [emoji, setEmoji] = useState(list?.emoji || "📝");
+  const [color, setColor] = useState(list?.color || COLORS[1]);
+  const [kind, setKind] = useState<TaskList["kind"]>(list?.kind ?? "todo");
+  const [confirm, setConfirm] = useState(false);
+  const emojis = LIST_EMOJI.includes(emoji) ? LIST_EMOJI : [emoji, ...LIST_EMOJI];
+  const save = async () => {
+    try {
+      const fields = { name: name.trim(), emoji, color, kind };
+      const l = list ? await api.updateList(list.id, fields) : await api.createList(fields);
+      onSaved(l.id);
+      onClose();
+    } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
+  };
+  const remove = async () => {
+    if (!list) return;
+    if (!confirm) { setConfirm(true); return; }
+    const pin = await askPin(`Delete ${list.name} and its ${list.open_count + list.done_count} items?`);
+    if (!pin) return;
+    try { await api.deleteList(list.id); toast(`${list.name} deleted`); onDeleted?.(); onClose(); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't delete"); }
   };
   return (
-    <Sheet title="New list" onClose={onClose} footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><span style={{ flex: 1 }} /><button className="btn" disabled={!name.trim()} onClick={create}>Create</button></>}>
+    <Sheet title={list ? `Edit ${list.name}` : "New list"} onClose={onClose} footer={<>
+      {list ? <button className="btn ghost danger" onClick={remove}><IconTrash size={18} /> {confirm ? "Tap again to delete" : "Delete"}</button>
+        : <button className="btn ghost" onClick={onClose}>Cancel</button>}
+      <span style={{ flex: 1 }} />
+      <button className="btn" disabled={!name.trim()} onClick={save}>{list ? "Save" : "Create"}</button>
+    </>}>
       <div className="form">
-        <input className="input big" placeholder="List name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        <div className="emoji-grid">{LIST_EMOJI.map((e) => <button key={e} className={e === emoji ? "on" : ""} onClick={() => setEmoji(e)}>{e}</button>)}</div>
-        <div className="chip-row">{COLORS.map((c) => <button key={c} className={"swatch" + (c === color ? " on" : "")} style={{ background: c }} onClick={() => setColor(c)} />)}</div>
+        <input className="input big" placeholder="List name" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!list} />
+        <div className="emoji-grid">{emojis.map((e) => <button key={e} className={e === emoji ? "on" : ""} onClick={() => setEmoji(e)}>{e}</button>)}</div>
+        <div className="chip-row">{COLORS.map((c) => <button key={c} className={"swatch" + (c === color ? " on" : "")} style={{ background: c }} onClick={() => setColor(c)} aria-label={c} />)}</div>
+        <label className="field-label">Kind</label>
+        <div className="chip-row">
+          <button className={"chip-btn" + (kind === "todo" ? " on" : "")} onClick={() => setKind("todo")}>To-do (people, due dates)</button>
+          <button className={"chip-btn" + (kind === "grocery" ? " on" : "")} onClick={() => setKind("grocery")}>Shopping</button>
+        </div>
       </div>
     </Sheet>
   );

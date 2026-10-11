@@ -13,11 +13,12 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .. import auth, db
-from ..common import body_dict, choice, hub, not_found, opt_str, require_pin
+from ..common import bad, body_dict, choice, hub, not_found, opt_str, req_str, require_pin
 
 router = APIRouter(prefix="/api")
 
 LAYOUTS = ("hallway", "kitchen", "phone")
+SECTIONS = ("today", "calendar", "chores", "rewards", "meals", "lists")  # Settings is always shown
 SERVICE = "service"  # a non-screen client, e.g. the Home Assistant integration
 PAIR_TTL = 600  # seconds a pairing code stays valid
 MAX_PENDING = 50
@@ -127,6 +128,51 @@ async def approve(body: dict = Body(...)):
         entry["expires"] = now + 120  # the waiting screen polls every few seconds
     await hub.broadcast("displays")
     return display_out(d)
+
+
+@router.patch("/displays/{display_id}")
+async def rename(display_id: str, body: dict = Body(...)):
+    """Rename a paired screen (or connection): `{name, pin}`."""
+    body = body_dict(body)
+    name = req_str(body, "name").strip()[:60]
+    if not name:
+        raise bad("name is required")
+    with db.connect() as c:
+        require_pin(c, body.get("pin"))
+        d = db.row(c, "SELECT * FROM displays WHERE id = ? AND revoked = 0", (display_id,))
+        if not d:
+            raise not_found("Screen not found")
+        c.execute("UPDATE displays SET name = ? WHERE id = ?", (name, display_id))
+        d["name"] = name
+    await hub.broadcast("displays")
+    return display_out(d)
+
+
+def apply_settings(c, body: dict) -> None:
+    """PATCH /api/settings `screens`: {layout: {start?, sections?}}; layouts not sent are kept."""
+    if "screens" not in body:
+        return
+    val = body["screens"]
+    if not isinstance(val, dict):
+        raise bad("screens must be an object like {\"kitchen\": {\"start\": \"today\"}}")
+    cur = {k: dict(v) for k, v in db.get_setting(c, "screens", db.DEFAULT_SETTINGS["screens"]).items()}
+    for layout, conf in val.items():
+        if layout not in LAYOUTS or not isinstance(conf, dict):
+            raise bad("screens keys are hallway, kitchen, phone, each an object")
+        s = {**db.DEFAULT_SETTINGS["screens"][layout], **cur.get(layout, {})}
+        if "sections" in conf:
+            secs = conf["sections"]
+            if not isinstance(secs, list) or not secs or any(x not in SECTIONS for x in secs):
+                raise bad(f"screens.{layout}.sections must be a non-empty list of " + ", ".join(SECTIONS))
+            s["sections"] = [x for x in SECTIONS if x in secs]
+        if "start" in conf:
+            s["start"] = choice(conf["start"], f"screens.{layout}.start", SECTIONS)
+        if s["start"] not in s["sections"]:
+            if "start" in conf:
+                raise bad(f"screens.{layout}.start must be one of its sections")
+            s["start"] = s["sections"][0]
+        cur[layout] = s
+    db.set_setting(c, "screens", cur)
 
 
 @router.delete("/displays/{display_id}")

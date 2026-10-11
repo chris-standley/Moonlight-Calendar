@@ -61,8 +61,13 @@ On the add-on's LAN port every screen must be paired (HA users via ingress are a
 go to Settings > Screens > Pair a new screen, enter the code and the PIN; the kiosk loads the app and remembers its
 token (localStorage + an HttpOnly cookie). Revoke a screen there too. For TouchKio you can instead copy a token into
 the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
-turns this off. The Home Assistant integration (`custom_components/moonlight`) pairs the same way: its setup dialog
-shows a code to enter there, and it is listed as "Home Assistant" (Integration) so it can be revoked too.
+turns this off. Settings > Screens also sets, per kind of screen (hallway, kitchen, phones), which sections the menu
+shows, which one it opens on, its speaker and when the screensaver starts, and renames paired screens.
+
+The Home Assistant integration (`custom_components/moonlight`, via HACS) doesn't need pairing with the add-on: the
+add-on announces itself, so Home Assistant shows Moonlight under Settings > Devices & services > Discovered, and
+Configure connects it. It is listed in Moonlight under Settings > Screens > Connections, where it can be
+disconnected. Set up by hand (Moonlight not running as an add-on), it pairs with a code like a screen.
 
 ## Photo screensaver (Immich)
 
@@ -110,7 +115,7 @@ served by `httpx.MockTransport`).
   conditions); until then the screens show a demo forecast.
 - Music: the kitchen screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
   bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Pick a
-  speaker per screen in Settings > Music. Works with any HA
+  speaker per screen in Settings > Screens > Set up. Works with any HA
   `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
   show a small player in the top bar only if given a speaker.
 - Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
