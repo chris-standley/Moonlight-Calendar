@@ -11,21 +11,21 @@ export interface Settings {
   chore_approval: boolean;
   /** Photo screensaver: seconds per photo, idle minutes per screen (0 = never). Photos come from Immich. */
   screensaver_seconds?: number;
-  idle_minutes?: Partial<Record<"hallway" | "kitchen" | "phone", number>>;
+  idle_minutes?: Partial<Record<Layout, number>>;
   timezone?: string;
   /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
-  media_players?: Partial<Record<"hallway" | "kitchen" | "phone", string>>;
+  media_players?: Partial<Record<Layout, string>>;
   /** Home Assistant weather entity the screens show; "" = built-in demo forecast. */
   weather_entity?: string;
   /** Per kind of screen: the sections its menu shows (Settings always) and the one it opens on. */
-  screens?: Partial<Record<"hallway" | "kitchen" | "phone", ScreenSetup>>;
+  screens?: Partial<Record<Layout, ScreenSetup>>;
 }
 export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists";
 export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "lists"];
 export interface ScreenSetup { start: Section; sections: Section[] }
-export const DEFAULT_SCREENS: Record<"hallway" | "kitchen" | "phone", ScreenSetup> = {
-  hallway: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "lists"] },
-  kitchen: { start: "today", sections: [...SECTIONS] },
+export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
+  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "lists"] },
+  compact: { start: "today", sections: [...SECTIONS] },
   phone: { start: "today", sections: [...SECTIONS] },
 };
 
@@ -93,9 +93,19 @@ export interface Weather {
   daily: { date: string; high: number; low: number; condition: string }[];
 }
 
-export type Layout = "hallway" | "kitchen" | "phone";
+/** Screen style: a big wall screen, a small touch screen, a phone. */
+export type Layout = "large" | "compact" | "phone";
 /** "service" = a non-screen client such as the Home Assistant integration. */
-export interface Display { id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean }
+export interface Display {
+  id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean;
+  /** Screens only: what it shows (its own choices, else its style's) and whether it has choices of its own. */
+  setup?: DisplaySetup; own_setup?: boolean;
+}
+/** A paired screen's setup: menu sections, the one it opens on, its speaker ("" = none), screensaver delay (0 = never). */
+export interface DisplaySetup { start: Section; sections: Section[]; speaker: string; idle_minutes: number }
+export interface DisplayPatch { pin: string; name?: string; layout?: Layout; setup?: Partial<DisplaySetup> | null }
+export const DEFAULT_IDLE: Record<Layout, number> = { large: 5, compact: 3, phone: 0 };
+export const STYLE_LABEL: Record<Layout, string> = { large: "Large", compact: "Compact", phone: "Phone" };
 
 // Photo screensaver source: the family's Immich server. Moonlight keeps the API key (write-only) and proxies previews.
 export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
@@ -237,7 +247,10 @@ export interface Api {
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;
   revokeDisplay(id: string, pin: string): Promise<void>;
-  renameDisplay(id: string, name: string, pin: string): Promise<Display>;
+  /** Rename a screen, change its style or its setup (`setup: null` = follow its style again). */
+  updateDisplay(id: string, patch: DisplayPatch): Promise<Display>;
+  /** The paired screen this is (null in the Home Assistant app, a browser with auth off, or the demo). */
+  thisScreen(): Promise<Display | null>;
   // Photo screensaver (Immich; see API.md "Photo screensaver")
   immich(): Promise<ImmichConfig>;
   saveImmich(c: ImmichIn): Promise<ImmichConfig>;

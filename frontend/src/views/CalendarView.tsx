@@ -111,7 +111,7 @@ export function CalendarView({ defaultView }: { defaultView: CalView }) {
           {people.length === 0 && <button className="btn ghost small cal-family-cta" onClick={() => go("settings")}>Add your family</button>}
           <div className="filters">
             {people.map((p) => (
-              <Avatar key={p.id} person={p} size={layout === "hallway" ? 2.3 : 2} dim={hidden.includes(p.id)} ring={!hidden.includes(p.id)}
+              <Avatar key={p.id} person={p} size={layout === "large" ? 2.3 : 2} dim={hidden.includes(p.id)} ring={!hidden.includes(p.id)}
                 onClick={() => setHidden((h) => (h.includes(p.id) ? h.filter((x) => x !== p.id) : [...h, p.id]))} />
             ))}
           </div>
@@ -310,7 +310,7 @@ function MonthView({ anchor, start, events, people, onPick }: {
   const month = anchor.slice(0, 7);
   const rows = days[35].slice(0, 7) === month ? 6 : 5;
   const { layout } = useApp();
-  const max = layout === "hallway" ? 4 : 3;
+  const max = layout === "large" ? 4 : 3;
   return (
     <div className="month" style={{ "--rows": rows } as CSSProperties}>
       {days.slice(0, 7).map((d) => <div key={d} className="month-dow">{fmtDow(d)}</div>)}

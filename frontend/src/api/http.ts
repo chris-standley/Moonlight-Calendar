@@ -1,4 +1,4 @@
-import { Api, ApiError, NowPlaying, ScreensaverPhotos, Topic } from "./types";
+import { Api, ApiError, Display, NowPlaying, ScreensaverPhotos, Topic } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -106,7 +106,8 @@ export function httpApi(base = ""): Api {
     displays: () => get("/api/displays"),
     approveDisplay: (code, name, layout, pin) => req("POST", "/api/displays/approve", { code, name, layout, pin }),
     revokeDisplay: async (id, pin) => { await req("DELETE", `/api/displays/${id}`, { pin }); },
-    renameDisplay: (id, name, pin) => req("PATCH", `/api/displays/${id}`, { name, pin }),
+    updateDisplay: (id, patch) => req("PATCH", `/api/displays/${id}`, patch),
+    thisScreen: async () => (await get<{ display: Display | null }>("/api/auth/status")).display,
     immich: () => get("/api/immich"),
     saveImmich: (c) => req("PUT", "/api/immich", c),
     disconnectImmich: async (pin) => { await req("DELETE", "/api/immich", { pin }); },

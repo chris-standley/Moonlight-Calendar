@@ -1,9 +1,9 @@
 // Demo-mode screens and a simulated Immich server for the photo screensaver. Sample photos are painted on a canvas
 // at runtime (so the single-file preview stays small). Kept in memory only.
-import { Api, ApiError, Display, ImmichAlbum, ImmichConfig, SlidePhoto, Topic } from "./types";
+import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, Layout, SECTIONS, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
-type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "renameDisplay" | "immich" | "saveImmich" | "disconnectImmich" |
+type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "updateDisplay" | "thisScreen" | "immich" | "saveImmich" | "disconnectImmich" |
   "testImmich" | "immichAlbums" | "screensaverPhotos">;
 
 interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number }
@@ -66,13 +66,17 @@ const ALBUMS: (ImmichAlbum & { looks: number[] })[] = [
 const FAVOURITES = [2, 3];
 const ON_THIS_DAY = [5];
 
-export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]) => void): Extras {
+/** `styleSetup`: what a screen of that style shows without choices of its own (from the demo's settings). */
+export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]) => void, styleSetup: (l: Layout) => DisplaySetup): Extras {
   const ago = (min: number) => isoDT(new Date(Date.now() - min * 60_000));
-  let displays: Display[] = [
-    { id: "ds_hall", name: "Hallway", layout: "hallway", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
-    { id: "ds_kitchen", name: "Kitchen", layout: "kitchen", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
+  type Stored = Omit<Display, "setup" | "own_setup"> & { own?: Partial<DisplaySetup> };
+  let displays: Stored[] = [
+    { id: "ds_hall", name: "Hallway", layout: "large", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
+    { id: "ds_kitchen", name: "Kitchen", layout: "compact", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
     { id: "ds_ha", name: "Home Assistant", layout: "service", created_at: ago(60 * 24 * 19), last_seen: ago(1), revoked: false, current: false },
   ];
+  const out1 = ({ own, ...d }: Stored): Display => d.layout === "service" ? { ...d }
+    : { ...d, setup: { ...styleSetup(d.layout), ...own }, own_setup: !!own && Object.keys(own).length > 0 };
   let n = 0;
   const uid = (p: string) => `${p}_${Date.now().toString(36)}${(n++).toString(36)}`;
   const find = <T extends { id: string }>(xs: T[], id: string) => { const x = xs.find((a) => a.id === id); if (!x) throw new ApiError(404, "Not found"); return x; };
@@ -120,23 +124,36 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   const clean = (u: string) => u.trim().replace(/\/+$/, "").replace(/\/api$/, "");
 
   return {
-    displays: async () => displays.map((d) => ({ ...d })),
+    displays: async () => displays.map(out1),
+    thisScreen: async () => null,
     async approveDisplay(code, name, layout, pin) {
       checkPin(pin);
       if (!/^\d{6}$/.test(code)) throw new ApiError(400, "Enter the 6-digit code shown on the screen");
-      const l = layout ?? "kitchen";
-      const d: Display = { id: uid("ds"), name: name || `${l[0].toUpperCase()}${l.slice(1)} screen`, layout: l, created_at: ago(0), last_seen: ago(0), revoked: false, current: false };
+      const l = layout ?? "compact";
+      const d: Stored = { id: uid("ds"), name: name || (l === "phone" ? "Phone" : `${l[0].toUpperCase()}${l.slice(1)} screen`), layout: l, created_at: ago(0), last_seen: ago(0), revoked: false, current: false };
       displays = [...displays, d];
       emit("displays");
-      return { ...d };
+      return out1(d);
     },
-    async renameDisplay(id, name, pin) {
+    async updateDisplay(id, { pin, name, layout, setup }) {
       checkPin(pin);
-      if (!name.trim()) throw new ApiError(400, "name is required");
-      const d = find(displays, id);
-      displays = displays.map((x) => (x.id === id ? { ...x, name: name.trim() } : x));
+      const d = { ...find(displays, id) };
+      if (name !== undefined) { if (!name.trim()) throw new ApiError(400, "name is required"); d.name = name.trim().slice(0, 60); }
+      if (layout !== undefined) d.layout = layout;
+      if (setup === null) d.own = undefined;
+      else if (setup) {
+        const own = { ...d.own, ...setup };
+        if (own.sections) {
+          own.sections = SECTIONS.filter((x) => own.sections!.includes(x));
+          if (!own.sections.length) throw new ApiError(400, "setup.sections must not be empty");
+        }
+        const shown = own.sections ?? styleSetup(d.layout as Layout).sections;
+        if (!shown.includes(own.start ?? styleSetup(d.layout as Layout).start)) own.start = shown[0];
+        d.own = own;
+      }
+      displays = displays.map((x) => (x.id === id ? d : x));
       emit("displays");
-      return { ...d, name: name.trim() };
+      return out1(d);
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
     immich: async () => out(),

@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Api, DEFAULT_SCREENS, Person, Section, Settings } from "./api/types";
+import { Api, DEFAULT_SCREENS, Display, Person, Section, Settings } from "./api/types";
 import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
@@ -27,18 +27,20 @@ const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode 
   { key: "lists", label: "Lists", icon: IconLists },
   { key: "settings", label: "Settings", icon: IconSettings },
 ];
-const IDLE_MS = { hallway: 5 * 60_000, kitchen: 3 * 60_000, phone: 0 };
+const IDLE_MS = { large: 5 * 60_000, compact: 3 * 60_000, phone: 0 };
 
 interface Burst { id: number; x: number; y: number; color: string }
 
 /** Inside Home Assistant (ingress panel iframe): HA's own frame already keeps clear of the iPhone home indicator. */
 const EMBEDDED = (() => { try { return window.self !== window.top; } catch { return true; } })();
 
-export function App({ api, layout }: { api: Api; layout: Layout }) {
+/** `onLayout`: the paired screen was given another style in Settings > Screens (the live app re-renders in it). */
+export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLayout?: (l: Layout) => void }) {
   const [tab, setTab] = useState<Tab>(DEFAULT_SCREENS[layout].start);
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [screen, setScreen] = useState<Display | null | undefined>(undefined);
   const [pinReq, setPinReq] = useState<{ why: string; resolve: (p: string | null) => void; error?: string; check: boolean } | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [bursts, setBursts] = useState<Burst[]>([]);
@@ -50,12 +52,21 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
       api.people().then((p) => { setPeople(p); setPeopleLoaded(true); }).catch((e) => console.error(e));
       api.settings().then(setSettings).catch((e) => console.error(e));
     };
+    const loadScreen = () => api.thisScreen().then(setScreen).catch(() => setScreen((s) => s ?? null));
     load();
-    return api.subscribe((t) => { if (t === "people" || t === "settings") load(); });
+    loadScreen();
+    return api.subscribe((t) => {
+      if (t === "people" || t === "settings") load();
+      if (t === "displays" || t === "settings") loadScreen();
+    });
   }, [api]);
+  useEffect(() => {
+    const l = screen?.layout;
+    if (l && l !== "service" && l !== layout) onLayout?.(l);
+  }, [screen?.layout, layout, onLayout]);
 
-  // Idle -> photo screensaver (minutes per screen from settings, 0 = never).
-  const idleMin = settings?.idle_minutes?.[layout];
+  // Idle -> photo screensaver (minutes per screen, else per style from settings; 0 = never).
+  const idleMin = screen?.setup?.idle_minutes ?? settings?.idle_minutes?.[layout];
   useEffect(() => {
     const ms = idleMin !== undefined ? idleMin * 60_000 : IDLE_MS[layout];
     if (!ms) return;
@@ -91,41 +102,41 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   }, []);
   const personById = useCallback((id: string | null | undefined) => people.find((p) => p.id === id), [people]);
 
-  // Sections chosen for this kind of screen (Settings > Screens); Settings itself is always there.
-  const setup = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+  // Sections chosen for this screen, else for its style (Settings > Screens); Settings itself is always there.
+  const setup = screen?.setup ?? settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
   const nav = NAV.filter((n) => n.key === "settings" || setup.sections.includes(n.key as Section));
   // Open on the chosen start section once settings arrive, and leave a section that was just hidden.
   const opened = useRef(false);
   useEffect(() => {
-    if (!settings) return;
+    if (!settings || screen === undefined) return;
     if (!opened.current) { opened.current = true; setTab(setup.start); return; }
     setTab((t) => (t === "settings" || setup.sections.includes(t as Section) ? t : setup.start));
-  }, [settings, setup.start, setup.sections]);
+  }, [settings, screen, setup.start, setup.sections]);
   // A new install has nobody yet: still show every view (they point to Settings > Family).
   const ready = peopleLoaded && settings;
   const go = useCallback((t: string) => setTab(t as Tab), []);
 
   return (
-    <AppProvider value={{ api, layout, people, settings, personById, askPin, toast, celebrate, go }}>
+    <AppProvider value={{ api, layout, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
       <div className={`app layout-${layout}` + (EMBEDDED ? " embedded" : "")} ref={root}>
        <MediaProvider api={api} layout={layout}>
         <nav className="rail">
-          <div className="rail-logo"><Logo size={layout === "hallway" ? 44 : 34} /></div>
+          <div className="rail-logo"><Logo size={layout === "large" ? 44 : 34} /></div>
           {nav.map((n) => (
             <button key={n.key} className={"rail-item" + (tab === n.key ? " on" : "")} onClick={() => setTab(n.key)}>
-              <n.icon size={layout === "hallway" ? 30 : layout === "phone" ? 21 : 24} />
+              <n.icon size={layout === "large" ? 30 : layout === "phone" ? 21 : 24} />
               <span>{n.label}</span>
             </button>
           ))}
         </nav>
         <main className="main">
-          {/* The kitchen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
-          <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "kitchen" && tab === "today")} />
+          {/* A compact screen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
+          <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")} />
           {ready && <SyncBanner onOpen={() => setTab("settings")} />}
           <div className="content">
             {ready && <>
               {tab === "today" && <TodayView go={go} />}
-              {tab === "calendar" && <CalendarView defaultView={layout === "hallway" ? "week" : "schedule"} />}
+              {tab === "calendar" && <CalendarView defaultView={layout === "large" ? "week" : "schedule"} />}
               {tab === "chores" && <ChoresView />}
               {tab === "rewards" && <RewardsView />}
               {tab === "meals" && <MealsView />}

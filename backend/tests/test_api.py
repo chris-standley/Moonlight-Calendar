@@ -581,16 +581,16 @@ def test_list_and_reward_edit(client):
 
 def test_screen_sections_setting(client):
     s = client.get("/api/settings").json()["screens"]
-    assert s["hallway"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]}
+    assert s["large"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]}
     r = client.patch("/api/settings", json={"pin": PIN, "screens": {
         "kitchen": {"sections": ["lists", "today", "meals"], "start": "meals"}}})
     assert r.status_code == 200, r.text
     s = r.json()["screens"]
-    assert s["kitchen"] == {"start": "meals", "sections": ["today", "meals", "lists"]}
-    assert s["hallway"]["start"] == "calendar"  # untouched
+    assert s["compact"] == {"start": "meals", "sections": ["today", "meals", "lists"]}
+    assert s["large"]["start"] == "calendar"  # untouched
     # Hiding the start section moves the start to the first one still shown.
     s = client.patch("/api/settings", json={"pin": PIN, "screens": {"kitchen": {"sections": ["lists", "today"]}}}).json()
-    assert s["screens"]["kitchen"] == {"start": "today", "sections": ["today", "lists"]}
+    assert s["screens"]["compact"] == {"start": "today", "sections": ["today", "lists"]}
     for bad in ({"kitchen": {"sections": []}}, {"kitchen": {"sections": ["settings"]}}, {"tv": {}},
                 {"kitchen": {"start": "rewards"}}, {"kitchen": {"start": "nope"}}, []):
         assert client.patch("/api/settings", json={"pin": PIN, "screens": bad}).status_code == 400, bad

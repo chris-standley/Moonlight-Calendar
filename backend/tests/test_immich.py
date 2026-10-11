@@ -282,12 +282,12 @@ def test_key_revoked_in_immich(client, fake, monkeypatch):
 def test_screensaver_timing_settings(client):
     s = client.get("/api/settings").json()
     assert "screensaver_album" not in s and s["screensaver_seconds"] == 10
-    assert s["idle_minutes"] == {"hallway": 5, "kitchen": 3, "phone": 0}
+    assert s["idle_minutes"] == {"large": 5, "compact": 3, "phone": 0}
     r = client.patch("/api/settings", json={"pin": PIN, "screensaver_seconds": 20, "idle_minutes": {"kitchen": 10}})
     assert r.status_code == 200, r.text
-    assert r.json()["screensaver_seconds"] == 20 and r.json()["idle_minutes"] == {"hallway": 5, "kitchen": 10, "phone": 0}
+    assert r.json()["screensaver_seconds"] == 20 and r.json()["idle_minutes"] == {"large": 5, "compact": 10, "phone": 0}
     assert client.patch("/api/settings", json={"pin": PIN, "idle_minutes": 7}).json()["idle_minutes"] == \
-        {"hallway": 7, "kitchen": 7, "phone": 0}
+        {"large": 7, "compact": 7, "phone": 0}
     assert client.patch("/api/settings", json={"pin": PIN, "screensaver_seconds": 1}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "idle_minutes": {"attic": 1}}).status_code == 400
 

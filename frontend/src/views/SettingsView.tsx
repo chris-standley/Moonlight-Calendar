@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, Weather } from "../api/types";
+import { ApiError, STYLE_LABEL, Weather } from "../api/types";
 import { useApp, useData } from "../state";
 import { Segmented } from "../components/ui";
 import { WeatherIcon } from "../components/icons";
@@ -9,7 +9,7 @@ import { FamilyPanel } from "./FamilySettings";
 import { WeatherPicker } from "./WeatherSettings";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
-  const { api, people, settings, askPin, toast, layout } = useApp();
+  const { api, people, settings, askPin, toast, layout, screen } = useApp();
   const noFamily = people.length === 0;
   const [wx, setWx] = useState<Weather | null>(null);
   const [pickWx, setPickWx] = useState(false);
@@ -48,7 +48,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
           <div className="set-row"><span>Week starts on</span>
             <Segmented value={settings?.week_start ?? "monday"} onChange={setWeekStart} options={[{ value: "monday", label: "Monday" }, { value: "sunday", label: "Sunday" }]} />
           </div>
-          <div className="set-row"><span>This screen</span><b>{layout === "hallway" ? "Hallway (27 in)" : layout === "kitchen" ? "Kitchen (10 in)" : "Phone"}</b></div>
+          <div className="set-row"><span>This screen</span><b>{screen ? `${screen.name} · ` : ""}{STYLE_LABEL[layout]}</b></div>
           <div className="set-row"><span>Weather</span>
             <span className="set-pin"><b className="set-wx">{wx && <WeatherIcon condition={wx.current.condition} size={26} />}{wxName}</b>
               <button className="btn ghost small" onClick={() => setPickWx(true)}>Change</button></span>

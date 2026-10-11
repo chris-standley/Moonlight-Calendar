@@ -1,8 +1,8 @@
 """Now playing and playback control for a Home Assistant media_player (e.g. a Sonos speaker exposed by
 Music Assistant's Home Assistant integration), through the same Supervisor proxy as the weather.
 
-Which player a screen controls: Settings `media_players` ({hallway, kitchen, phone} -> entity id, "" = none);
-the kitchen defaults to MOONLIGHT_MEDIA_ENTITY when set (development; the add-on no longer has an option for it). Screens only ever name
+Which player a screen controls: its own speaker (a paired screen's setup, see routes/displays.py), else Settings
+`media_players` ({large, compact, phone} -> entity id, "" = none); compact defaults to MOONLIGHT_MEDIA_ENTITY when set (development; the add-on no longer has an option for it). Screens only ever name
 their layout, never an entity, so a screen can't read or drive any other Home Assistant entity.
 
 Live updates: one WebSocket to Home Assistant (ws://supervisor/core/websocket, authenticated with the Supervisor
@@ -34,7 +34,6 @@ from . import db
 
 log = logging.getLogger("moonlight.media")
 
-LAYOUTS = ("hallway", "kitchen", "phone")
 ENTITY_RE = re.compile(r"^media_player\.[a-z0-9_]+$")
 SUPERVISOR_API = "http://supervisor/core/api"
 SUPERVISOR_WS = "ws://supervisor/core/websocket"
@@ -72,7 +71,7 @@ class AuthFailed(Exception):
 # ---------------------------------------------------------------- configuration
 
 def default_entity() -> str:
-    """MOONLIGHT_MEDIA_ENTITY, used by the kitchen screen unless Settings say otherwise."""
+    """MOONLIGHT_MEDIA_ENTITY, used by compact screens unless Settings say otherwise."""
     raw = os.environ.get("MOONLIGHT_MEDIA_ENTITY", "").strip()
     if raw and not ENTITY_RE.match(raw):
         log.warning("MOONLIGHT_MEDIA_ENTITY %r isn't a media_player entity id; ignoring it", raw)
@@ -82,7 +81,7 @@ def default_entity() -> str:
 
 def players_setting(c) -> dict[str, str]:
     saved = db.get_setting(c, "media_players", {}) or {}
-    out = {"hallway": "", "kitchen": default_entity(), "phone": ""}
+    out = {"large": "", "compact": default_entity(), "phone": ""}
     for k, v in saved.items():
         if k in out and isinstance(v, str) and (v == "" or ENTITY_RE.match(v)):
             out[k] = v
@@ -93,15 +92,14 @@ def apply_settings(c, body: dict) -> bool:
     """PATCH /api/settings `media_players`: {layout: entity_id | "" | null}. Returns True if it was present."""
     if "media_players" not in body:
         return False
-    from .common import bad  # local import: common imports db, keep this module importable on its own
+    from .common import bad, layout_name  # local import: keep this module importable on its own
 
     val = body["media_players"]
     if not isinstance(val, dict):
-        raise bad("media_players must be an object like {\"kitchen\": \"media_player.kitchen\"}")
+        raise bad("media_players must be an object like {\"compact\": \"media_player.kitchen\"}")
     saved = dict(db.get_setting(c, "media_players", {}) or {})
     for k, v in val.items():
-        if k not in LAYOUTS:
-            raise bad("media_players keys are hallway, kitchen, phone")
+        k = layout_name(k, "media_players keys")
         v = "" if v is None else v
         if not isinstance(v, str) or (v and not ENTITY_RE.match(v.strip())):
             raise bad(f"media_players.{k} must be a media_player entity id or empty")
@@ -110,13 +108,25 @@ def apply_settings(c, body: dict) -> bool:
     return True
 
 
-def entity_for(layout: str) -> str:
-    if layout not in LAYOUTS:
-        from .common import bad
+def entity_for(layout: str, display: dict | None = None) -> str:
+    """The speaker for this screen: a paired screen's own choice, else its style's."""
+    from .common import layout_name
 
-        raise bad("layout must be one of: " + ", ".join(LAYOUTS))
+    layout = layout_name(layout)
+    speaker = setup_of(display).get("speaker")
+    if isinstance(speaker, str):
+        return speaker
     with db.connect() as c:
         return players_setting(c)[layout]
+
+
+def setup_of(display: dict | None) -> dict:
+    """A paired screen's own setup ({} when it follows its style), as stored in displays.setup."""
+    try:
+        val = json.loads((display or {}).get("setup") or "{}")
+    except ValueError:
+        return {}
+    return val if isinstance(val, dict) else {}
 
 
 def watched_entities() -> set[str]:

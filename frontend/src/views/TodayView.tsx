@@ -76,7 +76,7 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
         </section>
       </div>
       <div className="today-right">
-        {layout === "kitchen" && <NowPlayingCard />}
+        {layout === "compact" && <NowPlayingCard />}
         <section className="panel">
           <h2 className="panel-title" onClick={() => go("lists")}>{grocery ? `${grocery.emoji} ${grocery.name}` : "Lists"}</h2>
           {grocery ? <ListPanel list={grocery} compact /> : lists && <div className="sched-none">No shopping list yet. Make one in Lists.</div>}

@@ -12,24 +12,27 @@ implementation of the same contract, used for the published preview). Keep them 
 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
-  screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone},
-  media_players: {hallway, kitchen, phone}, screens: {hallway, kitchen, phone}}`
-  `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
-  (default `{hallway: 5, kitchen: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
+  screensaver_seconds: int, idle_minutes: {large, compact, phone},
+  media_players: {large, compact, phone}, screens: {large, compact, phone}}`
+  Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
+  `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
+  screen uses until it has its own setup (see Screens).
+  `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per style, 0 = never
+  (default `{large: 5, compact: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
-  `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each layout shows; the kitchen defaults to
+  `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
-  `screens` = per layout `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
-  chores, rewards, meals, lists` (Settings is always shown), and the one it opens on (default hallway
-  `{start: "calendar", sections: all but today}`, kitchen and phone `{start: "today", sections: all}`).
+  `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
+  chores, rewards, meals, lists` (Settings is always shown), and the one it opens on (default large
+  `{start: "calendar", sections: all but today}`, compact and phone `{start: "today", sections: all}`).
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
   screensaver_seconds, idle_minutes, media_players, screens, weather_entity`, plus `pin` (required) -> settings.
-  `screens` may be partial (`{kitchen: {start: "meals"}}`, merged per layout); `sections` must not be empty and `start`
+  `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
-  (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
-  merged) or one number (applies to hallway and kitchen). `new_pin` (4 digits) replaces the parent PIN; with no PIN set
+  (`{large: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{compact: 10}`,
+  merged) or one number (applies to large and compact). `new_pin` (4 digits) replaces the parent PIN; with no PIN set
   yet, the first `pin` sent becomes it.
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
 - `GET /api/sample-data` -> `{remaining: int}`: rows of the demo family (seeded on first start) still present.
@@ -207,10 +210,11 @@ Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
 
 ## Music (now playing on a Home Assistant speaker)
 The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a
-Sonos speaker). Screens only name their `layout` (`hallway|kitchen|phone`, default `kitchen`); the backend maps it to
-the entity in `settings.media_players`, so a screen can't read or control any other entity. Without Home Assistant
+Sonos speaker). Screens only name their `layout` (`large|compact|phone`, default `compact`); the backend maps it to
+the paired screen's own speaker (its setup), else the style's entity in `settings.media_players`, so a screen can't
+read or control any other entity. Without Home Assistant
 (`SUPERVISOR_TOKEN`, or `MOONLIGHT_HA_URL` + `MOONLIGHT_HA_TOKEN`) the commands return 409.
-- `GET /api/media/now-playing?layout=kitchen` -> NowPlaying:
+- `GET /api/media/now-playing?layout=compact` -> NowPlaying:
   `{layout, configured: bool, entity: str|null, name, state, show: bool, title, artist, album, duration, position,
   position_updated_at, volume: 0..1|null, muted: bool|null, shuffle: bool|null, repeat: "off"|"all"|"one"|null,
   source, app, music_assistant: bool, has_art: bool, art_url: str|null, supports: {play_pause, previous, next, volume,
@@ -221,7 +225,7 @@ the entity in `settings.media_players`, so a screen can't read or control any ot
   `supports` comes from the entity's `supported_features`. `music_assistant` = the entity has Music Assistant's
   `mass_player_type` attribute (or `app_id: music_assistant`). If HA is unreachable the last state is kept for 90 s,
   then `state: "unavailable", reachable: false`.
-- `GET /api/media/art?layout=kitchen&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
+- `GET /api/media/art?layout=compact&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
   `entity_picture_local`/`entity_picture` (a `/api/media_player_proxy/...` path, with its own HA token, or a public
   URL fetched without any token) and caches the last 12 images. `v` is a hash of the picture URL; only the layout's
   current (or recently cached) picture is served, and no HA token ever reaches the screen. Cache-Control: immutable.
@@ -231,7 +235,7 @@ the entity in `settings.media_players`, so a screen can't read or control any ot
   `repeat_set` (`off|all|one`). 400 bad action/value, 409 no speaker for that layout, 502 HA unreachable or refused.
 - `GET /api/media/players` -> `[{entity_id, name, state, music_assistant}]` every `media_player` in HA (Music
   Assistant ones first), for the Settings picker. 502 if HA can't be reached.
-- `GET /api/media/favourites?layout=kitchen` -> `[{uri, name, media_type}]` Music Assistant favourite playlists (10)
+- `GET /api/media/favourites?layout=compact` -> `[{uri, name, media_type}]` Music Assistant favourite playlists (10)
   and radio stations (6), via `music_assistant.get_library` (favorite: true) on the first loaded Music Assistant
   config entry; cached 15 minutes. Empty for non-Music Assistant players or on any error.
 - `POST /api/media/play` `{layout, uri}` -> NowPlaying. Plays one of those favourites with
@@ -267,19 +271,27 @@ Otherwise `/api/*` returns 401 `{"detail": "This screen is not paired", "pairing
 open without auth: `/api/health`, `/api/auth/status`, `/api/pair/*`. HTML and assets are always served so the pairing
 screen loads. A 401 makes the frontend show the pairing screen (so revoking kicks a screen back to pairing).
 
-Display = `{id, name, layout: "hallway"|"kitchen"|"phone"|"service", created_at, last_seen|null, revoked, current: bool}`
-(`current` = the screen making the request; `last_seen` updated at most once a minute).
+Every screen opens the same address, `/display`, and is told apart by the token it got when it was paired (a browser
+can't read a MAC address). Each paired screen has a name, a style and its own setup.
+
+Display = `{id, name, layout: "large"|"compact"|"phone"|"service", created_at, last_seen|null, revoked, current: bool,
+setup?: {start, sections, speaker, idle_minutes}, own_setup?: bool}`
+(`current` = the screen making the request; `last_seen` updated at most once a minute). Screens only: `setup` is what it
+shows, its own choices over its style's (Settings `screens`, `media_players`, `idle_minutes`); `own_setup` says whether
+it has choices of its own. The frontend takes the style from `GET /api/auth/status` and switches when it changes.
 - `GET /api/auth/status` -> `{required: bool, authorised: bool, via: "ingress"|"display"|"open"|null, display: Display|null}`
-- `POST /api/pair/start` `{layout, name?}` -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
+- `POST /api/pair/start` `{layout, name?}` (`layout` = the style the screen guesses from its size) -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
   `layout: "service"` is for a non-screen client (the Home Assistant integration sends `{layout: "service", name: "Home Assistant"}`);
   `name` is a suggestion used if the approver leaves the name blank.
 - `GET /api/pair/{pair_id}` -> `{status: "pending", expires_in}` | `{status: "expired"}` |
   `{status: "approved", token, display}` (once only; also sets the cookie). The screen stores the token in localStorage and reloads.
 - `POST /api/displays/approve` `{code, name?, layout?, pin}` (authorised session) -> Display. 404 if no screen waits with that code.
-  `layout` defaults to what the screen asked for; `name` to the suggested name, else "<Layout> screen". A `service`
+  `layout` defaults to what the screen asked for; `name` to the suggested name, else "Large screen" and so on. A `service`
   pairing always stays `service` (the approver's `layout` is ignored), and a screen can't be approved as `service`.
 - `GET /api/displays` -> `[Display]` (not revoked)
-- `PATCH /api/displays/{id}` `{name, pin}` -> Display (rename).
+- `PATCH /api/displays/{id}` `{pin, name?, layout?, setup?}` -> Display. `setup` = `{start?, sections?, speaker?,
+  idle_minutes?}` merged into the screen's own setup (`speaker` a `media_player.*` id or `""` for none; hiding the start
+  section moves it to the first one left), or `null` to follow its style again. A `service` has no style or setup.
 - `DELETE /api/displays/{id}` `{pin}` -> `{ok: true}`; that token stops working on its next request.
 
 Home Assistant discovery: inside the add-on (`SUPERVISOR_TOKEN` set, `discovery: [moonlight]` in config.yaml) Moonlight
@@ -321,4 +333,5 @@ The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 Changes broadcast the `photos` topic.
 
 ## Display
-- `GET /display/{hallway|kitchen|phone}` and every non-`/api` path serve the SPA `index.html`.
+- `GET /display` and every non-`/api` path serve the SPA `index.html`. Older `/display/hallway`, `/display/kitchen` and
+  `/display/phone` addresses keep working; a paired screen's style comes from the server either way.

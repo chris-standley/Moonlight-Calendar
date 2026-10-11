@@ -177,11 +177,12 @@ DEFAULT_SETTINGS = {
     "chore_approval": False,
     # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
-    "idle_minutes": {"hallway": 5, "kitchen": 3, "phone": 0},
-    # Per kind of screen: which sections the menu shows (Settings is always there) and which one it opens on.
+    "idle_minutes": {"large": 5, "compact": 3, "phone": 0},
+    # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
+    # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
     "screens": {
-        "hallway": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]},
-        "kitchen": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
+        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]},
+        "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
         "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
     },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
@@ -250,6 +251,23 @@ def init_db() -> None:
             if col not in have:
                 c.execute(f"ALTER TABLE calendars ADD COLUMN {col} {decl}")
         c.execute("CREATE INDEX IF NOT EXISTS events_calendar ON events(calendar_id)")
+        have = {r[1] for r in c.execute("PRAGMA table_info(displays)")}
+        if "setup" not in have:
+            c.execute("ALTER TABLE displays ADD COLUMN setup TEXT")  # JSON, see routes/displays.py
+        _rename_layouts(c)
+
+
+# Screen styles were named after rooms until 0.3.8.
+OLD_LAYOUTS = {"hallway": "large", "kitchen": "compact"}
+
+
+def _rename_layouts(c: sqlite3.Connection) -> None:
+    for old, new in OLD_LAYOUTS.items():
+        c.execute("UPDATE displays SET layout = ? WHERE layout = ?", (new, old))
+    for key in ("screens", "idle_minutes", "media_players"):
+        val = get_setting(c, key)
+        if isinstance(val, dict) and any(k in val for k in OLD_LAYOUTS):
+            set_setting(c, key, {OLD_LAYOUTS.get(k, k): v for k, v in val.items()})
 
 
 def is_empty() -> bool:

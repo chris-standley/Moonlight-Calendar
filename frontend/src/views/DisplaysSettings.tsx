@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { ApiError, DEFAULT_SCREENS, Display, ImmichAlbum, ImmichConfig, Layout, MediaPlayerOption, SECTIONS, Section, Settings } from "../api/types";
+import {
+  ApiError, DEFAULT_IDLE, DEFAULT_SCREENS, Display, DisplaySetup, ImmichAlbum, ImmichConfig, Layout, MediaPlayerOption, SECTIONS, STYLE_LABEL,
+  Section, Settings,
+} from "../api/types";
 import { useApp, useData, useNow } from "../state";
 import { Segmented, Sheet } from "../components/ui";
 import { IconPhotos } from "../components/icons";
@@ -16,32 +19,37 @@ export function ago(isoTime: string | null, now: Date): string {
   return d === 1 ? "Yesterday" : `${d} days ago`;
 }
 
-const KINDS: { layout: Layout; title: string; note: string }[] = [
-  { layout: "hallway", title: "Hallway screen", note: "Big wall screen" },
-  { layout: "kitchen", title: "Kitchen screen", note: "10in touch screen" },
-  { layout: "phone", title: "Phones", note: "Home Assistant app and phone browsers; no pairing needed" },
+const STYLES: { layout: Layout; note: string }[] = [
+  { layout: "large", note: "Big wall screen" },
+  { layout: "compact", note: "Small touch screen" },
+  { layout: "phone", note: "Held in the hand" },
 ];
 const SECTION_LABEL: Record<Section, string> = {
   today: "Today", calendar: "Calendar", chores: "Chores", rewards: "Rewards", meals: "Meals", lists: "Lists",
 };
 const SPEAKER_WHERE: Record<Layout, string> = {
-  kitchen: "Card on Today, album art on the screensaver",
-  hallway: "Small player in the top bar",
+  compact: "Card on Today, album art on the screensaver",
+  large: "Small player in the top bar",
   phone: "Small player in the top bar",
 };
 const IDLE_OPTS = [0, 1, 3, 5, 10, 30].map((v) => ({ value: String(v), label: v === 0 ? "Never" : `${v} min` }));
-const DEFAULT_IDLE: Record<Layout, number> = { hallway: 5, kitchen: 3, phone: 0 };
+const STYLE_OPTS = STYLES.map((x) => ({ value: x.layout, label: STYLE_LABEL[x.layout] }));
 
-/** Settings > Screens: each kind of screen (its sections, start page, speaker, screensaver and the paired
- *  devices showing it), plus connections such as the Home Assistant integration. */
+/** What a screen of this style shows without choices of its own (Settings `screens`, `media_players`, `idle_minutes`). */
+function styleSetup(settings: Settings | null, layout: Layout): DisplaySetup {
+  const s = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+  return { ...s, speaker: settings?.media_players?.[layout] ?? "", idle_minutes: settings?.idle_minutes?.[layout] ?? DEFAULT_IDLE[layout] };
+}
+
+/** Settings > Screens: every paired screen (its name, style and what it shows), what each style shows in the
+ *  Home Assistant app, and connections such as the Home Assistant integration. */
 export function ScreensPanel() {
   const { api, settings, askPin, toast } = useApp();
-  const [screens] = useData((a) => a.displays(), ["displays"], []);
+  const [screens] = useData((a) => a.displays(), ["displays", "settings"], []);
   const [players, setPlayers] = useState<MediaPlayerOption[] | null>(null);
   const [playersError, setPlayersError] = useState<string | null>(null);
   const [pairing, setPairing] = useState(false);
-  const [setting, setSetting] = useState<Layout | null>(null);
-  const [renaming, setRenaming] = useState<Display | null>(null);
+  const [editing, setEditing] = useState<{ display?: Display; layout: Layout } | null>(null);
   const now = useNow(30_000);
   useEffect(() => {
     api.mediaPlayers().then((p) => { setPlayers(p); setPlayersError(null); })
@@ -49,13 +57,16 @@ export function ScreensPanel() {
   }, [api]);
 
   async function revoke(d: Display) {
-    const pin = await askPin(d.layout === "service" ? `Disconnect ${d.name}? It stops getting Moonlight's data.`
-      : `Remove ${d.name}? It will need pairing again.`);
+    const pin = await askPin(`Disconnect ${d.name}? It stops getting Moonlight's data.`);
     if (!pin) return;
     try { await api.revokeDisplay(d.id, pin); toast(`${d.name} removed`); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't remove"); }
   }
   const speakerName = (id: string) => players?.find((p) => p.entity_id === id)?.name ?? id;
+  const summary = (s: DisplaySetup) =>
+    `Opens on ${SECTION_LABEL[s.start]} · ${s.sections.length} section${s.sections.length === 1 ? "" : "s"} · `
+    + `${s.speaker ? speakerName(s.speaker) : "No speaker"} · ${s.idle_minutes ? `Screensaver after ${s.idle_minutes} min` : "No screensaver"}`;
+  const devices = (screens ?? []).filter((d) => d.layout !== "service");
   const services = (screens ?? []).filter((d) => d.layout === "service");
 
   return (
@@ -65,46 +76,43 @@ export function ScreensPanel() {
         <button className="btn small" onClick={() => setPairing(true)}>Pair a new screen</button>
       </div>
       <p className="muted screens-help">
-        A wall screen opens <code>http://&lt;home-assistant&gt;:8091/display/kitchen</code> (or <code>/display/hallway</code>)
-        and shows a 6-digit code to enter here.
+        Every screen opens <code>http://&lt;home-assistant&gt;:8091/display</code> and shows a 6-digit code to enter here.
+        Name it, pick its style, then choose what it shows.
       </p>
-      {KINDS.map(({ layout, title, note }) => {
-        const setup = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
-        const speaker = settings?.media_players?.[layout] ?? "";
-        const idle = settings?.idle_minutes?.[layout] ?? DEFAULT_IDLE[layout];
-        const devices = (screens ?? []).filter((d) => d.layout === layout);
-        return (
-          <div key={layout} className="screen-kind">
-            <div className="screen-kind-head">
-              <span className={`screen-ico ${layout}`} aria-hidden />
-              <div className="screen-main">
-                <b>{title}</b>
-                <span>
-                  Opens on {SECTION_LABEL[setup.start]} · {setup.sections.length} section{setup.sections.length === 1 ? "" : "s"}
-                  {" · "}{speaker ? speakerName(speaker) : "No speaker"}
-                  {" · "}{idle ? `Screensaver after ${idle} min` : "No screensaver"}
-                </span>
-              </div>
-              <button className="btn ghost small" onClick={() => setSetting(layout)}>Set up</button>
+      <div className="screen-list">
+        {devices.map((d) => {
+          const l = d.layout as Layout;
+          return (
+            <button key={d.id} className="screen-row screen-device" onClick={() => setEditing({ display: d, layout: l })}>
+              <span className={`screen-ico ${l}`} aria-hidden />
+              <span className="screen-main">
+                <b>{d.name}{d.current && <em className="screen-this">This screen</em>}</b>
+                <span>{STYLE_LABEL[l]} · {d.setup ? summary(d.setup) : ""}</span>
+                <span>Seen {ago(d.last_seen, now).toLowerCase()}{d.own_setup ? "" : ` · Uses the ${STYLE_LABEL[l]} settings`}</span>
+              </span>
+              <span className="btn ghost small">Set up</span>
+            </button>
+          );
+        })}
+        {screens && devices.length === 0 && <div className="screen-note muted">No screens paired yet.</div>}
+      </div>
+      <h3 className="screens-sub">In the Home Assistant app</h3>
+      <p className="muted screens-help">
+        What Moonlight shows when it's opened from Home Assistant (the sidebar or the phone app), by screen size. Paired
+        screens use these too until they're set up on their own.
+      </p>
+      <div className="screen-list">
+        {STYLES.map(({ layout, note }) => (
+          <div key={layout} className="screen-row">
+            <span className={`screen-ico ${layout}`} aria-hidden />
+            <div className="screen-main">
+              <b>{STYLE_LABEL[layout]} <em className="screen-kind-note">{note}</em></b>
+              <span>{summary(styleSetup(settings, layout))}</span>
             </div>
-            {layout === "phone" ? <div className="screen-note muted">{note}</div> : (
-              <div className="screen-list">
-                {devices.map((d) => (
-                  <div key={d.id} className="screen-row">
-                    <div className="screen-main">
-                      <b>{d.name}{d.current && <em className="screen-this">This screen</em>}</b>
-                      <span>Paired · seen {ago(d.last_seen, now).toLowerCase()}</span>
-                    </div>
-                    <button className="btn ghost small" onClick={() => setRenaming(d)}>Rename</button>
-                    <button className="btn ghost small danger" onClick={() => revoke(d)}>Remove</button>
-                  </div>
-                ))}
-                {screens && devices.length === 0 && <div className="screen-note muted">No {title.toLowerCase()} paired yet.</div>}
-              </div>
-            )}
+            <button className="btn ghost small" onClick={() => setEditing({ layout })}>Set up</button>
           </div>
-        );
-      })}
+        ))}
+      </div>
       <h3 className="screens-sub">Connections</h3>
       <div className="screen-list">
         {services.map((d) => (
@@ -125,51 +133,93 @@ export function ScreensPanel() {
         )}
       </div>
       {pairing && <PairSheet onClose={() => setPairing(false)} />}
-      {setting && <ScreenSetupSheet layout={setting} title={KINDS.find((k) => k.layout === setting)!.title}
-        players={players} playersError={playersError} onClose={() => setSetting(null)} />}
-      {renaming && <RenameSheet display={renaming} onClose={() => setRenaming(null)} />}
+      {editing && <SetupSheet display={editing.display} layout={editing.layout}
+        players={players} playersError={playersError} onClose={() => setEditing(null)} />}
     </section>
   );
 }
 
-/** One kind of screen: which sections its menu shows, the one it opens on, its speaker and screensaver delay. */
-function ScreenSetupSheet({ layout, title, players, playersError, onClose }: {
-  layout: Layout; title: string; players: MediaPlayerOption[] | null; playersError: string | null; onClose: () => void;
+/** One paired screen (name, style, what it shows; remove), or one style's settings for the Home Assistant app. */
+function SetupSheet({ display, layout: initialLayout, players, playersError, onClose }: {
+  display?: Display; layout: Layout; players: MediaPlayerOption[] | null; playersError: string | null; onClose: () => void;
 }) {
   const { api, settings, askPin, toast } = useApp();
-  const setup = settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
-  const [sections, setSections] = useState<Section[]>(setup.sections);
-  const [start, setStart] = useState<Section>(setup.start);
-  const [speaker, setSpeaker] = useState(settings?.media_players?.[layout] ?? "");
-  const [idle, setIdle] = useState(settings?.idle_minutes?.[layout] ?? DEFAULT_IDLE[layout]);
+  const initial = display?.setup ?? styleSetup(settings, initialLayout);
+  const [name, setName] = useState(display?.name ?? "");
+  const [layout, setLayout] = useState<Layout>(initialLayout);
+  const [sections, setSections] = useState<Section[]>(initial.sections);
+  const [start, setStart] = useState<Section>(initial.start);
+  const [speaker, setSpeaker] = useState(initial.speaker);
+  const [idle, setIdle] = useState(initial.idle_minutes);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const shown = SECTIONS.filter((x) => sections.includes(x));
   const opensOn = shown.includes(start) ? start : shown[0];
+  const setup: DisplaySetup = { sections: shown, start: opensOn, speaker, idle_minutes: idle };
+  const changed = JSON.stringify(setup) !== JSON.stringify({ sections: initial.sections, start: initial.start, speaker: initial.speaker, idle_minutes: initial.idle_minutes });
+  const title = display ? display.name : `${STYLE_LABEL[initialLayout]} screens`;
   function toggle(x: Section) {
     if (sections.includes(x)) { if (sections.length > 1) setSections(sections.filter((y) => y !== x)); }
     else setSections([...sections, x]);
   }
   async function save() {
-    const pin = await askPin(`Change the ${title.toLowerCase()}`);
+    if (display && !name.trim()) return;
+    const pin = await askPin(`Change ${display ? display.name : `the ${title.toLowerCase()}`}`);
     if (!pin) return;
     setSaving(true);
     try {
-      await api.updateSettings({
-        pin, screens: { [layout]: { sections: shown, start: opensOn } },
-        media_players: { [layout]: speaker }, idle_minutes: { [layout]: idle },
-      });
+      if (display) {
+        await api.updateDisplay(display.id, {
+          pin, ...(name.trim() !== display.name ? { name: name.trim() } : {}), ...(layout !== display.layout ? { layout } : {}),
+          ...(changed ? { setup } : {}),
+        });
+      } else {
+        await api.updateSettings({
+          pin, screens: { [layout]: { sections: shown, start: opensOn } },
+          media_players: { [layout]: speaker }, idle_minutes: { [layout]: idle },
+        });
+      }
       toast("Saved");
       onClose();
     } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
     finally { setSaving(false); }
   }
+  async function followStyle() {
+    if (!display) return;
+    const pin = await askPin(`Use the ${STYLE_LABEL[layout].toLowerCase()} settings on ${display.name}`);
+    if (!pin) return;
+    try { await api.updateDisplay(display.id, { pin, setup: null, ...(layout !== display.layout ? { layout } : {}) }); toast("Saved"); onClose(); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
+  }
+  async function remove() {
+    if (!display) return;
+    if (!removing) { setRemoving(true); return; }
+    const pin = await askPin(`Remove ${display.name}? It will need pairing again.`);
+    if (!pin) return;
+    try { await api.revokeDisplay(display.id, pin); toast(`${display.name} removed`); onClose(); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't remove"); }
+  }
   return (
     <Sheet title={title} onClose={onClose} footer={<>
-      <button className="btn ghost" onClick={onClose}>Cancel</button>
+      {display ? <button className="btn ghost danger" onClick={remove}>{removing ? "Tap again to remove" : "Remove"}</button>
+        : <button className="btn ghost" onClick={onClose}>Cancel</button>}
       <span style={{ flex: 1 }} />
-      <button className="btn" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
+      <button className="btn" disabled={saving || (!!display && !name.trim())} onClick={save}>{saving ? "Saving…" : "Save"}</button>
     </>}>
       <div className="form">
+        {display && (<>
+          <label className="field-label">Name</label>
+          <input className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="e.g. Kitchen" />
+          <label className="field-label">Style</label>
+          <Segmented value={layout} options={STYLE_OPTS} onChange={(v) => setLayout(v as Layout)} />
+          <p className="muted connect-note">
+            {layout === "large" ? "For a big wall screen: a week at a glance." : layout === "compact" ? "For a small touch screen, like a 10in kitchen display." : "For a phone held in the hand."}
+            {layout !== display.layout && " The screen switches as soon as you save."}
+          </p>
+          {display.own_setup
+            ? <p className="muted connect-note">This screen has its own setup. <button type="button" className="link-btn" style={{ display: "inline", margin: 0 }} onClick={followStyle}>Use the {STYLE_LABEL[layout].toLowerCase()} settings instead</button></p>
+            : <p className="muted connect-note">Uses the {STYLE_LABEL[display.layout as Layout].toLowerCase()} settings until you change something below.</p>}
+        </>)}
         <label className="field-label">Sections in the menu</label>
         <div className="section-toggles">
           {SECTIONS.map((x) => (
@@ -205,30 +255,6 @@ function ScreenSetupSheet({ layout, title, players, playersError, onClose }: {
         <label className="field-label">Photo screensaver starts after</label>
         <Segmented value={String(idle)} options={IDLE_OPTS} onChange={(v) => setIdle(Number(v))} />
       </div>
-    </Sheet>
-  );
-}
-
-function RenameSheet({ display, onClose }: { display: Display; onClose: () => void }) {
-  const { api, askPin, toast } = useApp();
-  const [name, setName] = useState(display.name);
-  async function save() {
-    if (!name.trim()) return;
-    const pin = await askPin(`Rename ${display.name}`);
-    if (!pin) return;
-    try { await api.renameDisplay(display.id, name.trim(), pin); toast("Renamed"); onClose(); }
-    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't rename"); }
-  }
-  return (
-    <Sheet title={`Rename ${display.name}`} onClose={onClose} footer={<>
-      <button className="btn ghost" onClick={onClose}>Cancel</button>
-      <span style={{ flex: 1 }} />
-      <button className="btn" disabled={!name.trim()} onClick={save}>Save</button>
-    </>}>
-      <form className="form" onSubmit={(e) => { e.preventDefault(); save(); }}>
-        <label className="field-label">Name</label>
-        <input className="input" value={name} maxLength={60} autoFocus onChange={(e) => setName(e.target.value)} />
-      </form>
     </Sheet>
   );
 }
@@ -274,11 +300,8 @@ function PairSheet({ onClose }: { onClose: () => void }) {
             <button key={n} className={"chip-btn" + (name === n ? " on" : "")} onClick={() => setName(n)}>{n}</button>
           ))}
         </div>
-        <div className="field-label">Layout</div>
-        <Segmented value={layout} onChange={setLayout} options={[
-          { value: "auto", label: "As the screen asked" }, { value: "hallway", label: "Hallway" },
-          { value: "kitchen", label: "Kitchen" }, { value: "phone", label: "Phone" },
-        ]} />
+        <div className="field-label">Style</div>
+        <Segmented value={layout} onChange={setLayout} options={[{ value: "auto", label: "By its size" }, ...STYLE_OPTS]} />
         {error && <div className="form-error">{error}</div>}
       </div>
     </Sheet>
