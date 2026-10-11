@@ -52,6 +52,12 @@ h1, h2 { margin: 0; }
 .segmented { display: inline-flex; padding: 0.25rem; background: var(--surface-2); border-radius: 999px; }
 .segmented button { min-height: 2.4rem; padding: 0 1.1rem; border-radius: 999px; font-weight: 800; font-size: 0.95rem; color: var(--muted); }
 .segmented button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+/* In forms the options share the row and wrap onto a second one when the sheet is narrow (phones). */
+.form .segmented { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.6rem, 1fr)); gap: 0.2rem; border-radius: 1.3rem; max-width: 100%; }
+.form .segmented button { padding: 0 0.6rem; white-space: nowrap; }
+.edit-banner { margin: 0 1.6rem 0.6rem; padding: 0.5rem 0.9rem; border-radius: 0.8rem; background: #eef0fe; color: var(--accent); font-weight: 800; }
+.layout-phone .edit-banner { margin: 0 0.8rem 0.5rem; }
+.chore.editing { outline: 2px dashed color-mix(in srgb, var(--pc) 55%, transparent); outline-offset: -2px; }
 .avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; font-weight: 800; letter-spacing: 0.02em; transition: opacity 0.2s, filter 0.2s; }
 .avatar.dim { opacity: 0.35; filter: grayscale(0.6); }
 .avatar-btn { display: inline-flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.2rem; }

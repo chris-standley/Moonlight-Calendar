@@ -139,7 +139,7 @@ Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon
   ChoreDay = Chore + `{date, completed: bool, completed_at: str|null, streak: int}`.
   `streak` = number of consecutive due dates, walking back from `date` (counting `date` only if completed;
   if `date` is not completed, start at the previous due date), that were completed. Look back max 60 days.
-- `POST /api/chores` / `PATCH /api/chores/{id}` / `DELETE /api/chores/{id}`
+- `POST /api/chores` / `PATCH /api/chores/{id}` (any of title, emoji, person_id, points, time_of_day, schedule, sort) / `DELETE /api/chores/{id}` (also drops its completions)
 - `POST /api/chores/{id}/complete` `{date}` -> `{completed: true, balance}`; idempotent; adds ledger `+points`
   with reason `"<emoji> <title>"`.
 - `DELETE /api/chores/{id}/complete?date=` -> `{completed: false, balance}`; adds ledger `-points`, reason `"Undo: <title>"`.
