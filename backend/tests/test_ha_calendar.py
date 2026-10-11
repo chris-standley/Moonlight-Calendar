@@ -120,6 +120,18 @@ def test_list_add_and_show_ha_calendars(client, ha):
     assert sorted(e["title"] for e in cal_events(client, bins)) == ["Black bin", "Recycling"]
     assert caldav_sync.sync_account(bins["id"]) is False
 
+    # Give it the household's own name; a poll keeps it.
+    cal = next(c for c in client.get("/api/calendars").json() if c["account_id"] == bins["id"])
+    r = client.patch(f"/api/calendars/{cal['id']}", json={"name": "  Bin days "})
+    assert (r.json()["name"], r.json()["source_name"]) == ("Bin days", "Bin collections")
+    ha.calendars["calendar.bins"] = ("Waste collections", ha.calendars["calendar.bins"][1])
+    caldav_sync.sync_account(bins["id"], force=True)
+    assert next(c for c in client.get("/api/calendars").json() if c["id"] == cal["id"])["name"] == "Bin days"
+    assert next(a for a in client.get("/api/accounts").json() if a["id"] == bins["id"])["label"] == "Bin days"
+    r = client.patch(f"/api/calendars/{cal['id']}", json={"name": ""})
+    assert r.json()["name"] == "Bin collections"
+    assert client.patch(f"/api/calendars/{cal['id']}", json={"name": 3}).status_code == 400
+
     # Rename, then remove.
     client.patch(f"/api/accounts/{bins['id']}", json={"pin": PIN, "label": "Bins"})
     assert any(c["name"] == "Bins" for c in client.get("/api/calendars").json())

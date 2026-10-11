@@ -167,6 +167,9 @@ def remove_sample(c, data: dict) -> int:
         for ev in db.rows(c, "SELECT id, person_ids FROM events"):
             kept = [p for p in json.loads(ev["person_ids"]) if p not in people]
             c.execute("UPDATE events SET person_ids = ? WHERE id = ?", (json.dumps(kept), ev["id"]))
+        for cal in db.rows(c, "SELECT id, person_ids FROM calendars"):
+            kept = [p for p in json.loads(cal["person_ids"]) if p not in people]
+            c.execute("UPDATE calendars SET person_ids = ? WHERE id = ?", (json.dumps(kept), cal["id"]))
     if chores:
         c.execute(f"DELETE FROM completions WHERE chore_id IN ({_marks(chores)})", chores)
     if ids["recipes"]:

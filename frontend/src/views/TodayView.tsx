@@ -3,9 +3,9 @@ import { Occurrence } from "../api/types";
 import { addDays, fmtDow, today } from "../dates";
 import { useApp, useData } from "../state";
 import { Avatar, Ring, tint } from "../components/ui";
-import { IconStar } from "../components/icons";
+import { IconPlus, IconStar } from "../components/icons";
 import { ScheduleView } from "./CalendarView";
-import { EventDetail, EventForm } from "./EventSheets";
+import { EventDetail, EventForm, newEventDefaults } from "./EventSheets";
 import { ListPanel } from "./ListsView";
 import { SLOTS } from "./MealsView";
 import { FamilyPrompt } from "./FamilySettings";
@@ -23,6 +23,7 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
   const [lists] = useData((api) => api.lists(), ["lists"], []);
   const [open, setOpen] = useState<Occurrence | null>(null);
   const [edit, setEdit] = useState<Occurrence | null>(null);
+  const [adding, setAdding] = useState(false);
   const grocery = lists?.find((l) => l.kind === "grocery");
   const todayMeals = SLOTS.map((s) => ({ s, m: meals?.find((x) => x.date === t && x.slot === s.key) })).filter((x) => x.m);
   const dinners = Array.from({ length: 6 }, (_, i) => addDays(t, i + 1)).map((d) => ({ d, m: meals?.find((x) => x.date === d && x.slot === "dinner") }));
@@ -31,7 +32,10 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
   return (
     <div className="today-view">
       <section className="panel agenda">
-        <h2 className="panel-title">Coming up</h2>
+        <div className="panel-head">
+          <h2 className="panel-title">Coming up</h2>
+          <button className="btn small" onClick={() => setAdding(true)}><IconPlus size={18} /> Add event</button>
+        </div>
         {events && events.length === 0 ? <div className="sched-none">Nothing planned today or tomorrow</div>
           : <ScheduleView start={t} days={2} events={events ?? []} meals={[]} weather={weather} people={people} onOpen={setOpen} compact />}
       </section>
@@ -80,6 +84,7 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
       </div>
       {open && <EventDetail occ={open} onClose={() => setOpen(null)} onEdit={() => { setEdit(open); setOpen(null); }} />}
       {edit && <EventForm id={edit.id} initial={edit} onClose={() => setEdit(null)} />}
+      {adding && <EventForm initial={newEventDefaults(t, [], 9)} onClose={() => setAdding(false)} />}
     </div>
   );
 }

@@ -152,6 +152,8 @@ export interface Account {
 export interface AccountIn { kind: AccountKind; username: string; password: string; server_url?: string; label?: string; pin: string }
 export interface SyncCalendar {
   id: string; account_id: string; name: string; color: string; person_ids: string[]; visible: boolean; read_only: boolean;
+  /** The server's own name; `name` is the household's name for it when one was set. */
+  source_name?: string;
   /** Shown as "Chris – busy" blocks: the household's choice, else automatic (every summary is Busy/Free/...). */
   busy_blocks?: boolean; busy_blocks_auto?: boolean; busy_blocks_set?: boolean;
 }
@@ -259,7 +261,7 @@ export interface Api {
   updateFeed(id: string, patch: { url?: string; label?: string; pin: string }): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;
   /** busy_blocks: null = automatic. */
-  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null }): Promise<SyncCalendar>;
+  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null; name?: string | null }): Promise<SyncCalendar>;
   // Music (see API.md "Music"): the speaker set for a screen layout, through Home Assistant / Music Assistant.
   nowPlaying(layout: Layout): Promise<NowPlaying>;
   mediaCommand(layout: Layout, action: MediaAction, value?: number | boolean | string): Promise<NowPlaying>;

@@ -455,3 +455,28 @@ def test_background_loop_syncs(db_file, tmp_path, server, dav, monkeypatch):
         for b in c.bodies:
             assert PASSWORD not in b
     assert caldav_sync.manager is None
+
+
+def test_network_blips_are_retried_before_showing_an_error(client, server, dav, monkeypatch, no_retry_waits):
+    dav.make_calendar(name="Family", cal_id="family").save_event(
+        ics("e1", "Swim", "20261010T090000", "20261010T100000"))
+    acct = connect(client, server)
+    real = caldav_sync.Remote.list_calendars
+    blips = {"left": 2}
+
+    def flaky(self, home):
+        if blips["left"]:
+            blips["left"] -= 1
+            return self._call(lambda: (_ for _ in ()).throw(ConnectionError("reset by peer")))
+        return real(self, home)
+
+    monkeypatch.setattr(caldav_sync.Remote, "list_calendars", flaky)
+    # Two blips in a row: retried quietly, and the sync still succeeds.
+    assert sync(client, acct)["status"] == "ok"
+    assert no_retry_waits == list(caldav_sync.RETRY_WAITS)
+
+    # Still unreachable after every retry: now it's shown.
+    blips["left"] = len(caldav_sync.RETRY_WAITS) + 1
+    r = client.post(f"/api/accounts/{acct['id']}/sync").json()
+    assert r["status"] == "error" and "Couldn't reach" in r["last_error"] and "ConnectionError" in r["last_error"]
+    assert sync(client, acct)["status"] == "ok"

@@ -30,7 +30,8 @@ def account_out(c, r: dict) -> dict:
 
 def calendar_out(r: dict) -> dict:
     return {
-        "id": r["id"], "account_id": r["account_id"], "name": r["name"], "color": r["color"],
+        "id": r["id"], "account_id": r["account_id"], "name": r.get("display_name") or r["name"],
+        "source_name": r["name"], "color": r["color"],
         "person_ids": json.loads(r["person_ids"]), "visible": bool(r["visible"]), "read_only": bool(r["read_only"]),
         "busy_blocks": bool(r["busy_blocks"] if r.get("busy_blocks") is not None else r.get("busy_auto")),
         "busy_blocks_auto": bool(r.get("busy_auto")), "busy_blocks_set": r.get("busy_blocks") is not None,
@@ -240,7 +241,8 @@ async def update_account(account_id: str, body: dict = Body(...)):
         if "label" in body:
             c.execute("UPDATE accounts SET label = ? WHERE id = ?", (req_str(body, "label"), account_id))
             if r["kind"] in SINGLE:  # a link's single calendar carries its name
-                c.execute("UPDATE calendars SET name = ? WHERE account_id = ?", (req_str(body, "label"), account_id))
+                c.execute("UPDATE calendars SET name = ?, display_name = NULL WHERE account_id = ?",
+                          (req_str(body, "label"), account_id))
         out = account_out(c, db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,)))
     await hub.broadcast("accounts")
     return out
@@ -300,12 +302,20 @@ async def update_calendar(calendar_id: str, body: dict = Body(...)):
             if not (len(color) == 7 and color.startswith("#")):
                 raise bad("color must look like #RRGGBB")
             r["color"] = color
+        if "name" in body:  # a name to show instead of the source's; "" or null goes back to the source's
+            if body["name"] is not None and not isinstance(body["name"], str):
+                raise bad("name must be text")
+            r["display_name"] = (body["name"] or "").strip()[:80] or None
         if "busy_blocks" in body:  # true / false, or null to follow the automatic guess
             if body["busy_blocks"] is not None and not isinstance(body["busy_blocks"], bool):
                 raise bad("busy_blocks must be true, false or null")
             r["busy_blocks"] = None if body["busy_blocks"] is None else int(body["busy_blocks"])
-        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ? WHERE id = ?",
-                  (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"), calendar_id))
+        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ?, display_name = ? "
+                  "WHERE id = ?", (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"),
+                                   r.get("display_name"), calendar_id))
+        if "name" in body:  # a link or Home Assistant calendar is its account: keep the two names the same
+            c.execute("UPDATE accounts SET label = ? WHERE id = ? AND kind IN ('ics', 'ha')",
+                      (r.get("display_name") or r["name"], r["account_id"]))
     await hub.broadcast("accounts", "events")
     return calendar_out(r)
 

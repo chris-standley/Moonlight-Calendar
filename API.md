@@ -77,8 +77,9 @@ account whose login is rejected gets `status: "auth_failed"` and is not retried 
 
 Account = `{id, kind: "icloud"|"caldav"|"ics", label, username, server_url, status: "ok"|"auth_failed"|"error",
 last_error: str|null, last_sync: datetime|null, calendar_count}`. The password is never returned.
-Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_only: bool,
+Calendar = `{id, account_id, name, source_name, color, person_ids: [id], visible: bool, read_only: bool,
 busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks: see Calendar links).
+`name` is the household's own name for it when one was set, else `source_name` (the server's name).
 - `GET /api/accounts` -> `[Account]`
 - `POST /api/accounts` `{kind, username, password, server_url (caldav only), label?, pin}` -> Account.
   Logs in and discovers event calendars first: 400 if the login is rejected, 502 if the server can't be
@@ -89,8 +90,9 @@ busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks:
 - `DELETE /api/accounts/{id}` `{pin}` -> `{ok: true}`. Forgets the account and its cached events (nothing
   is deleted in iCloud).
 - `POST /api/accounts/{id}/sync` -> Account (after syncing now; check `status`).
-- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{person_ids?, visible?, color?,
-  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic).
+- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{name?, person_ids?, visible?, color?,
+  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic; `name` "" or `null` = the server's name
+  again). The name survives syncs.
   Hidden calendars keep syncing but their events are left out of `GET /api/events`.
 - `GET /api/sync/status` -> `{running, interval_seconds, needs_reconnect: bool,
   accounts: [{id, label, kind, status, last_sync, last_error}]}`

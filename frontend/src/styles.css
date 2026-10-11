@@ -611,8 +611,8 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .cal-row { display: flex; align-items: center; gap: 0.7rem; min-height: 3.2rem; padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
 .cal-row.off .cal-name, .cal-row.off .cal-who, .cal-row.off .cal-swatch { opacity: 0.45; }
 .cal-swatch { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 0.45rem; }
-.cal-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem; text-align: left; font-weight: 800; }
-.cal-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-name { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.5rem; padding: 0.3rem 0; text-align: left; font-weight: 800; }
+.cal-name b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-who { display: flex; align-items: center; gap: 0.15rem; min-height: 2.4rem; padding: 0 0.3rem; font-size: 0.85rem; font-weight: 700; }
 .cal-none { padding: 0.6rem 0; font-weight: 700; }
 .tag { flex: none; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--surface-2); color: var(--muted); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
