@@ -1,3 +1,49 @@
+add_chore:
+  fields:
+    person:
+      required: true
+      example: Chris
+      selector:
+        text:
+          multiple: true
+    title:
+      required: true
+      example: Put the bins out
+      selector:
+        text:
+    emoji:
+      required: false
+      example: "🗑️"
+      selector:
+        text:
+    points:
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+    time_of_day:
+      required: false
+      default: anytime
+      selector:
+        select:
+          options:
+            - morning
+            - afternoon
+            - evening
+            - anytime
+    date:
+      required: false
+      selector:
+        date:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight
+
 complete_chore:
   fields:
     person:

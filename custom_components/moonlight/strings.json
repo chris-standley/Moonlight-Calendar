@@ -94,6 +94,40 @@
     }
   },
   "services": {
+    "add_chore": {
+      "name": "Add chore",
+      "description": "Adds a one-off chore for a day in Moonlight (for example from an automation when the dishwasher finishes). If the same chore is already waiting for that person on that day, nothing is added.",
+      "fields": {
+        "person": {
+          "name": "Person",
+          "description": "Who does it: a name or person id, or several."
+        },
+        "title": {
+          "name": "Chore",
+          "description": "What to do."
+        },
+        "emoji": {
+          "name": "Emoji",
+          "description": "Optional icon for the chore."
+        },
+        "points": {
+          "name": "Stars",
+          "description": "Stars earned for doing it."
+        },
+        "time_of_day": {
+          "name": "Time of day",
+          "description": "Which part of the day it shows under."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Which day (default today)."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    },
     "complete_chore": {
       "name": "Complete chore",
       "description": "Ticks off a chore in Moonlight and awards its stars.",

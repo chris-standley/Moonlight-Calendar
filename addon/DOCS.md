@@ -60,6 +60,11 @@ work calendar: Outlook on the web > Settings > Calendar > Shared calendars > Pub
 "Can view when I'm busy" and copy the ICS link; its events show as "busy" blocks. Some workplaces block
 publishing. Treat the link like a password.
 
+Settings > Calendars > Home Assistant shows one of Home Assistant's own calendars (bin collections, Workday,
+energy saving sessions), read-only and refreshed every 15 minutes. Pick everyone as its people for household
+things like bin day. To turn calendar events or appliances into chores (bins out the night before, empty the
+dishwasher when it finishes), use the Moonlight integration's `moonlight.add_chore` action in an automation.
+
 ## Photo screensaver
 
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter

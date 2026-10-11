@@ -113,6 +113,10 @@ served by `httpx.MockTransport`).
   speaker per screen in Settings > Music. Works with any HA
   `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
   show a small player in the top bar only if given a speaker.
+- Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
+  energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.
+- Chores from automations: the integration's `moonlight.add_chore` action adds a one-off chore, for example
+  the night before bin day or when the dishwasher finishes (examples in its README).
 - Entities and services: install the `moonlight` integration through HACS, see `custom_components/moonlight/README.md`.
 
 ## Your family

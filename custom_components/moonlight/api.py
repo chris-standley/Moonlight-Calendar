@@ -105,6 +105,9 @@ class MoonlightClient:
     async def chores(self, day: str) -> list[dict]:
         return await self._req("GET", "/api/chores", params={"date": day})
 
+    async def add_chore(self, chore: dict) -> dict:
+        return await self._req("POST", "/api/chores", json=chore)
+
     async def complete_chore(self, chore_id: str, day: str) -> dict:
         return await self._req("POST", f"/api/chores/{chore_id}/complete", json={"date": day})
 

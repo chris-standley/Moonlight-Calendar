@@ -43,7 +43,7 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
           <span>{occ.all_day ? "All day" : `${fmtTime(occ.start)} – ${fmtTime(occ.end)}`}</span>
         </div>
         {occ.location && <div className="detail-row"><IconPin size={20} /> {occ.location}</div>}
-        {occ.custom_repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats (custom pattern set in {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "the published calendar" : "the calendar app"})</div>}
+        {occ.custom_repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats (custom pattern set in {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "the published calendar" : occ.source === "ha" ? "Home Assistant" : "the calendar app"})</div>}
         {occ.repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats {REPEAT_LABEL[occ.repeat.freq].toLowerCase()}{occ.repeat.byday?.length ? ` on ${occ.repeat.byday.map((d) => d[0] + d[1].toLowerCase()).join(", ")}` : ""}</div>}
         <div className="detail-people">
           {who.map((p) => <span key={p!.id} className="chip" style={{ background: p!.color + "22" }}><Avatar person={p!} size={1.6} /> {p!.name}</span>)}
@@ -53,7 +53,7 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
           : <div className="detail-row">{occ.title}</div>)}
         {occ.notes && <p className="detail-notes">{occ.notes}</p>}
         {occ.source && (
-          <div className="detail-source"><IconCloud size={18} /> {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "Calendar link" : "CalDAV"}{cal ? ` · ${cal.name}` : ""}{readOnly ? " · read-only" : ""}</div>
+          <div className="detail-source"><IconCloud size={18} /> {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "Calendar link" : occ.source === "ha" ? "Home Assistant" : "CalDAV"}{cal ? ` · ${cal.name}` : ""}{readOnly ? " · read-only" : ""}</div>
         )}
       </div>
     </Sheet>

@@ -600,7 +600,7 @@ def sync_account(account_id: str, force: bool = False) -> bool:
             acct = db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,))
         if not acct:
             return False
-        if acct["kind"] == "ics":
+        if acct["kind"] in ("ics", "ha"):
             return _sync_feed(acct, force)
         remote = remote_for(acct)
         try:
@@ -634,9 +634,9 @@ def sync_account(account_id: str, force: bool = False) -> bool:
 
 
 def _sync_feed(acct: dict, force: bool) -> bool:
-    from . import ics_feed  # imports this module
+    from . import ha_calendar, ics_feed  # import this module
     try:
-        changed = ics_feed.sync_feed(acct, force)
+        changed = ha_calendar.sync(acct) if acct["kind"] == "ha" else ics_feed.sync_feed(acct, force)
     except SyncError as e:
         _set_status(acct["id"], "error", str(e))
         raise
@@ -800,8 +800,8 @@ def delete_event(existing: dict) -> None:
 # ---------------------------------------------------------------- background loop
 
 class SyncManager:
-    """Polls every CalDAV account every `interval` seconds and every ICS feed every `feed_interval`
-    seconds (default 15 min), with exponential backoff on errors.
+    """Polls every CalDAV account every `interval` seconds and every ICS feed and Home Assistant calendar
+    every `feed_interval` seconds (default 15 min), with exponential backoff on errors.
 
     An account whose login fails is marked auth_failed and skipped until its credentials change.
     """
@@ -841,7 +841,7 @@ class SyncManager:
     def interval_for(self, account_id: str) -> float:
         with db.connect() as c:
             r = db.row(c, "SELECT kind FROM accounts WHERE id = ?", (account_id,))
-        return self.feed_interval if r and r["kind"] == "ics" else self.interval
+        return self.feed_interval if r and r["kind"] in ("ics", "ha") else self.interval
 
     def synced(self, account_id: str) -> None:
         """An account was just synced outside the loop (e.g. a feed added): next poll one interval later."""
