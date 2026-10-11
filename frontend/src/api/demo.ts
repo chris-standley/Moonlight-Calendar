@@ -374,6 +374,13 @@ export function demoApi(): Api {
       const ch: Chore = { ...c, id: uid("ch"), sort: st.chores.length };
       st.chores.push(ch); emit("chores"); return clone(ch);
     },
+    async updateChore(id, patch) {
+      const ch = find(st.chores, id);
+      if ("title" in patch && !patch.title?.trim()) throw new ApiError(400, "title is required");
+      if (patch.person_id && !st.people.some((p) => p.id === patch.person_id)) throw new ApiError(400, "person_id must be an existing person");
+      Object.assign(ch, patch);
+      emit("chores"); return clone(ch);
+    },
     async deleteChore(id) { st.chores = st.chores.filter((c) => c.id !== id); emit("chores"); },
     async completeChore(id, date) {
       const c = find(st.chores, id);

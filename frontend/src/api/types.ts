@@ -179,6 +179,7 @@ export interface Api {
   allChores(): Promise<Chore[]>;
   chores(date: string): Promise<ChoreDay[]>;
   createChore(c: Omit<Chore, "id" | "sort">): Promise<Chore>;
+  updateChore(id: string, patch: Partial<Omit<Chore, "id">>): Promise<Chore>;
   deleteChore(id: string): Promise<void>;
   completeChore(id: string, date: string): Promise<number>;
   uncompleteChore(id: string, date: string): Promise<number>;

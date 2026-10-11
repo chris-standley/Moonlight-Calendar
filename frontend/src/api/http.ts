@@ -68,6 +68,7 @@ export function httpApi(base = ""): Api {
     allChores: () => get("/api/chores/all"),
     chores: (date) => get("/api/chores" + q({ date })),
     createChore: (c) => req("POST", "/api/chores", c),
+    updateChore: (id, patch) => req("PATCH", `/api/chores/${id}`, patch),
     deleteChore: async (id) => { await req("DELETE", `/api/chores/${id}`); },
     completeChore: async (id, date) => (await req<{ balance: number }>("POST", `/api/chores/${id}/complete`, { date })).balance,
     uncompleteChore: async (id, date) => (await req<{ balance: number }>("DELETE", `/api/chores/${id}/complete` + q({ date }))).balance,
