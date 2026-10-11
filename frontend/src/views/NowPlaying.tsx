@@ -1,4 +1,4 @@
-// "Now playing" for the speaker set for this screen (Settings > Screens > Set up): a compact card on Today (kitchen), a pill in
+// "Now playing" for the speaker set for this screen (Settings > Screens > Set up): a card on Today (compact screens), a pill in
 // the top bar elsewhere, a big sheet with album art, and a corner card on the screensaver.
 import { createContext, CSSProperties, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Api, ApiError, Layout, MediaAction, MediaFavourite, NowPlaying } from "../api/types";
@@ -176,7 +176,7 @@ function Volume({ np }: { np: NowPlaying }) {
   );
 }
 
-/** Today (kitchen): compact card. Hidden when nothing is playing or queued. */
+/** Today (compact screens): a card. Hidden when nothing is playing or queued. */
 export function NowPlayingCard() {
   const { np, at, openSheet } = useMedia();
   if (!np?.show) return null;
@@ -196,7 +196,7 @@ export function NowPlayingCard() {
   );
 }
 
-/** Top bar: a small pill (hallway, phone, and kitchen tabs other than Today). */
+/** Top bar: a small pill (large screens, phones, and compact screens away from Today). */
 export function NowPlayingPill() {
   const { np, openSheet } = useMedia();
   const cmd = useCommand();

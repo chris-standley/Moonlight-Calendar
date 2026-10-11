@@ -23,11 +23,14 @@ Moonlight's Settings. The weather comes from a Home Assistant weather entity you
 
 ## Wall screens
 
-On the screen's browser open `http://<ha-host>:8091/display/hallway` (or `kitchen`, `phone`). It shows a 6-digit
-code: in Moonlight (sidebar or phone) go to Settings > Screens > Pair a new screen and enter the code and the PIN.
-The screen remembers its pairing; rename or remove it in the same place. Each kind of screen (hallway, kitchen,
-phones) has a Set up button there: which sections its menu shows, which one it opens on, which speaker it shows and
-when the photo screensaver starts.
+Every screen opens the same address: `http://<ha-host>:8091/display`. It shows a 6-digit code: in Moonlight (sidebar
+or phone) go to Settings > Screens > Pair a new screen, enter the code and the PIN, and give the screen a name. The
+screen remembers its pairing. Tap it in Settings > Screens to rename it, pick its style (Large for a big wall screen,
+Compact for a small touch screen, Phone) and choose what it shows: the sections in its menu, the one it opens on, its
+speaker and when the photo screensaver starts. Remove it there too.
+
+Below the screens, "In the Home Assistant app" sets the same choices per style for Moonlight opened from Home
+Assistant's sidebar or phone app. Paired screens follow those until they're given choices of their own.
 
 For Home Assistant automations and entities, install the Moonlight integration through HACS (custom repository
 `https://github.com/chris-standley/Moonlight-Calendar`, type Integration) and restart Home Assistant. The add-on
@@ -36,7 +39,7 @@ code is needed.
 
 ## Music
 
-The kitchen screen can show what's playing on a speaker (album art, title, progress, play/pause, skip, volume) and
+A screen can show what's playing on a speaker (album art, title, progress, play/pause, skip, volume) and
 put the album art on the screensaver. Moonlight drives the speaker through Home Assistant, so anything that is a
 `media_player` entity works; for Sonos the recommended route is Music Assistant:
 
@@ -48,8 +51,8 @@ put the album art on the screensaver. Moonlight drives the speaker through Home 
    automatically; otherwise Add integration > Music Assistant. It creates a `media_player` entity for each Music
    Assistant player (e.g. `media_player.kitchen`). Use that entity rather than the one from Home Assistant's own Sonos
    integration: it knows Music Assistant's queue, and Moonlight can then offer your Music Assistant favourites.
-3. Pick it: in Moonlight go to Settings > Screens > Kitchen screen > Set up and choose its speaker (Music Assistant players are marked). The hallway and phones can get one too; they show a small
-   player in the top bar.
+3. Pick it: in Moonlight go to Settings > Screens, tap the screen and choose its speaker (Music Assistant players are
+   marked). Compact screens show a card on Today; large screens and phones show a small player in the top bar.
 
 Moonlight follows the speaker over Home Assistant's WebSocket API, so changes made in the Sonos or Music Assistant
 apps appear straight away; while Home Assistant restarts it falls back to checking every few seconds. Album art is

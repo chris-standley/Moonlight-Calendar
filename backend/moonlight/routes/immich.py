@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
 from .. import db, immich
-from ..common import as_int, bad, body_dict, hub, not_found, require_pin
+from ..common import as_int, bad, body_dict, hub, layout_name, not_found, require_pin
 
 router = APIRouter(prefix="/api")
 
@@ -29,12 +29,11 @@ def apply_settings(c, body: dict) -> None:
         val = body["idle_minutes"]
         cur = dict(db.get_setting(c, "idle_minutes", db.DEFAULT_SETTINGS["idle_minutes"]))
         if isinstance(val, (int, float)) and not isinstance(val, bool):
-            val = {k: val for k in ("hallway", "kitchen")}  # one number: both wall screens
+            val = {k: val for k in ("large", "compact")}  # one number: both wall screen styles
         if not isinstance(val, dict):
-            raise bad("idle_minutes must be a number or {hallway, kitchen, phone}")
+            raise bad("idle_minutes must be a number or {large, compact, phone}")
         for k, v in val.items():
-            if k not in ("hallway", "kitchen", "phone"):
-                raise bad("idle_minutes keys are hallway, kitchen, phone")
+            k = layout_name(k, "idle_minutes keys")
             v = as_int(v, f"idle_minutes.{k}")
             if not 0 <= v <= 1440:
                 raise bad("idle_minutes must be between 0 (never) and 1440")

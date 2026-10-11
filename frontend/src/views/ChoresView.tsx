@@ -24,7 +24,7 @@ export function ChoresView() {
     if (editing) { setEditing(false); return; }
     if (await askPin("Edit chores")) setEditing(true);
   }
-  const [who, setWho] = useState<"everyone" | "kids">(layout === "kitchen" ? "kids" : "everyone");
+  const [who, setWho] = useState<"everyone" | "kids">(layout === "compact" ? "kids" : "everyone");
   const [chores] = useData((api) => api.chores(date), ["chores"], [date]);
   const [points] = useData((api) => api.points(), ["points"], []);
   const cols = people.filter((p) => who === "everyone" || p.role === "child");

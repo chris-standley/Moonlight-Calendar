@@ -3,7 +3,7 @@
 import seed from "../../../seed/demo.json";
 import {
   Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
-  DEFAULT_SCREENS, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
+  DEFAULT_IDLE, DEFAULT_SCREENS, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
@@ -294,8 +294,8 @@ export function demoApi(): Api {
     return e.calendar_id ?? null;
   };
 
-  // The demo kitchen screen has a (pretend) Music Assistant speaker; other screens have none until set in Settings.
-  const mediaPlayers = () => ({ hallway: "", kitchen: "media_player.kitchen", phone: "", ...st.settings.media_players });
+  // Compact demo screens have a (pretend) Music Assistant kitchen speaker; others have none until set in Settings.
+  const mediaPlayers = () => ({ large: "", compact: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
     return { weather_entity: "", ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
@@ -314,8 +314,8 @@ export function demoApi(): Api {
       if (rest.weather_entity === null) rest.weather_entity = "";
       Object.assign(st.settings, rest);
       if (media_players) {
-        if (Object.entries(media_players).some(([k, v]) => !["hallway", "kitchen", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
-          throw new ApiError(400, "media_players must map hallway/kitchen/phone to a media_player entity id or empty");
+        if (Object.entries(media_players).some(([k, v]) => !["large", "compact", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
+          throw new ApiError(400, "media_players must map large/compact/phone to a media_player entity id or empty");
         st.settings.media_players = { ...st.settings.media_players, ...media_players };
       }
       if (idle_minutes) st.settings.idle_minutes = { ...st.settings.idle_minutes, ...idle_minutes };
@@ -541,7 +541,10 @@ export function demoApi(): Api {
         { entity_id: "weather.openweathermap", name: "OpenWeatherMap", available: false, condition: null, temperature: null, unit: "C", attribution: null },
       ];
     },
-    ...demoExtras(checkPin, emit), // screens + simulated Immich, kept in memory
+    ...demoExtras(checkPin, emit, (l) => { // screens + simulated Immich, kept in memory
+      const s = settingsOut();
+      return { ...(s.screens?.[l] ?? DEFAULT_SCREENS[l]), speaker: s.media_players?.[l] ?? "", idle_minutes: s.idle_minutes?.[l] ?? DEFAULT_IDLE[l] };
+    }),
     ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {

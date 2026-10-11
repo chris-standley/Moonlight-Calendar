@@ -13,7 +13,7 @@ screensaver from Immich; speaker controls and album art through Music Assistant.
 | `addon/` | Home Assistant add-on (config.yaml, multi-stage Dockerfile built from the repo root, DOCS.md). It is listed in [home-assistant-apps](https://github.com/chris-standley/home-assistant-apps) |
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
 | `tests/` | Tests for the integration (`python3 -m pytest tests`; `tests/ha/` needs pytest-homeassistant-custom-component) |
-| `screenshots/` | Every view at hallway (2560x1440), kitchen (1920x1200 at 2x zoom) and phone sizes |
+| `screenshots/` | Every view at large (2560x1440), compact (1920x1200 at 2x zoom) and phone sizes |
 
 ## Install on Home Assistant
 
@@ -44,9 +44,12 @@ needs the whole repo.
 
 ## Screens
 
-- Hallway: `http://<ha-host>:8091/display/hallway` (27in, 2560x1440, browser zoom 1, root font 20px). Opens on the week calendar.
-- Kitchen: `http://<ha-host>:8091/display/kitchen` (Touch Display 2, 1920x1200, run TouchKio at 2x zoom = 960x600 CSS px). Opens on Today.
-- Phone: `/display/phone`, or the HA sidebar via ingress.
+Every screen opens `http://<ha-host>:8091/display`; its style is set when it's paired (and can be changed in
+Settings > Screens), guessed from the window size until then. Older `/display/hallway` and `/display/kitchen`
+addresses still work.
+- Large: a big wall screen, e.g. 27in 2560x1440 at browser zoom 1 (root font 20px). Opens on the week calendar.
+- Compact: a small touch screen, e.g. Touch Display 2, 1920x1200, TouchKio at 2x zoom = 960x600 CSS px. Opens on Today.
+- Phone: a phone browser, or the HA sidebar and companion app via ingress.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.
 
 ## Preview build
@@ -57,12 +60,13 @@ against an in-browser copy of the API (`src/api/demo.ts`) seeded from `seed/demo
 ## Pairing wall screens
 
 On the add-on's LAN port every screen must be paired (HA users via ingress are already signed in). Open
-`http://<ha-host>:8091/display/kitchen` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
+`http://<ha-host>:8091/display` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
 go to Settings > Screens > Pair a new screen, enter the code and the PIN; the kiosk loads the app and remembers its
 token (localStorage + an HttpOnly cookie). Revoke a screen there too. For TouchKio you can instead copy a token into
-the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
-turns this off. Settings > Screens also sets, per kind of screen (hallway, kitchen, phones), which sections the menu
-shows, which one it opens on, its speaker and when the screensaver starts, and renames paired screens.
+the URL once: `.../display?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
+turns this off. In Settings > Screens each paired screen has a name, a style (large, compact, phone) and its own
+choice of menu sections, start section, speaker and screensaver delay. "In the Home Assistant app" sets the same per
+style for ingress, and paired screens follow those until they have their own.
 
 The Home Assistant integration (`custom_components/moonlight`, via HACS) doesn't need pairing with the add-on: the
 add-on announces itself, so Home Assistant shows Moonlight under Settings > Devices & services > Discovered, and
@@ -113,10 +117,10 @@ served by `httpx.MockTransport`).
 
 - Weather: pick a Home Assistant weather entity in Settings > Display > Weather (it lists them with their current
   conditions); until then the screens show a demo forecast.
-- Music: the kitchen screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
+- Music: a compact screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
   bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Pick a
   speaker per screen in Settings > Screens > Set up. Works with any HA
-  `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
+  `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. Large screens and phones
   show a small player in the top bar only if given a speaker.
 - Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
   energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.

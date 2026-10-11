@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Api, Person, Settings, Topic } from "./api/types";
+import { Api, Display, Person, Settings, Topic } from "./api/types";
 
-export type Layout = "hallway" | "kitchen" | "phone";
+export type Layout = "large" | "compact" | "phone";
 
 interface Ctx {
   api: Api;
   layout: Layout;
+  /** The paired screen this is, with its name and setup (null in the Home Assistant app or the demo). */
+  screen: Display | null;
   people: Person[];
   settings: Settings | null;
   personById: (id: string | null | undefined) => Person | undefined;
