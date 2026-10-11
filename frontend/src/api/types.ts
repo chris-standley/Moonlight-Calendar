@@ -155,7 +155,8 @@ export interface Api {
   mode: "live" | "demo";
   subscribe(fn: (topic: Topic) => void): () => void;
   settings(): Promise<Settings>;
-  updateSettings(patch: Partial<Settings> & { pin: string }): Promise<Settings>;
+  /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
+  updateSettings(patch: Partial<Settings> & { pin: string; new_pin?: string }): Promise<Settings>;
   verifyPin(pin: string): Promise<boolean>;
   people(): Promise<Person[]>;
   createPerson(p: PersonIn): Promise<Person>;

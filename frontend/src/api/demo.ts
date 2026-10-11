@@ -283,8 +283,9 @@ export function demoApi(): Api {
     mode: "demo",
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     settings: async () => settingsOut(),
-    async updateSettings({ pin, ...patch }) {
+    async updateSettings({ pin, new_pin, ...patch }) {
       checkPin(pin);
+      if (new_pin != null && new_pin !== "" && !/^\d{4}$/.test(new_pin)) throw new ApiError(400, "new_pin must be 4 digits");
       const { media_players, ...rest } = patch;
       Object.assign(st.settings, rest);
       if (media_players) {
@@ -292,6 +293,7 @@ export function demoApi(): Api {
           throw new ApiError(400, "media_players must map hallway/kitchen/phone to a media_player entity id or empty");
         st.settings.media_players = { ...st.settings.media_players, ...media_players };
       }
+      if (new_pin) st.settings.pin = new_pin;
       emit("settings", "media");
       return settingsOut();
     },

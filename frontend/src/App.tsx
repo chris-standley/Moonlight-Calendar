@@ -36,7 +36,7 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [pinReq, setPinReq] = useState<{ why: string; resolve: (p: string | null) => void; error?: string } | null>(null);
+  const [pinReq, setPinReq] = useState<{ why: string; resolve: (p: string | null) => void; error?: string; check: boolean } | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [saver, setSaver] = useState(false);
@@ -64,11 +64,12 @@ export function App({ api, layout }: { api: Api; layout: Layout }) {
     return () => { clearTimeout(t); el.removeEventListener("pointerdown", reset); };
   }, [layout, idleMin]);
 
-  const askPin = useCallback((why: string) => new Promise<string | null>((resolve) => setPinReq({ why, resolve })), []);
+  const askPin = useCallback((why: string, opts?: { check?: boolean }) =>
+    new Promise<string | null>((resolve) => setPinReq({ why, resolve, check: opts?.check ?? true })), []);
   const onPin = useCallback(async (pin: string | null) => {
     if (!pinReq) return;
     if (pin === null) { pinReq.resolve(null); setPinReq(null); return; }
-    if (await api.verifyPin(pin)) { pinReq.resolve(pin); setPinReq(null); }
+    if (!pinReq.check || await api.verifyPin(pin)) { pinReq.resolve(pin); setPinReq(null); }
     else setPinReq({ ...pinReq, error: "Wrong PIN, try again" });
   }, [api, pinReq]);
   const toast = useCallback((msg: string) => {

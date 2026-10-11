@@ -9,7 +9,8 @@ interface Ctx {
   people: Person[];
   settings: Settings | null;
   personById: (id: string | null | undefined) => Person | undefined;
-  askPin: (why: string) => Promise<string | null>;
+  /** Shows the PIN pad. It checks the entered PIN unless `check` is false (choosing a new PIN). */
+  askPin: (why: string, opts?: { check?: boolean }) => Promise<string | null>;
   toast: (msg: string) => void;
   celebrate: (x: number, y: number, color: string) => void;
   /** Switch to another tab ("settings", "chores", ...). */

@@ -308,6 +308,17 @@ def test_recipe_to_list(client):
 
 # ---------------------------------------------------------------- settings / PIN
 
+def test_change_pin(client):
+    bad = client.patch("/api/settings", json={"pin": PIN, "new_pin": "12a4"})
+    assert bad.status_code == 400 and "4 digits" in bad.json()["detail"]
+    assert client.patch("/api/settings", json={"pin": "0000", "new_pin": "2468"}).status_code == 403
+    assert client.post("/api/pin/verify", json={"pin": PIN}).json() == {"ok": True}  # unchanged so far
+    assert client.patch("/api/settings", json={"pin": PIN, "new_pin": "2468"}).status_code == 200
+    assert client.post("/api/pin/verify", json={"pin": "2468"}).json() == {"ok": True}
+    assert client.post("/api/pin/verify", json={"pin": PIN}).json() == {"ok": False}
+    assert client.patch("/api/settings", json={"week_start": "sunday", "pin": PIN}).status_code == 403
+
+
 def test_settings_pin(client, db_file):
     s = client.get("/api/settings").json()
     s = {k: s[k] for k in ("family_name", "week_start", "temp_unit", "pin_set", "chore_approval", "timezone")}  # + feature keys

@@ -22,7 +22,8 @@ implementation of the same contract, used for the published preview). Keep them 
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
   screensaver_seconds, idle_minutes, media_players`, plus `pin` (required) -> settings. `media_players` may be partial
   (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
-  merged) or one number (applies to hallway and kitchen).
+  merged) or one number (applies to hallway and kitchen). `new_pin` (4 digits) replaces the parent PIN; with no PIN set
+  yet, the first `pin` sent becomes it.
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
 
 ## People

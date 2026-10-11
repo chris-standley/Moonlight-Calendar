@@ -19,6 +19,21 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
     try { await api.updateSettings({ week_start: v, pin }); toast("Saved"); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
   }
+  async function changePin() {
+    // With no PIN yet, the new PIN is also the one that authorises the change (see PATCH /api/settings).
+    let current: string | null = null;
+    if (settings?.pin_set) {
+      current = await askPin("Enter your current PIN");
+      if (!current) return;
+    }
+    const next = await askPin("Choose a new 4-digit PIN", { check: false });
+    if (!next) return;
+    const again = await askPin("Enter the new PIN again", { check: false });
+    if (!again) return;
+    if (again !== next) { toast("The PINs didn't match. Nothing changed."); return; }
+    try { await api.updateSettings({ pin: current ?? next, new_pin: next }); toast("Parent PIN changed"); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't change the PIN"); }
+  }
   return (
     <div className="settings">
       <div className="toolbar"><div className="toolbar-l"><h1 className="toolbar-title">Settings</h1></div></div>
@@ -32,7 +47,10 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
           </div>
           <div className="set-row"><span>This screen</span><b>{layout === "hallway" ? "Hallway (27 in)" : layout === "kitchen" ? "Kitchen (10 in)" : "Phone"}</b></div>
           <div className="set-row"><span>Weather</span><b>{wxSource}</b></div>
-          <div className="set-row"><span>Parent PIN</span><b>{settings?.pin_set ? "Set" : "Not set"}{api.mode === "demo" ? " (demo PIN is 1234)" : ""}</b></div>
+          <div className="set-row"><span>Parent PIN</span>
+            <span className="set-pin"><b>{settings?.pin_set ? "Set" : "Not set"}</b>
+              <button className="btn ghost small" onClick={changePin}>{settings?.pin_set ? "Change" : "Set PIN"}</button></span>
+          </div>
         </section>
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />

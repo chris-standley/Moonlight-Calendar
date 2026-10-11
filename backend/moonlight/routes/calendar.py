@@ -41,6 +41,9 @@ async def patch_settings(body: dict = Body(...)):
     pin = body.get("pin")
     if pin is None or str(pin) == "":
         raise bad("pin is required")
+    new_pin = body.get("new_pin")
+    if new_pin not in (None, "") and not re.fullmatch(r"\d{4}", str(new_pin)):
+        raise bad("new_pin must be 4 digits")
     with db.connect() as c:
         if db.get_setting(c, "pin_hash"):
             require_pin(c, pin)
@@ -66,8 +69,8 @@ async def patch_settings(body: dict = Body(...)):
                 raise bad("timezone must be an IANA zone name like Europe/London")
             tz_changed = db.get_setting(c, "timezone", db.default_timezone()) != body["timezone"]
             db.set_setting(c, "timezone", str(body["timezone"]))
-        if body.get("new_pin") not in (None, ""):
-            db.set_pin(c, str(body["new_pin"]))
+        if new_pin not in (None, ""):
+            db.set_pin(c, str(new_pin))
         out = settings_out(c)
     if tz_changed:
         await asyncio.to_thread(caldav_sync.reparse_all)
