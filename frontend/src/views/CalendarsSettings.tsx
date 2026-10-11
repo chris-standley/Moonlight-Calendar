@@ -211,12 +211,14 @@ function CalendarSheet({ cal, feed, onClose }: { cal: SyncCalendar; feed?: boole
   const [who, setWho] = useState(cal.person_ids);
   const [color, setColor] = useState(cal.color);
   const [visible, setVisible] = useState(cal.visible);
+  const [name, setName] = useState(cal.name);
+  const source = cal.source_name ?? cal.name;
   // null = automatic (on when every event is just "Busy" / "Free" ...).
   const [busy, setBusy] = useState<boolean | null>(cal.busy_blocks_set ? !!cal.busy_blocks : null);
   const busyOn = busy ?? !!cal.busy_blocks_auto;
   const colors = PALETTE.includes(cal.color) ? PALETTE : [cal.color, ...PALETTE.slice(0, -1)];
   async function save() {
-    try { await api.updateCalendar(cal.id, { person_ids: who, color, visible, ...(feed ? { busy_blocks: busy } : {}) }); onClose(); }
+    try { await api.updateCalendar(cal.id, { name: name.trim() === source ? null : name, person_ids: who, color, visible, ...(feed ? { busy_blocks: busy } : {}) }); onClose(); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
   }
   return (
@@ -226,6 +228,9 @@ function CalendarSheet({ cal, feed, onClose }: { cal: SyncCalendar; feed?: boole
       <button className="btn" onClick={save}>Save</button>
     </>}>
       <div className="form">
+        <label className="field-label">Name</label>
+        <input className="input" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={source} />
+        {name.trim() !== source && <p className="muted connect-note">Called “{source}” in {cal.read_only ? "its source" : "the calendar app"}. <button type="button" className="link-btn" style={{ display: "inline", margin: 0 }} onClick={() => setName(source)}>Use that</button></p>}
         <label className="field-label">Whose calendar is this?</label>
         <PersonPicker people={people} value={who} onChange={setWho} />
         <p className="muted connect-note">Its events show in these people's colours and columns. Leave empty to show them in the calendar colour.</p>

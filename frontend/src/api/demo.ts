@@ -693,6 +693,13 @@ export function demoApi(): Api {
         Object.assign(cal, { busy_blocks: patch.busy_blocks ?? auto, busy_blocks_set: patch.busy_blocks !== null });
         delete patch.busy_blocks;
       }
+      if (patch.name !== undefined) {
+        cal.source_name ??= cal.name;
+        cal.name = patch.name?.trim() || cal.source_name;
+        delete patch.name;
+        const acct = find(accts(), cal.account_id);
+        if (acct.kind === "ics" || acct.kind === "ha") acct.label = cal.name;
+      }
       Object.assign(cal, patch);
       emit("accounts", "events");
       return clone(cal);

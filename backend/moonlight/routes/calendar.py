@@ -250,7 +250,13 @@ EVENT_SELECT = ("SELECT e.*, cal.person_ids AS cal_person_ids, cal.color AS cal_
                 "LEFT JOIN accounts a ON a.id = cal.account_id")
 
 
-def event_out(r: dict) -> dict:
+def known_people(c) -> set[str]:
+    return {r["id"] for r in db.rows(c, "SELECT id FROM people")}
+
+
+def event_out(r: dict, known: set[str] | None = None) -> dict:
+    """`known` (the people who still exist) drops stale ids, e.g. from a synced event's X-MOONLIGHT-PEOPLE or a
+    calendar mapping written before someone was removed."""
     out = {
         "id": r["id"], "title": r["title"], "person_ids": json.loads(r["person_ids"]),
         "start": r["start"], "end": r["end"], "all_day": bool(r["all_day"]),
@@ -262,8 +268,12 @@ def event_out(r: dict) -> dict:
         # Only on calendars shown as free/busy blocks: busy | tentative | away | elsewhere | free.
         "busy": (r.get("busy") or "busy") if r.get("cal_busy_blocks") else None,
     }
+    if known is not None:
+        out["person_ids"] = [p for p in out["person_ids"] if p in known]
     if out["calendar_id"] and not out["person_ids"]:
         out["person_ids"] = json.loads(r.get("cal_person_ids") or "[]")
+        if known is not None:
+            out["person_ids"] = [p for p in out["person_ids"] if p in known]
     return out
 
 
@@ -284,10 +294,8 @@ def _apply_event_fields(c, ev: dict, body: dict, creating: bool) -> dict:
         ids = body.get("person_ids") or []
         if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
             raise bad("person_ids must be a list of ids")
-        for i in ids:
-            if not person_exists(c, i):
-                raise bad(f"Unknown person {i}")
-        ev["person_ids"] = list(dict.fromkeys(ids))
+        # Ids of people who were removed (a screen showing an older copy of the event) are dropped, not refused.
+        ev["person_ids"] = [i for i in dict.fromkeys(ids) if person_exists(c, i)]
     if "all_day" in body or creating:
         ev["all_day"] = bool(body.get("all_day", False))
     if creating or "start" in body:
@@ -348,12 +356,13 @@ def list_events(start: str, end: str):
             'OR e.custom_repeat = 1 OR (e.start < ? AND (e."end" > ? OR e.start >= ?)))',
             (re_s, rs_s, rs_s),
         )
+        known = known_people(c)
     out = []
     for r in candidates:
         if r.get("custom_repeat") and r.get("raw_ics"):
-            out.extend(caldav_sync.expand_custom(event_out(r), r["raw_ics"], f"{r['id']}:{r['etag']}", rs, re_))
+            out.extend(caldav_sync.expand_custom(event_out(r, known), r["raw_ics"], f"{r['id']}:{r['etag']}", rs, re_))
         else:
-            out.extend(expand_event(event_out(r), rs, re_))
+            out.extend(expand_event(event_out(r, known), rs, re_))
     out = [o for o in out if o.get("busy") != "free"]  # free time on a busy-blocks calendar isn't shown
     out.sort(key=lambda o: (o["start"], not o["all_day"], o["end"], o["title"]))
     return out
@@ -363,9 +372,10 @@ def list_events(start: str, end: str):
 def get_event(event_id: str):
     with db.connect() as c:
         r = _load_event(c, event_id)
+        known = known_people(c)
     if not r:
         raise not_found("Event not found")
-    return event_out(r)
+    return event_out(r, known)
 
 
 @router.post("/events")
@@ -386,7 +396,7 @@ async def create_event(body: dict = Body(...)):
             await hub.broadcast("accounts")
             raise _sync_error(e)
     with db.connect() as c:
-        out = event_out(_load_event(c, ev["id"]))
+        out = event_out(_load_event(c, ev["id"]), known_people(c))
     await hub.broadcast("events")
     return out
 
@@ -398,7 +408,7 @@ async def update_event(event_id: str, body: dict = Body(...)):
         r = _load_event(c, event_id)
         if not r:
             raise not_found("Event not found")
-        ev = _apply_event_fields(c, event_out(r), body, creating=False)
+        ev = _apply_event_fields(c, event_out(r, known_people(c)), body, creating=False)
         try:
             target = caldav_sync.target_calendar(c, body, ev["person_ids"], current=r["calendar_id"])
         except ValueError as e:
@@ -415,7 +425,7 @@ async def update_event(event_id: str, body: dict = Body(...)):
             with db.connect() as c:
                 _save_event(c, ev, insert=False)
     with db.connect() as c:
-        out = event_out(_load_event(c, event_id))
+        out = event_out(_load_event(c, event_id), known_people(c))
     await hub.broadcast("events")
     return out
 

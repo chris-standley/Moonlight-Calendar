@@ -151,6 +151,24 @@ def test_event_patch_delete_and_sorting(client):
                                              "repeat": {"freq": "weekly", "interval": 0}}).status_code == 400
 
 
+def test_stale_person_ids_are_dropped(client, db_file):
+    a, b = person(client, "Ann"), person(client, "Ben")
+    ev = event(client, title="Swim", person_ids=[a["id"], b["id"]])
+    # An id left behind by a person who no longer exists (e.g. removed sample data).
+    with sqlite3.connect(db_file) as c:
+        c.execute("UPDATE events SET person_ids = ? WHERE id = ?",
+                  (json.dumps([a["id"], b["id"], "p_gone"]), ev["id"]))
+    assert client.get(f"/api/events/{ev['id']}").json()["person_ids"] == [a["id"], b["id"]]
+    assert occ(client, "2026-10-05", "2026-10-06")[0]["person_ids"] == [a["id"], b["id"]]
+    # A screen still holding the stale id can take someone off the event.
+    r = client.patch(f"/api/events/{ev['id']}", json={"person_ids": [a["id"], "p_gone"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["person_ids"] == [a["id"]]
+    r = client.post("/api/events", json={"title": "x", "person_ids": ["p_gone"], "start": "2026-10-05T09:00",
+                                         "end": "2026-10-05T10:00"})
+    assert r.status_code == 200 and r.json()["person_ids"] == []
+
+
 # ---------------------------------------------------------------- chores
 
 def test_chore_due_dates(client):

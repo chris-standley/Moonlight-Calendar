@@ -167,6 +167,7 @@ EVENT_SOURCE_COLUMNS = {
 CALENDAR_EXTRA_COLUMNS = {
     "busy_auto": "INTEGER NOT NULL DEFAULT 0",  # every summary looks like a free/busy placeholder
     "busy_blocks": "INTEGER",                   # household's choice; NULL = follow busy_auto
+    "display_name": "TEXT",                     # household's name for it; NULL = the source's name
 }
 
 DEFAULT_SETTINGS = {

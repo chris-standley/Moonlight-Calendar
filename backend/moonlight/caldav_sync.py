@@ -62,6 +62,10 @@ class AuthFailed(SyncError):
     status = 502
 
 
+class Unreachable(SyncError):
+    """A network error (connection reset, DNS, timeout). Usually a blip, so a sync retries before reporting it."""
+
+
 class Forbidden(SyncError):
     status = 403
 
@@ -153,7 +157,7 @@ class Remote:
             raise
         except Exception as e:  # network errors, DNS, TLS...
             host = urlparse(self.server_url).hostname or self.server_url
-            raise SyncError(f"Couldn't reach {host}: {e.__class__.__name__}")
+            raise Unreachable(f"Couldn't reach {host}: {e.__class__.__name__}")
 
     def request(self, url: str, method: str, body: str = "", headers: dict | None = None):
         r = self._call(self.client.request, url, method, body, headers or {})
@@ -593,8 +597,23 @@ def _pull_calendar(remote: Remote, cal: dict, tz: ZoneInfo) -> bool:
     return bool(gone or fetched)
 
 
+# Waits before retrying a sync that hit a network error; only after the last one is the error shown.
+RETRY_WAITS = (3, 10)
+_sleep = _time.sleep  # tests make this a no-op
+
+
 def sync_account(account_id: str, force: bool = False) -> bool:
     """Blocking: pull changes for one account. Returns True if events changed. Raises SyncError."""
+    for wait in RETRY_WAITS:
+        try:
+            return _sync_account(account_id, force, last_try=False)
+        except Unreachable as e:
+            log.info("Calendar account %s: %s; retrying in %ss", account_id, e, wait)
+            _sleep(wait)
+    return _sync_account(account_id, force, last_try=True)
+
+
+def _sync_account(account_id: str, force: bool, last_try: bool) -> bool:
     with _lock(account_id):
         with db.connect() as c:
             acct = db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,))
@@ -621,6 +640,10 @@ def sync_account(account_id: str, force: bool = False) -> bool:
                     c.execute("UPDATE calendars SET ctag = ? WHERE id = ?", (ctag, cal["id"]))
         except AuthFailed:
             _set_status(account_id, "auth_failed", auth_message(acct["kind"]))
+            raise
+        except Unreachable as e:
+            if last_try:
+                _set_status(account_id, "error", str(e))
             raise
         except SyncError as e:
             _set_status(account_id, "error", str(e))
