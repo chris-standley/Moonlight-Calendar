@@ -130,10 +130,13 @@ struct CalendarView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-                .overlay {
-                    if isToday {
-                        RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.accent, lineWidth: 3)
+                // Today is a tinted column (and the filled date circle), not a ring, so it can't be mistaken for
+                // the focus ring on the card that's selected.
+                .background {
+                    let shape = RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                    ZStack {
+                        shape.fill(Theme.surface)
+                        if isToday { shape.fill(Theme.accent.opacity(0.12)) }
                     }
                 }
                 .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
