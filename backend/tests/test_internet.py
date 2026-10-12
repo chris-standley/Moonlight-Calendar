@@ -59,6 +59,7 @@ def test_https_always_needs_pairing(tmp_path, https_env):
     assert s.get("/docs").status_code == 404 and s.get("/openapi.json").status_code == 404
     h = s.get("/api/health").json()
     assert h["external_url"] == "https://moonlight.example.com" and h["ha_login"] is False
+    assert len(h["instance"]) == 16 and home(app).get("/api/health").json()["instance"] == h["instance"]
     assert "strict-transport-security" in s.get("/display/phone").headers
 
 

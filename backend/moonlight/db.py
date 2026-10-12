@@ -277,7 +277,7 @@ def _rename_layouts(c: sqlite3.Connection) -> None:
 def is_empty() -> bool:
     with connect() as c:
         n = c.execute(
-            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings)"
+            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings WHERE key != 'instance_id')"
         ).fetchone()[0]
     return n == 0
 
@@ -311,6 +311,16 @@ def row(c: sqlite3.Connection, sql: str, args: tuple | list = ()) -> dict | None
 def get_setting(c: sqlite3.Connection, key: str, default: Any = None) -> Any:
     r = c.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     return json.loads(r["value"]) if r else default
+
+
+def instance_id() -> str:
+    """A random id for this Moonlight, so apps that find it under several names list it once."""
+    with connect() as c:
+        val = get_setting(c, "instance_id")
+        if not val:
+            val = secrets.token_hex(8)
+            set_setting(c, "instance_id", val)
+    return val
 
 
 def set_setting(c: sqlite3.Connection, key: str, value: Any) -> None:

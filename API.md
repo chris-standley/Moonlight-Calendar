@@ -269,7 +269,8 @@ While that socket is down (HA restarting) it polls the entities' states every 5 
   EventSummary = `{id, occurrence_id, title, person_ids, start, end, all_day, location}`.
 
 ## Health
-- `GET /api/health` -> `{ok: true, version, external_url: str|null, ha_login: bool}`. `external_url` is Moonlight's
+- `GET /api/health` -> `{ok: true, version, instance, external_url: str|null, ha_login: bool}`. `instance` is a random
+  id for this install, so the apps list a Moonlight they find under several names once. `external_url` is Moonlight's
   public address (add-on option), `ha_login` says whether Sign in with Home Assistant is available.
 
 ## Screens (pairing and access)

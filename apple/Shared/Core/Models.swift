@@ -199,6 +199,8 @@ struct PairPoll: Codable {
 struct Health: Codable {
     let ok: Bool
     let version: String?
+    /// A random id per install (0.4.0+), so one Moonlight found under several names is listed once.
+    let instance: String?
     /// Moonlight's https address from the internet (add-on option), if set.
     let external_url: String?
     /// Whether "Sign in with Home Assistant" is available.

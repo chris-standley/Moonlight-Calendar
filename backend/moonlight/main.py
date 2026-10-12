@@ -142,7 +142,7 @@ def create_app(
     @app.get("/api/health")
     async def health():
         # external_url: where the apps go when the home address doesn't answer; ha_login: offer "Sign in with HA".
-        return {"ok": True, "version": __version__, "external_url": security.external_url(),
+        return {"ok": True, "version": __version__, "instance": db.instance_id(), "external_url": security.external_url(),
                 "ha_login": bool(await ha_login.ha_login_url())}
 
     @app.websocket("/api/ws")

@@ -74,9 +74,6 @@ struct CalendarView: View {
         .focusSection()
     }
 
-    private func sorted(_ list: [Occurrence]) -> [Occurrence] {
-        list.sorted { ($0.all_day ? 0 : 1, $0.start) < ($1.all_day ? 0 : 1, $1.start) }
-    }
 
     private func week(days: [String], events: [Occurrence]) -> some View {
         let d = model.dates
@@ -109,8 +106,8 @@ struct CalendarView: View {
 
                     ScrollView {
                         VStack(spacing: 10) {
-                            ForEach(sorted(events.filter { d.overlaps($0, day: day) }), id: \.key) { ev in
-                                EventCard(event: ev, compact: true) { open = $0 }
+                            ForEach(AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)) { item in
+                                AgendaCard(item: item, compact: true) { open = $0 }
                             }
                         }
                         .padding(.horizontal, 10).padding(.vertical, 6)
@@ -146,7 +143,7 @@ struct CalendarView: View {
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(days, id: \.self) { day in
-                    let list = sorted(events.filter { d.overlaps($0, day: day) })
+                    let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)
                     HStack(alignment: .top, spacing: 30) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(d.dow(day)).font(Theme.font(22, .heavy)).foregroundStyle(day == d.today ? Theme.accent : Theme.muted)
@@ -163,7 +160,7 @@ struct CalendarView: View {
                             Text("Nothing planned").font(Theme.font(24, .bold)).foregroundStyle(Theme.muted).padding(.top, 20)
                         } else {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 480), spacing: 16)], alignment: .leading, spacing: 14) {
-                                ForEach(list, id: \.key) { ev in EventCard(event: ev) { open = $0 } }
+                                ForEach(list) { item in AgendaCard(item: item) { open = $0 } }
                             }
                         }
                     }

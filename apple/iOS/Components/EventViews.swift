@@ -51,6 +51,55 @@ struct EventRow: View {
     }
 }
 
+/// A day's work busy time as one card: "Chris busy", first start to last finish, the free gaps and anything tentative.
+struct BusyRow: View {
+    @Environment(AppModel.self) private var model
+    let busy: BusyDay
+    var compact = false
+
+    var body: some View {
+        let color = Color(hex: busy.color ?? model.person(busy.personIds.first)?.color ?? Theme.fallbackEvent)
+        HStack(spacing: 0) {
+            Rectangle().fill(color.opacity(busy.allTentative ? 0.45 : 1)).frame(width: 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(model.dates.clock(minutes: busy.start)) – \(model.dates.clock(minutes: busy.end))")
+                    .font(Theme.text(.caption, .bold))
+                    .foregroundStyle(color.mix(with: .black, by: 0.3))
+                Text(busy.who(model.people))
+                    .font(Theme.text(compact ? .footnote : .subheadline, .heavy))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                ForEach(busy.details(model.dates), id: \.self) { line in
+                    Text(line).font(Theme.text(.caption, .semibold)).foregroundStyle(Theme.muted).lineLimit(compact ? 2 : 3)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08))
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// An event or a folded busy line, as a list row. Events open their details.
+struct AgendaRow: View {
+    let item: AgendaItem
+    var compact = false
+    let onOpen: (Occurrence) -> Void
+
+    var body: some View {
+        switch item {
+        case .event(let ev):
+            Button { onOpen(ev) } label: { EventRow(event: ev, compact: compact) }.buttonStyle(.plain)
+        case .busy(let b):
+            BusyRow(busy: b, compact: compact)
+        }
+    }
+}
+
 /// Details sheet with Edit and Delete for events Moonlight can change.
 struct EventDetailSheet: View {
     @Environment(AppModel.self) private var model

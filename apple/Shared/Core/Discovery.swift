@@ -14,6 +14,7 @@ final class Discovery {
     struct Server: Identifiable, Hashable {
         let url: URL
         let version: String?
+        var instance: String? = nil
         var id: String { url.absoluteString }
         var host: String { "\(url.host ?? url.absoluteString):\(url.port ?? Discovery.defaultPort)" }
     }
@@ -74,10 +75,22 @@ final class Discovery {
     private func check(_ url: URL) {
         Task {
             guard let health = try? await APIClient(baseURL: url, token: nil).health(), health.ok else { return }
-            if !servers.contains(where: { $0.url == url }) {
-                servers.append(Server(url: url, version: health.version))
+            let found = Server(url: url, version: health.version, instance: health.instance)
+            if let i = servers.firstIndex(where: { $0.url == url || (found.instance != nil && $0.instance == found.instance) }) {
+                // The same Moonlight under another name: keep the most local-looking one.
+                if Self.rank(found.url) < Self.rank(servers[i].url) { servers[i] = found }
+            } else {
+                servers.append(found)
             }
         }
+    }
+
+    /// homeassistant.local, then a numeric address, then other single names, then full domain names.
+    nonisolated static func rank(_ url: URL) -> Int {
+        let host = (url.host ?? "").lowercased()
+        if host.hasSuffix(".local") { return 0 }
+        if host.allSatisfy({ $0.isNumber || $0 == "." || $0 == ":" }) { return 1 }
+        return host.contains(".") ? 3 : 2
     }
 
     /// The Apple TV's own IPv4 address, to prefill the manual address picker with the home network's prefix.

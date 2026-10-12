@@ -10,7 +10,13 @@ struct TodayScreen: View {
     @State private var lists: [TaskList] = []
     @State private var grocery: [ListItem] = []
     @State private var open: Occurrence?
-    @State private var adding = false
+    @State private var adding: Adding?
+
+    /// What the + menu adds: everything Today shows.
+    enum Adding: String, Identifiable {
+        case event, chore, item, dinner
+        var id: String { rawValue }
+    }
 
     var body: some View {
         let d = model.dates
@@ -34,12 +40,30 @@ struct TodayScreen: View {
             .refreshable { await load(today) }
         } tools: {
             ToolbarItem(placement: .primaryAction) {
-                Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("New event")
+                Menu {
+                    Button { adding = .event } label: { Label("Event", systemImage: "calendar.badge.plus") }
+                    Button { adding = .chore } label: { Label("Chore", systemImage: "checkmark.circle") }
+                    Button { adding = .item } label: { Label("List item", systemImage: "cart.badge.plus") }
+                    Button { adding = .dinner } label: { Label("Tonight's dinner", systemImage: "fork.knife") }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Add")
             }
         }
         .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points", "lists"))") { await load(today) }
         .sheet(item: $open) { EventDetailSheet(event: $0) }
-        .sheet(isPresented: $adding) { EventEditor() }
+        .sheet(item: $adding) { what in
+            switch what {
+            case .event: EventEditor()
+            case .chore: ChoreEditor(chore: nil, personId: model.kids.first?.id ?? model.people.first?.id)
+            case .item: ItemAdder(lists: lists)
+            case .dinner:
+                let today = model.dates.today
+                MealEditor(edit: .init(date: today, slot: .dinner,
+                                       meal: meals.first { $0.date == today && $0.slot == "dinner" }))
+            }
+        }
     }
 
     private var greeting: String {
@@ -78,16 +102,14 @@ struct TodayScreen: View {
         return Card(title: "Coming up") {
             if events.isEmpty { EmptyHint(text: "Nothing planned today or tomorrow") }
             ForEach([today, d.addDays(today, 1)], id: \.self) { day in
-                let list = events.filter { d.overlaps($0, day: day) }
-                    .filter { day != today || $0.all_day || $0.end > d.now }
-                    .sorted { ($0.all_day ? 0 : 1, $0.start) < ($1.all_day ? 0 : 1, $1.start) }
+                // Today leaves out what's over, but keeps the whole day's busy line.
+                let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }
+                    .filter { day != today || $0.all_day || $0.isBusyBlock || $0.end > d.now }, day: day)
                 if !list.isEmpty {
                     Text(d.relative(day).uppercased())
                         .font(Theme.text(.caption, .heavy)).kerning(1)
                         .foregroundStyle(day == today ? Theme.accent : Theme.muted)
-                    ForEach(list, id: \.key) { ev in
-                        Button { open = ev } label: { EventRow(event: ev) }.buttonStyle(.plain)
-                    }
+                    ForEach(list) { item in AgendaRow(item: item) { open = $0 } }
                 }
             }
         }
@@ -98,21 +120,64 @@ struct TodayScreen: View {
             if model.kids.isEmpty {
                 EmptyHint(text: model.people.isEmpty ? "Add your family in Settings › Family." : "Add a child to track their chores and stars.")
             }
-            ForEach(model.kids) { kid in
-                let mine = chores.filter { $0.person_id == kid.id }
-                let done = mine.filter(\.completed).count
-                HStack(spacing: 12) {
-                    ProgressRing(person: kid, done: done, total: mine.count, size: 48)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(kid.name).font(Theme.text(.headline, .heavy))
-                        Text(mine.isEmpty ? "No chores today" : done == mine.count ? "All done! 🎉" : "\(done) of \(mine.count) done")
-                            .font(Theme.text(.subheadline)).foregroundStyle(Theme.muted)
-                    }
-                    Spacer()
-                    StarBadge(value: points.first { $0.person_id == kid.id }?.balance ?? 0, size: 15)
+            TimelineView(.everyMinute) { ctx in
+                let period = ChoreDay.period(model.dates, at: ctx.date)
+                VStack(spacing: 14) {
+                    ForEach(model.kids) { kid in kidChores(kid, period: period) }
                 }
             }
         }
+    }
+
+    /// A child's progress and stars, then up to three chores due now to tick off right here.
+    private func kidChores(_ kid: Person, period: String) -> some View {
+        let mine = chores.filter { $0.person_id == kid.id }
+        let done = mine.filter(\.completed).count
+        let due = ChoreDay.dueNow(mine, period: period)
+        let later = mine.first { !$0.completed && !due.contains($0) }
+        let status = mine.isEmpty ? "No chores today" : done == mine.count ? "All \(done) done 🎉"
+            : !due.isEmpty ? "\(done) of \(mine.count) done"
+            : "\(done) of \(mine.count) done · later: \(later.map { "\($0.emoji) \($0.title)" } ?? "")"
+        let color = Color(hex: kid.color)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                ProgressRing(person: kid, done: done, total: mine.count, size: 48)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(kid.name).font(Theme.text(.headline, .heavy))
+                    Text(status).font(Theme.text(.subheadline)).foregroundStyle(Theme.muted).lineLimit(1)
+                }
+                Spacer()
+                StarBadge(value: points.first { $0.person_id == kid.id }?.balance ?? 0, size: 15)
+            }
+            ForEach(due.prefix(3)) { c in
+                Button { Task { await tick(c) } } label: {
+                    HStack(spacing: 10) {
+                        Text(c.emoji).font(.title3)
+                        Text(c.title).font(Theme.text(.subheadline, .heavy)).foregroundStyle(Theme.text).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Circle().strokeBorder(color, lineWidth: 2).frame(width: 26, height: 26)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Done: \(c.title)")
+            }
+            if due.count > 3 {
+                Text("+\(due.count - 3) more").font(Theme.text(.caption, .heavy)).foregroundStyle(Theme.muted).padding(.leading, 4)
+            }
+        }
+        .padding(10)
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func tick(_ c: ChoreDay) async {
+        let today = model.dates.today
+        if let i = chores.firstIndex(of: c) { chores[i].completed = true }  // straight away; the reload confirms it
+        _ = await model.call { try await $0.setChore(c.id, date: today, done: true) }
+        model.bump("chores")
+        model.bump("points")
     }
 
     private func mealsCard(today: String) -> some View {
@@ -150,6 +215,67 @@ struct TodayScreen: View {
                 Label(item.title, systemImage: "circle").font(Theme.text(.subheadline, .semibold))
             }
             if open.count > 8 { Text("+ \(open.count - 8) more").font(Theme.text(.caption)).foregroundStyle(Theme.muted) }
+        }
+    }
+}
+
+/// Add one or more items ("milk, eggs and bread") to a list, the shopping list first.
+struct ItemAdder: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let lists: [TaskList]
+    @State private var listId = ""
+    @State private var text = ""
+    @State private var error: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if lists.isEmpty {
+                    Text("Make a list on the Lists tab first.").foregroundStyle(Theme.muted)
+                } else {
+                    Section {
+                        TextField("Milk, eggs and bread", text: $text).font(Theme.text(.headline))
+                            .focused($focused).submitLabel(.done).onSubmit { Task { await save() } }
+                        Picker("List", selection: $listId) {
+                            ForEach(lists) { Text("\($0.emoji) \($0.name)").tag($0.id) }
+                        }
+                    } footer: {
+                        Text("Separate several with commas.")
+                    }
+                }
+                if let error { Text(error).foregroundStyle(Theme.danger) }
+            }
+            .navigationTitle("Add to a list")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") { Task { await save() } }.disabled(parts.isEmpty || listId.isEmpty)
+                }
+            }
+            .onAppear {
+                listId = (lists.first { $0.kind == "grocery" } ?? lists.first)?.id ?? ""
+                focused = true
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private var parts: [String] {
+        text.replacingOccurrences(of: " and ", with: ",").split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    private func save() async {
+        guard let api = model.api, !parts.isEmpty, !listId.isEmpty else { return }
+        do {
+            for p in parts { try await api.addItem(listId, title: p) }
+            model.bump("lists")
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

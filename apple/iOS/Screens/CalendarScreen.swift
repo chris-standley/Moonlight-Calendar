@@ -96,10 +96,6 @@ struct CalendarScreen: View {
         .pickerStyle(.segmented)
     }
 
-    private func sorted(_ list: [Occurrence]) -> [Occurrence] {
-        list.sorted { ($0.all_day ? 0 : 1, $0.start) < ($1.all_day ? 0 : 1, $1.start) }
-    }
-
     // MARK: Day: week strip + that day's events
 
     private func dayView(days: [String], day: String, events: [Occurrence]) -> some View {
@@ -137,11 +133,9 @@ struct CalendarScreen: View {
                         }
                         .padding(.horizontal, 4)
                     }
-                    let list = sorted(events.filter { d.overlaps($0, day: day) })
+                    let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)
                     if list.isEmpty { EmptyHint(text: "Nothing planned") }
-                    ForEach(list, id: \.key) { ev in
-                        Button { open = ev } label: { EventRow(event: ev) }.buttonStyle(.plain)
-                    }
+                    ForEach(list) { item in AgendaRow(item: item) { open = $0 } }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
@@ -176,8 +170,8 @@ struct CalendarScreen: View {
                     .padding(.horizontal, 8).padding(.top, 8)
                     ScrollView {
                         VStack(spacing: 5) {
-                            ForEach(sorted(events.filter { d.overlaps($0, day: day) }), id: \.key) { ev in
-                                Button { open = ev } label: { EventRow(event: ev, compact: true) }.buttonStyle(.plain)
+                            ForEach(AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)) { item in
+                                AgendaRow(item: item, compact: true) { open = $0 }
                             }
                         }
                         .padding(.horizontal, 5)
@@ -205,13 +199,12 @@ struct CalendarScreen: View {
         let d = model.dates
         return List {
             ForEach(days, id: \.self) { day in
-                let list = sorted(events.filter { d.overlaps($0, day: day) })
+                let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)
                 if !list.isEmpty || day == d.today {
                     Section {
                         if list.isEmpty { Text("Nothing planned").foregroundStyle(Theme.muted) }
-                        ForEach(list, id: \.key) { ev in
-                            Button { open = ev } label: { EventRow(event: ev) }
-                                .buttonStyle(.plain)
+                        ForEach(list) { item in
+                            AgendaRow(item: item) { open = $0 }
                                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)

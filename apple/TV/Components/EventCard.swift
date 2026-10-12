@@ -56,6 +56,53 @@ struct EventCard: View {
     }
 }
 
+/// A day's work busy time folded into one card (not focusable: there's nothing to open).
+struct BusyCard: View {
+    @Environment(AppModel.self) private var model
+    let busy: BusyDay
+    var compact = false
+
+    var body: some View {
+        let color = Color(hex: busy.color ?? model.person(busy.personIds.first)?.color ?? Theme.fallbackEvent)
+        HStack(spacing: 0) {
+            Rectangle().fill(color.opacity(busy.allTentative ? 0.45 : 1)).frame(width: 8)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(model.dates.clock(minutes: busy.start)) – \(model.dates.clock(minutes: busy.end))")
+                    .font(Theme.font(compact ? 19 : 22, .bold))
+                    .foregroundStyle(color.mix(with: .black, by: 0.3))
+                Text(busy.who(model.people))
+                    .font(Theme.font(compact ? 23 : 27, .heavy))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                ForEach(busy.details(model.dates), id: \.self) { line in
+                    Text(line).font(Theme.font(compact ? 17 : 19, .semibold)).foregroundStyle(Theme.muted).lineLimit(2)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08))
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// An event card or a folded busy card.
+struct AgendaCard: View {
+    let item: AgendaItem
+    var compact = false
+    let onSelect: (Occurrence) -> Void
+
+    var body: some View {
+        switch item {
+        case .event(let ev): EventCard(event: ev, compact: compact, onSelect: onSelect)
+        case .busy(let b): BusyCard(busy: b, compact: compact)
+        }
+    }
+}
+
 /// Event details (read only: the TV has no keyboard; edit on a wall screen or phone).
 struct EventDetail: View {
     @Environment(AppModel.self) private var model
