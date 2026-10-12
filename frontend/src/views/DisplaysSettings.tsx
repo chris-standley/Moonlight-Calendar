@@ -393,6 +393,8 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
   const [chosen, setChosen] = useState<string[]>(cfg.album_ids);
   const [favorites, setFavorites] = useState(cfg.favorites);
   const [memories, setMemories] = useState(cfg.memories);
+  const [skipCert, setSkipCert] = useState(cfg.skip_cert_check);
+  const https = /^https:/i.test(url.trim());
   const [pin, setPin] = useState<string | null>(null);
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -417,7 +419,7 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
     if (!p) return;
     setBusy("test"); setError(null); setChecked(null);
     try {
-      const r = await api.testImmich({ server_url: url.trim(), api_key: key.trim() || undefined, pin: p });
+      const r = await api.testImmich({ server_url: url.trim(), api_key: key.trim() || undefined, skip_cert_check: https && skipCert, pin: p });
       setAlbums(r.albums);
       setChecked(`Connected${r.version ? ` to Immich ${r.version}` : ""} · ${r.albums.length} album${r.albums.length === 1 ? "" : "s"}`);
     } catch (e) {
@@ -431,7 +433,7 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
     if (!p) return;
     setBusy("save"); setError(null);
     try {
-      const r = await api.saveImmich({ server_url: url.trim(), api_key: key.trim() || undefined, album_ids: chosen, favorites, memories, pin: p });
+      const r = await api.saveImmich({ server_url: url.trim(), api_key: key.trim() || undefined, album_ids: chosen, favorites, memories, skip_cert_check: https && skipCert, pin: p });
       toast(r.status === "ok" ? `Saved · ${photoCount(r.photo_count)}` : "Saved, but Immich can't be reached right now");
       onClose();
     } catch (e) {
@@ -456,6 +458,13 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
         <input className="input" type="password" autoComplete="new-password" value={key}
           placeholder={cfg.key_set ? "Saved · type a new key to replace it" : "Paste the key from Immich"}
           onChange={(e) => { setKey(e.target.value); setChecked(null); }} />
+        {https && (
+          <div className="set-row"><span>Skip certificate check</span>
+            <button type="button" className={"toggle" + (skipCert ? " on" : "")} onClick={() => { setSkipCert(!skipCert); setChecked(null); }}
+              aria-pressed={skipCert} aria-label="Skip certificate check"><span /></button>
+          </div>
+        )}
+        {https && skipCert && <p className="muted connect-note">For a self-signed certificate, or one made for a domain name while you enter the IP address. Only use it on your home network.</p>}
         <p className="muted connect-note">
           In Immich: Account Settings › API Keys › New API Key (permissions album.read, asset.read and asset.view;
           memory.read for "on this day"). The key stays on this Moonlight add-on and is never sent to the screens.

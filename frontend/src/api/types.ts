@@ -119,11 +119,13 @@ export const STYLE_LABEL: Record<Layout, string> = { large: "Large", compact: "C
 export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
 export interface ImmichConfig {
   configured: boolean; server_url: string; key_set: boolean; album_ids: string[]; favorites: boolean; memories: boolean;
+  /** HTTPS without checking the certificate (self-signed, or one made for a domain name while Moonlight uses the IP). */
+  skip_cert_check: boolean;
   status: ImmichStatus; last_error: string | null; last_refresh: string | null; photo_count: number; version: string | null;
 }
 export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean }
 /** PUT /api/immich: `api_key` may be left out once one is saved. */
-export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; pin: string }
+export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
 export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
 /** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
 export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; url: string }
@@ -268,7 +270,7 @@ export interface Api {
   saveImmich(c: ImmichIn): Promise<ImmichConfig>;
   disconnectImmich(pin: string): Promise<void>;
   /** Without server_url/api_key the saved ones are tested. */
-  testImmich(t: { server_url?: string; api_key?: string; pin: string }): Promise<ImmichTest>;
+  testImmich(t: { server_url?: string; api_key?: string; skip_cert_check?: boolean; pin: string }): Promise<ImmichTest>;
   immichAlbums(): Promise<ImmichAlbum[]>;
   screensaverPhotos(): Promise<ScreensaverPhotos>;
   accounts(): Promise<Account[]>;

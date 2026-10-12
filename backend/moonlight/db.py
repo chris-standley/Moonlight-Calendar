@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS immich (
     album_ids    TEXT NOT NULL DEFAULT '[]',
     favorites    INTEGER NOT NULL DEFAULT 0,
     memories     INTEGER NOT NULL DEFAULT 0,
+    skip_cert_check INTEGER NOT NULL DEFAULT 0,  -- HTTPS without checking the certificate (self-signed, by IP)
     updated_at   TEXT NOT NULL
 );
 """
@@ -254,6 +255,9 @@ def init_db() -> None:
         have = {r[1] for r in c.execute("PRAGMA table_info(displays)")}
         if "setup" not in have:
             c.execute("ALTER TABLE displays ADD COLUMN setup TEXT")  # JSON, see routes/displays.py
+        have = {r[1] for r in c.execute("PRAGMA table_info(immich)")}
+        if "skip_cert_check" not in have:
+            c.execute("ALTER TABLE immich ADD COLUMN skip_cert_check INTEGER NOT NULL DEFAULT 0")
         _rename_layouts(c)
 
 
