@@ -116,6 +116,24 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   const ready = peopleLoaded && settings;
   const go = useCallback((t: string) => setTab(t as Tab), []);
 
+  // On a phone the top bar (clock, date, weather) stays put and the page slides up over it as it scrolls, giving the
+  // content the whole screen. Whichever list scrolls inside the page drives it; sheets and sideways scrolling don't.
+  const content = useRef<HTMLDivElement>(null);
+  const [lift, setLift] = useState(0);
+  useEffect(() => {
+    setLift(0);
+    const el = content.current;
+    if (layout !== "phone" || !el) return;
+    const onScroll = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (!(t instanceof HTMLElement) || t.closest(".scrim")) return;
+      const bar = el.parentElement?.querySelector<HTMLElement>(".topbar");
+      setLift(Math.min(Math.max(t.scrollTop, 0), bar?.offsetHeight ?? 0));
+    };
+    el.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => el.removeEventListener("scroll", onScroll, { capture: true });
+  }, [layout, tab]);
+
   return (
     <AppProvider value={{ api, layout, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
       <div className={`app layout-${layout}` + (EMBEDDED ? " embedded" : "")} ref={root}>
@@ -133,7 +151,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
           {/* A compact screen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
           <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")} />
           {ready && <SyncBanner onOpen={() => setTab("settings")} />}
-          <div className="content">
+          <div className={"content" + (lift > 0 ? " lifted" : "")} ref={content} style={lift ? { marginTop: -lift } : undefined}>
             {ready && <>
               {tab === "today" && <TodayView go={go} />}
               {tab === "calendar" && <CalendarView defaultView={layout === "large" ? "week" : "schedule"} />}
