@@ -63,7 +63,7 @@ against an in-browser copy of the API (`src/api/demo.ts`) seeded from `seed/demo
 
 On the add-on's LAN port every screen must be paired (HA users via ingress are already signed in). Open
 `http://<ha-host>:8091/display` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
-go to Settings > Screens > Pair a new screen, enter the code and the PIN; the kiosk loads the app and remembers its
+go to Settings > Screens > Pair, enter the code and the PIN; the kiosk loads the app and remembers its
 token (localStorage + an HttpOnly cookie). Revoke a screen there too. For TouchKio you can instead copy a token into
 the URL once: `.../display?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
 turns this off. In Settings > Screens each paired screen has a name, a style (large, compact, phone) and its own

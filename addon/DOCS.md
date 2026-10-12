@@ -30,7 +30,7 @@ Moonlight's Settings. The weather comes from a Home Assistant weather entity you
 ## Wall screens
 
 Every screen opens the same address: `http://<ha-host>:8091/display`. It shows a 6-digit code: in Moonlight (sidebar
-or phone) go to Settings > Screens > Pair a new screen, enter the code and the PIN, and give the screen a name. The
+or phone) go to Settings > Screens > Pair, enter the code and the PIN, and give the screen a name. The
 screen remembers its pairing. Tap it in Settings > Screens to rename it, pick its style (Large for a big wall screen,
 Compact for a small touch screen, Phone) and choose what it shows: the sections in its menu, the one it opens on, its
 speaker and when the photo screensaver starts. Remove it there too.

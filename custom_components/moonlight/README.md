@@ -18,7 +18,7 @@ WebSocket, so a chore ticked off on the wall shows up in HA within a second or t
    disconnected; restarting the add-on afterwards offers it again.
 4. **Without the add-on** (Moonlight running elsewhere): **Add integration -> Moonlight**, enter its host and port
    (`8091`). Setup checks `GET /api/health`. If Moonlight requires pairing, the next step shows a 6-digit code: enter
-   it in Moonlight under **Settings > Screens > Pair a new screen** with the parent PIN, then select **Submit**. If the
+   it in Moonlight under **Settings > Screens > Pair** with the parent PIN, then select **Submit**. If the
    token stops working, the integration asks you to re-authenticate and shows a new code. You can change host/port
    later with **Reconfigure**. A manual entry for the add-on's own address is adopted when the add-on announces itself.
 

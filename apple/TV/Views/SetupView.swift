@@ -82,7 +82,7 @@ struct PairingView: View {
             LogoMark(size: 110)
             VStack(spacing: 16) {
                 Text("Pair this Apple TV").font(Theme.font(60, .heavy)).foregroundStyle(Theme.text)
-                Text("On your phone or a wall screen, open Moonlight › Settings › Screens › Pair a new screen, and enter this code.")
+                Text("On your phone or a wall screen, open Moonlight › Settings › Screens › Pair, and enter this code.")
                     .font(Theme.font(32, .bold)).foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center).frame(maxWidth: 1200)
             }

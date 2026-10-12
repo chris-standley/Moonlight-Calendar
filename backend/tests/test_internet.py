@@ -171,7 +171,7 @@ def test_sign_in_for_the_app(tmp_path, https_env, fake_ha):
     token = parse_qs(loc.query)["token"][0]
     assert parse_qs(loc.query)["server"] == ["https://moonlight.example.com"]
     assert web(app).get("/api/people", headers={"Authorization": f"Bearer {token}"}).status_code == 200
-    assert [d["name"] for d in ha_user(app).get("/api/displays").json()] == ["Chris's iPhone"]
+    assert [(d["name"], d["layout"]) for d in ha_user(app).get("/api/displays").json()] == [("Chris's iPhone", "app")]
 
 
 def test_sign_in_failures(tmp_path, https_env, fake_ha):

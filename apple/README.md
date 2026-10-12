@@ -74,7 +74,7 @@ tab.
    is tried too. Otherwise enter the address: typed on the phone (`192.168.1.5`, `homeassistant.local:8091` or a full
    URL), or picked with the remote on the TV (IP and port, swipe up/down on each number).
 2. The app shows a 6-digit code. On a wall screen or in the Home Assistant sidebar open Moonlight › Settings ›
-   Screens › Pair a new screen and enter it. The phone pairs as a "phone" screen, the TV as a large screen.
+   Screens › Pair and enter it. The TV pairs as a large screen. The iPhone and iPad app is listed apart from the screens, under Phones and tablets (it has no screen style or setup).
 3. The token is kept in the device's Keychain. Deleting it in Settings › Screens sends the app back to pairing.
 
 Live updates come over the same WebSocket the wall screens use, so a change anywhere shows everywhere straight away.

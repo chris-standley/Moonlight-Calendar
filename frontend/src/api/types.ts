@@ -103,9 +103,9 @@ export interface Weather {
 
 /** Screen style: a big wall screen, a small touch screen, a phone. */
 export type Layout = "large" | "compact" | "phone";
-/** "service" = a non-screen client such as the Home Assistant integration. */
+/** Not screens: "service" = the Home Assistant integration, "app" = the iPhone and iPad app (a person's device). */
 export interface Display {
-  id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean;
+  id: string; name: string; layout: Layout | "service" | "app"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean;
   /** Screens only: what it shows (its own choices, else its style's) and whether it has choices of its own. */
   setup?: DisplaySetup; own_setup?: boolean;
 }

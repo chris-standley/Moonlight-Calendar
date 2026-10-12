@@ -46,7 +46,7 @@ function Live() {
   useEffect(() => {
     authStatus(base).then((s) => {
       const l = s.display?.layout;
-      if (l && l !== "service") setLayout(l);
+      if (l && l !== "service" && l !== "app") setLayout(l);
       setAccess(s.authorised ? "ok" : "pair");
     }).catch(() => setAccess("ok"));
     const onUnpaired = () => setAccess("pair");

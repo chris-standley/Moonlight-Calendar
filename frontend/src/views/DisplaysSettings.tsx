@@ -66,14 +66,15 @@ export function ScreensPanel() {
   const summary = (s: DisplaySetup) =>
     `Opens on ${SECTION_LABEL[s.start]} · ${s.sections.length} section${s.sections.length === 1 ? "" : "s"} · `
     + `${s.speaker ? speakerName(s.speaker) : "No speaker"} · ${s.idle_minutes ? `Screensaver after ${s.idle_minutes} min` : "No screensaver"}`;
-  const devices = (screens ?? []).filter((d) => d.layout !== "service");
+  const devices = (screens ?? []).filter((d) => d.layout !== "service" && d.layout !== "app");
+  const apps = (screens ?? []).filter((d) => d.layout === "app");
   const services = (screens ?? []).filter((d) => d.layout === "service");
 
   return (
     <section className="panel screens-panel">
       <div className="panel-head">
         <h2 className="panel-title">Screens</h2>
-        <button className="btn small" onClick={() => setPairing(true)}>Pair a new screen</button>
+        <button className="btn small" onClick={() => setPairing(true)}>Pair</button>
       </div>
       <p className="muted screens-help">
         Every screen opens <code>http://&lt;home-assistant&gt;:8091/display</code> and shows a 6-digit code to enter here.
@@ -97,6 +98,24 @@ export function ScreensPanel() {
           );
         })}
         {screens && devices.length === 0 && <div className="screen-note muted">No screens paired yet.</div>}
+      </div>
+      <h3 className="screens-sub">Phones and tablets</h3>
+      <div className="screen-list">
+        {apps.map((d) => (
+          <div key={d.id} className="screen-row">
+            <span className="screen-ico phone" aria-hidden />
+            <div className="screen-main">
+              <b>{d.name}</b>
+              <span>Moonlight app · seen {ago(d.last_seen, now).toLowerCase()}</span>
+            </div>
+            <button className="btn ghost small danger" onClick={() => revoke(d)}>Disconnect</button>
+          </div>
+        ))}
+        {screens && apps.length === 0 && (
+          <div className="screen-note muted">
+            The Moonlight app for iPhone and iPad shows a code to enter with Pair, or signs in with Home Assistant.
+          </div>
+        )}
       </div>
       <h3 className="screens-sub">In the Home Assistant app</h3>
       <p className="muted screens-help">
@@ -272,7 +291,7 @@ function PairSheet({ onClose }: { onClose: () => void }) {
 
   async function submit() {
     if (!valid || busy) return;
-    const pin = await askPin("Pair a new screen");
+    const pin = await askPin("Pair a screen or phone");
     if (!pin) return;
     setBusy(true);
     try {
@@ -285,12 +304,12 @@ function PairSheet({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Sheet title="Pair a new screen" onClose={onClose} footer={<>
+    <Sheet title="Pair a screen or phone" onClose={onClose} footer={<>
       <button className="btn ghost" onClick={onClose}>Cancel</button>
-      <button className="btn" disabled={!valid || busy} onClick={submit}>Pair screen</button>
+      <button className="btn" disabled={!valid || busy} onClick={submit}>Pair</button>
     </>}>
       <div className="form">
-        <div className="field-label">Code shown on the screen</div>
+        <div className="field-label">Code shown on the screen or in the app</div>
         <input className="input big pair-code-input" inputMode="numeric" autoComplete="one-time-code" placeholder="000000"
           maxLength={7} value={code} autoFocus
           onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(null); }}
@@ -302,7 +321,7 @@ function PairSheet({ onClose }: { onClose: () => void }) {
             <button key={n} className={"chip-btn" + (name === n ? " on" : "")} onClick={() => setName(n)}>{n}</button>
           ))}
         </div>
-        <div className="field-label">Style</div>
+        <div className="field-label">Style (screens only)</div>
         <Segmented value={layout} onChange={setLayout} options={[{ value: "auto", label: "By its size" }, ...STYLE_OPTS]} />
         {error && <div className="form-error">{error}</div>}
       </div>

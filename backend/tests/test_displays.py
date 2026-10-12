@@ -257,3 +257,17 @@ def test_old_style_names_are_renamed(tmp_path):
         assert dict(c.execute("SELECT id, layout FROM displays")) == {"ds_1": "large", "ds_2": "compact"}
         assert c.execute("SELECT value FROM settings WHERE key = 'idle_minutes'").fetchone()[0] == \
             '{"large": 9, "compact": 2, "phone": 0}'
+
+
+def test_the_phone_app_is_not_a_screen(app_on, ha):
+    phone = lan(app_on)
+    start = phone.post("/api/pair/start", json={"layout": "app", "name": "iPhone"}).json()
+    assert start["layout"] == "app"
+    r = ha.post("/api/displays/approve", json={"code": start["code"], "layout": "large", "pin": PIN})
+    d = r.json()
+    assert (d["layout"], d["name"]) == ("app", "iPhone")  # the approver can't make it a screen
+    assert "setup" not in d
+    token = phone.get(f"/api/pair/{start['pair_id']}").json()["token"]
+    assert lan(app_on, headers={"Authorization": f"Bearer {token}"}).get("/api/people").status_code == 200
+    assert ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "layout": "phone"}).status_code == 400
+    assert ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "name": "Chris's iPhone"}).json()["name"] == "Chris's iPhone"

@@ -42,7 +42,8 @@ final class AppModel {
         do {
             let status = try await api.authStatus()
             if status.required && !status.authorised { return forget() }
-            if let layout = status.display?.layout, layout != "service" { api.layout = layout }
+            // A screen (the TV) uses its own style's speaker; the phone app has no style and uses the phone one.
+            if let layout = status.display?.layout { api.layout = ["service", "app"].contains(layout) ? "phone" : layout }
         } catch {
             // Add-on unreachable (restarting, network down): keep the pairing and carry on; data loads retry.
         }

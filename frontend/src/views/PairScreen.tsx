@@ -65,7 +65,7 @@ export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
           <>
             <h1>Pair this screen</h1>
             <p className="pair-help">
-              On a phone or a screen that already shows Moonlight, open <b>Settings → Screens → Pair a new screen</b> and
+              On a phone or a screen that already shows Moonlight, open <b>Settings → Screens → Pair</b> and
               enter this code.
             </p>
             <div className="pair-code" aria-label={`Pairing code ${pair?.code ?? ""}`}>

@@ -134,7 +134,7 @@ struct PairingCard: View {
         VStack(spacing: 22) {
             LogoMark(size: 72).padding(.top, 30)
             Text("Pair this \(UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone")").font(Theme.text(.title, .heavy))
-            Text("On a wall screen or in the Home Assistant sidebar, open Moonlight › Settings › Screens › Pair a new screen and enter this code.")
+            Text("On a wall screen or in the Home Assistant sidebar, open Moonlight › Settings › Screens › Pair and enter this code.")
                 .font(Theme.text(.body)).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
             HStack(spacing: 8) {
                 ForEach(Array((code ?? "      ").enumerated()), id: \.offset) { item in
@@ -173,7 +173,7 @@ struct PairingCard: View {
     private func signInWithHomeAssistant() async {
         let name = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
         let api = APIClient(baseURL: server, token: nil)
-        let start = api.url("/api/auth/ha/start", query: ["layout": "phone", "name": name, "app": "1"])
+        let start = api.url("/api/auth/ha/start", query: ["layout": "phone", "name": name, "app": "1"])  // pairs as an "app" device
         signingIn = true
         defer { signingIn = false }
         do {
@@ -197,7 +197,7 @@ struct PairingCard: View {
         let name = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
         while !Task.isCancelled {
             do {
-                let start = try await api.pairStart(layout: "phone", name: name)
+                let start = try await api.pairStart(layout: "app", name: name)
                 code = start.code
                 expires = Date().addingTimeInterval(TimeInterval(start.expires_in))
                 error = nil

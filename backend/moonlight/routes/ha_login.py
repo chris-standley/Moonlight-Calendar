@@ -9,7 +9,8 @@ Home Assistant's own OAuth flow (the one its companion apps use, with the client
    WebSocket (`auth/current_user`), revokes that token straight away and pairs the device as a new screen named after
    them, which shows (and can be revoked) in Settings > Screens like any other.
 3. Browsers are sent to `/display` with the screen cookie set; the app (`app=1`) to
-   `moonlight://signed-in?token=...&server=<origin>`, which only the app's sign-in sheet receives.
+   `moonlight://signed-in?token=...&server=<origin>`, which only the app's sign-in sheet receives. The app is paired
+   as an `app` device (a person's phone or iPad), not a screen.
 
 Home Assistant's address for the login page: `MOONLIGHT_HA_LOGIN_URL` (add-on option `homeassistant_url`), else the
 external URL set in Home Assistant (Settings > System > Network), read through the Supervisor.
@@ -31,7 +32,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from .. import auth, security
 from .. import db
 from ..common import LAYOUTS, hub
-from .displays import create_display
+from .displays import APP, create_display
 
 log = logging.getLogger("moonlight.ha_login")
 router = APIRouter(prefix="/api/auth/ha")
@@ -182,7 +183,8 @@ async def callback(request: Request, state: str = "", code: str = "", error: str
 
     who = (user.get("name") or "Home Assistant user").strip()[:30]
     device = entry["name"] or {"phone": "phone", "compact": "screen", "large": "screen"}[entry["layout"]]
-    token, d = create_display(f"{who}'s {device}", entry["layout"])
+    # The app is a person's own device, not a screen (see displays.py).
+    token, d = create_display(f"{who}'s {device}", APP if entry["app"] else entry["layout"])
     log.info("%s signed in with Home Assistant as %s", d["name"], user.get("id"))
     await hub.broadcast("displays")
     if entry["app"]:

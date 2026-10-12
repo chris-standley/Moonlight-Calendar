@@ -8,7 +8,7 @@ Manual setup:
 
 With the add-on's `require_pairing` on (the default), Moonlight's LAN port only answers paired clients. Home
 Assistant then pairs itself like a wall screen: it asks for a 6-digit code (POST /api/pair/start), the user enters
-it in Moonlight under Settings > Screens > Pair a new screen (with the parent PIN), and on submit the flow
+it in Moonlight under Settings > Screens > Pair (with the parent PIN), and on submit the flow
 collects the token (GET /api/pair/{id}) and stores it in the config entry. Reconfigure and reauth (started when
 Moonlight answers 401, e.g. after the token was revoked) go through the same pairing step.
 """

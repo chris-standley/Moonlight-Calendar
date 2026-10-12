@@ -294,13 +294,15 @@ screen loads. A 401 makes the frontend show the pairing screen (so revoking kick
 Every screen opens the same address, `/display`, and is told apart by the token it got when it was paired (a browser
 can't read a MAC address). Each paired screen has a name, a style and its own setup.
 
-Display = `{id, name, layout: "large"|"compact"|"phone"|"service", created_at, last_seen|null, revoked, current: bool,
+Display = `{id, name, layout: "large"|"compact"|"phone"|"service"|"app", created_at, last_seen|null, revoked, current: bool,
 setup?: {start, sections, speaker, idle_minutes}, own_setup?: bool}`
 (`current` = the screen making the request; `last_seen` updated at most once a minute). Screens only: `setup` is what it
 shows, its own choices over its style's (Settings `screens`, `media_players`, `idle_minutes`); `own_setup` says whether
 it has choices of its own. The frontend takes the style from `GET /api/auth/status` and switches when it changes.
 - `GET /api/auth/status` -> `{required: bool, authorised: bool, via: "ingress"|"display"|"open"|null, display: Display|null}`
-- `POST /api/pair/start` `{layout, name?}` (`layout` = the style the screen guesses from its size) -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
+- `POST /api/pair/start` `{layout, name?}` (`layout` = the style the screen guesses from its size, or `service` /
+  `app` for the two kinds that aren't screens: the Home Assistant integration and the iPhone/iPad app, which have no
+  style or setup and are listed apart) -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
   `layout: "service"` is for a non-screen client (the Home Assistant integration sends `{layout: "service", name: "Home Assistant"}`);
   `name` is a suggestion used if the approver leaves the name blank.
 - `GET /api/pair/{pair_id}` -> `{status: "pending", expires_in}` | `{status: "expired"}` |
