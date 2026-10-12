@@ -115,9 +115,8 @@ struct CalendarView: View {
                                 AgendaCard(item: item, compact: true) { open = $0 }
                             }
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .padding(.horizontal, 14).padding(.vertical, 10)  // room for a focused card's lift inside the clip
                     }
-                    .scrollClipDisabled()
                     .frame(maxHeight: .infinity)
 
                     if let dinner = meals.first(where: { $0.date == day && $0.slot == "dinner" }) {
@@ -148,8 +147,10 @@ struct CalendarView: View {
 
     private func schedule(days: [String], events: [Occurrence]) -> some View {
         let d = model.dates
+        // Plain (not lazy) stacks and a clipped scroll view: rows don't pop in and out while scrolling or slide up
+        // over the controls; the padding leaves room for a focused card's lift.
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 18) {
                 ForEach(days, id: \.self) { day in
                     let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)
                     HStack(alignment: .top, spacing: 30) {
@@ -177,8 +178,15 @@ struct CalendarView: View {
                         if list.isEmpty {
                             Text("Nothing planned").font(Theme.font(24, .bold)).foregroundStyle(Theme.muted).padding(.top, 20)
                         } else {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 480), spacing: 16)], alignment: .leading, spacing: 14) {
-                                ForEach(list) { item in AgendaCard(item: item) { open = $0 } }
+                            // Three across, built up front (a lazy grid pops cards in and out as it scrolls).
+                            let rows = stride(from: 0, to: list.count, by: 3).map { Array(list[$0..<min($0 + 3, list.count)]) }
+                            VStack(alignment: .leading, spacing: 14) {
+                                ForEach(rows.indices, id: \.self) { r in
+                                    HStack(alignment: .top, spacing: 16) {
+                                        ForEach(rows[r]) { item in AgendaCard(item: item) { open = $0 } }
+                                        ForEach(rows[r].count..<3, id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
+                                    }
+                                }
                             }
                         }
                     }
@@ -187,8 +195,8 @@ struct CalendarView: View {
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                 }
             }
-            .padding(.vertical, 20)
+            .padding(.horizontal, 24).padding(.vertical, 24)
         }
-        .scrollClipDisabled()
+        .padding(.horizontal, -24)
     }
 }
