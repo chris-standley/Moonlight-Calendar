@@ -57,6 +57,14 @@ struct FamilyPrompt: View {
 }
 
 /// A Moonlight screen: safe-area padding, the header, then content.
+extension View {
+    /// For a scroll view inside a panel: clip the top and bottom (so rows don't run past the panel), but let a focused
+    /// card's lift and shadow spill out at the sides instead of being cut off.
+    func clipTopAndBottom(spill: CGFloat = 80) -> some View {
+        scrollClipDisabled().mask(Rectangle().padding(.horizontal, -spill))
+    }
+}
+
 struct Screen<Content: View>: View {
     @ViewBuilder var content: Content
 

@@ -115,8 +115,9 @@ struct CalendarView: View {
                                 AgendaCard(item: item, compact: true) { open = $0 }
                             }
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 10)  // room for a focused card's lift inside the clip
+                        .padding(.horizontal, 10).padding(.vertical, 30)  // room for a focused card's shadow at the ends
                     }
+                    .clipTopAndBottom()
                     .frame(maxHeight: .infinity)
 
                     if let dinner = meals.first(where: { $0.date == day && $0.slot == "dinner" }) {
@@ -193,5 +194,6 @@ struct CalendarView: View {
             .padding(.horizontal, 24).padding(.vertical, 24)
         }
         .padding(.horizontal, -24)
+        .clipTopAndBottom()
     }
 }

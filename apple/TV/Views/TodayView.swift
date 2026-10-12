@@ -64,8 +64,9 @@ struct TodayView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 30).padding(.vertical, 24)  // room for a focused card's lift inside the clip
+                .padding(.horizontal, 20).padding(.vertical, 40)  // room for a focused card's shadow at the ends
             }
+            .clipTopAndBottom()
         }
         .panel(padding: 24)
     }
@@ -114,8 +115,9 @@ struct TodayView: View {
                 VStack(spacing: 20) {
                     ForEach(model.kids) { kid in kidChores(kid, period: ChoreDay.period(model.dates)) }
                 }
-                .padding(8)
+                .padding(.horizontal, 8).padding(.vertical, 40)
             }
+            .clipTopAndBottom()
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
