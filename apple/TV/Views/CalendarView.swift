@@ -94,10 +94,15 @@ struct CalendarView: View {
                         }
                         Spacer()
                         if let w = model.weather?.day(day) {
-                            HStack(spacing: 4) {
-                                WeatherGlyph(condition: w.condition, size: 22)
-                                Text("\(w.high)°").font(Theme.font(20, .heavy))
-                                Text("\(w.low)°").font(Theme.font(18, .bold)).foregroundStyle(Theme.muted)
+                            // Stacked so it fits a narrow week column: the icon, then high and low on one line.
+                            VStack(alignment: .trailing, spacing: 4) {
+                                WeatherGlyph(condition: w.condition, size: 26)
+                                HStack(spacing: 6) {
+                                    Text("\(w.high)°").font(Theme.font(20, .heavy))
+                                    Text("\(w.low)°").font(Theme.font(18, .bold)).foregroundStyle(Theme.muted)
+                                }
+                                .lineLimit(1)
+                                .fixedSize()
                             }
                         }
                     }
@@ -153,6 +158,8 @@ struct CalendarView: View {
                                     WeatherGlyph(condition: w.condition, size: 22)
                                     Text("\(w.high)°").font(Theme.font(20, .heavy)).foregroundStyle(Theme.text)
                                 }
+                                .lineLimit(1)
+                                .fixedSize()
                             }
                         }
                         .frame(width: 140, alignment: .leading)
