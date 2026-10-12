@@ -56,36 +56,101 @@ struct EventCard: View {
     }
 }
 
-/// A day's work busy time folded into one card (not focusable: there's nothing to open).
+/// A day's work busy time folded into one card. Select it to see every busy and free time.
 struct BusyCard: View {
     @Environment(AppModel.self) private var model
     let busy: BusyDay
     var compact = false
+    @State private var showing = false
 
     var body: some View {
         let color = Color(hex: busy.color ?? model.person(busy.personIds.first)?.color ?? Theme.fallbackEvent)
-        HStack(spacing: 0) {
-            Rectangle().fill(color.opacity(busy.allTentative ? 0.45 : 1)).frame(width: 8)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(model.dates.clock(minutes: busy.start)) – \(model.dates.clock(minutes: busy.end))")
-                    .font(Theme.font(compact ? 19 : 22, .bold))
-                    .foregroundStyle(color.mix(with: .black, by: 0.3))
-                Text(busy.who(model.people))
-                    .font(Theme.font(compact ? 23 : 27, .heavy))
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
-                ForEach(busy.details(model.dates), id: \.self) { line in
-                    Text(line).font(Theme.font(compact ? 17 : 19, .semibold)).foregroundStyle(Theme.muted).lineLimit(2)
+        Button { showing = true } label: {
+            HStack(spacing: 0) {
+                Rectangle().fill(color.opacity(busy.allTentative ? 0.45 : 1)).frame(width: 8)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.dates.span(busy.start, busy.end))
+                        .font(Theme.font(compact ? 19 : 22, .bold))
+                        .foregroundStyle(color.mix(with: .black, by: 0.3))
+                    Text(busy.who(model.people))
+                        .font(Theme.font(compact ? 23 : 27, .heavy))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                    ForEach(busy.details(model.dates), id: \.self) { line in
+                        Text(line).font(Theme.font(compact ? 17 : 19, .semibold)).foregroundStyle(Theme.muted).lineLimit(2)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.08))
+            .background(Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.moonCard(radius: 16, ring: color))
+        .sheet(isPresented: $showing) { BusyDetail(busy: busy, color: color) }
+    }
+}
+
+/// Every busy, tentative and free time in a folded busy card.
+struct BusyDetail: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let busy: BusyDay
+    let color: Color
+
+    var body: some View {
+        let d = model.dates
+        let rows = BusyDetail.rows(busy, d)
+        VStack(alignment: .leading, spacing: 26) {
+            HStack(spacing: 20) {
+                RoundedRectangle(cornerRadius: 6).fill(color).frame(width: 12, height: 80)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(busy.who(model.people)).font(Theme.font(54, .heavy))
+                    Text(d.span(busy.start, busy.end)).font(Theme.font(32, .bold)).foregroundStyle(Theme.muted)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            Spacer(minLength: 0)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(rows, id: \.time) { row in
+                        HStack(spacing: 24) {
+                            Text(row.time).font(Theme.font(30, .heavy)).frame(width: 360, alignment: .leading)
+                            Text(row.kind.rawValue).font(Theme.font(28, .bold))
+                                .foregroundStyle(row.kind == .busy ? color.mix(with: .black, by: 0.3) : Theme.muted)
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(color.opacity(row.kind == .busy ? 0.14 : row.kind == .tentative ? 0.06 : 0),
+                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .focusable()  // so a long day can be scrolled with the remote
+                    }
+                }
+            }
+            .frame(maxHeight: 620)
+            Button("Close") { dismiss() }.buttonStyle(.pillProminent)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color.opacity(0.08))
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .foregroundStyle(Theme.text)
+        .padding(60)
+        .frame(width: 1100, alignment: .leading)
+    }
+
+    struct Row {
+        enum Kind: String { case busy = "Busy", tentative = "Tentative", free = "Free" }
+        let time: String
+        let kind: Kind
+    }
+
+    /// Busy runs and the free gaps between them, in time order.
+    static func rows(_ busy: BusyDay, _ d: Dates) -> [Row] {
+        busy.runs.enumerated().flatMap { i, r -> [Row] in
+            var out = [Row(time: d.span(r.start, r.end), kind: r.tentative ? .tentative : .busy)]
+            if i + 1 < busy.runs.count, busy.runs[i + 1].start - r.end >= 15 {
+                out.append(Row(time: d.span(r.end, busy.runs[i + 1].start), kind: .free))
+            }
+            return out
+        }
     }
 }
 
