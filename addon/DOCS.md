@@ -67,7 +67,7 @@ belongs to. Moonlight syncs every 2 minutes and writes changes made on the scree
 Settings > Calendars > Add calendar link shows a read-only published calendar (an ICS / webcal link), such
 as a work calendar, school term dates or bin days, refreshed every 15 minutes. For an Outlook / Microsoft 365
 work calendar: Outlook on the web > Settings > Calendar > Shared calendars > Publish a calendar, choose
-"Can view when I'm busy" and copy the ICS link; its events show as "busy" blocks. Some workplaces block
+"Can view when I'm busy" and copy the ICS link; its busy time shows as a thin bar down the side of the Day view and one line per day in Week and Schedule (first start, last finish and the free gaps). Some workplaces block
 publishing. Treat the link like a password.
 
 Settings > Calendars > Home Assistant shows one of Home Assistant's own calendars (bin collections, Workday,

@@ -793,3 +793,37 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .day-picker .day-presets button.on { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .layout-phone .day-picker .days button { width: 2.4rem; height: 2.4rem; }
 .form > .set-row { margin-top: 0.6rem; }
+
+/* Work calendar busy time: a thin bar down the side of the Day view; one summary line in Week and Schedule. */
+.busy-bar { position: absolute; left: 0.12rem; width: 0.32rem; border-radius: 0.3rem; background: var(--ec); opacity: 0.75; z-index: 1; }
+.busy-bar.tentative { opacity: 1; background: repeating-linear-gradient(180deg, color-mix(in srgb, var(--ec) 55%, transparent) 0 0.3rem, transparent 0.3rem 0.5rem); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ec) 45%, transparent); }
+.ev.busy-day { background: color-mix(in srgb, var(--ec) 7%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ec) 18%, transparent); }
+.ev.busy-day::before { width: 0.22rem; background: var(--ec); opacity: 0.7; }
+.ev.busy-day .ev-title { font-weight: 700; font-size: 0.88rem; color: color-mix(in srgb, var(--ec) 40%, var(--text)); }
+.bd-meta, .sched-ev.busy-day .se-meta { font-size: 0.78rem; font-weight: 600; color: var(--muted); line-height: 1.25; }
+.sched-ev.busy-day .se-bar { width: 0.22rem; justify-self: center; background: var(--ec); opacity: 0.7; }
+.sched-ev.busy-day .se-meta { display: block; }
+.sched-ev.busy-day .ev-title { font-weight: 700; color: color-mix(in srgb, var(--ec) 40%, var(--text)); }
+.busy-day.b-tentative { opacity: 0.75; }
+
+/* Day view names: never wider than their column. */
+.dv-person { min-width: 0; padding: 0 0.3rem; }
+.dv-person .avatar { flex: none; }
+.dv-person > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layout-phone .dayview, .layout-compact .dayview { --gutter: 3.2rem; }
+.layout-phone .dv-person { flex-direction: column; gap: 0.15rem; font-size: 0.78rem; }
+.layout-phone .dv-hour span { right: 0.4rem; font-size: 0.7rem; }
+
+/* Phone calendar toolbar: people on one row, the view switch full width under them, nothing cut off. */
+.layout-phone .toolbar-r { flex-wrap: wrap; overflow: visible; justify-content: flex-start; row-gap: 0.7rem; }
+.layout-phone .toolbar-r .filters { flex-wrap: wrap; padding: 0.35rem; margin: 0; }
+.layout-phone .toolbar-r .segmented { width: 100%; }
+.layout-phone .toolbar-r .segmented button { flex: 1; padding: 0 0.4rem; }
+
+/* Cards keep their full height in a busy day (the list scrolls instead of squashing them). */
+.week-events > *, .dv-cell > *, .month-cell > * { flex: none; }
+/* Short Day view blocks: one line, tighter padding. */
+.ev.block.short { padding-top: 0.05rem; padding-bottom: 0; justify-content: center; }
+.ev.block.short .ev-title { -webkit-line-clamp: 1; font-size: 0.78rem; }
+.mc-dots { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+.mc-dots i { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--stripe); }
