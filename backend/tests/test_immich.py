@@ -336,3 +336,54 @@ def test_connection_problems_say_what_to_try(client, monkeypatch):
     assert "answered 502" in detail("http://proxy.test") and "Immich is running" in detail("http://proxy.test")
     assert "redirects to https://immich.example.com/api/albums" in detail("http://redirect.test")
     assert "no Immich API (404)" in detail("http://other.test/photos")
+
+
+def test_self_signed_https_needs_skip_cert_check(client, monkeypatch, tmp_path):
+    """A real HTTPS server with a self-signed certificate, like an Immich add-on with SSL reached by IP address."""
+    import json as _json
+    import ssl
+    import subprocess
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=immich.example",
+                    "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.headers.get("x-api-key") != KEY:
+                self.send_response(401); self.end_headers(); return  # noqa: E702
+            body = _json.dumps([{"id": "0b6c2e0a-1f3d-4c5e-9a7b-2d4e6f8a0c1e", "albumName": "Garden", "assetCount": 3}] if self.path == "/api/albums"
+                               else {"major": 2, "minor": 1, "patch": 0}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()  # noqa: E702
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(str(cert), str(key))
+    server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setattr(immich, "transport", None)  # the real network stack, so TLS is really checked
+        for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+            monkeypatch.delenv(var, raising=False)
+        url = f"https://127.0.0.1:{server.server_port}"
+        client.put("/api/settings", json={"pin": PIN, "new_pin": PIN})
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": url, "api_key": KEY})
+        assert r.status_code == 502 and "Skip certificate check" in r.json()["detail"], r.text
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": url, "api_key": KEY, "skip_cert_check": True})
+        assert r.status_code == 200 and r.json()["albums"][0]["name"] == "Garden", r.text
+        r = client.put("/api/immich", json={"pin": PIN, "server_url": url, "api_key": KEY, "album_ids": ["0b6c2e0a-1f3d-4c5e-9a7b-2d4e6f8a0c1e"],
+                                            "skip_cert_check": True})
+        assert r.status_code == 200 and r.json()["skip_cert_check"] is True, r.text
+        assert client.get("/api/immich/albums").status_code == 200  # the saved setting is used
+        # Plain http:// to the HTTPS port says to use https://.
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": f"http://127.0.0.1:{server.server_port}",
+                                                  "api_key": KEY})
+        assert r.status_code == 502, r.text
+    finally:
+        server.shutdown()

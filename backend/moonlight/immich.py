@@ -23,6 +23,7 @@ import asyncio
 import json
 import os
 import socket
+import ssl
 import time
 from datetime import date, datetime
 from typing import Any
@@ -67,17 +68,18 @@ def load_config(c) -> dict | None:
     r["album_ids"] = json.loads(r["album_ids"])
     r["favorites"] = bool(r["favorites"])
     r["memories"] = bool(r["memories"])
+    r["skip_cert_check"] = bool(r.get("skip_cert_check"))
     return r
 
 
 def save_config(c, cfg: dict) -> None:
     c.execute(
-        "INSERT INTO immich(id, server_url, api_key, album_ids, favorites, memories, updated_at) "
-        "VALUES(1, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET server_url=excluded.server_url, "
+        "INSERT INTO immich(id, server_url, api_key, album_ids, favorites, memories, skip_cert_check, updated_at) "
+        "VALUES(1, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET server_url=excluded.server_url, "
         "api_key=excluded.api_key, album_ids=excluded.album_ids, favorites=excluded.favorites, "
-        "memories=excluded.memories, updated_at=excluded.updated_at",
+        "memories=excluded.memories, skip_cert_check=excluded.skip_cert_check, updated_at=excluded.updated_at",
         (cfg["server_url"], cfg["api_key"], json.dumps(cfg["album_ids"]), int(cfg["favorites"]),
-         int(cfg["memories"]), db.now_iso()))
+         int(cfg["memories"]), int(cfg.get("skip_cert_check", False)), db.now_iso()))
 
 
 def delete_config(c) -> None:
@@ -87,13 +89,16 @@ def delete_config(c) -> None:
 # ---------------------------------------------------------------- client
 
 class Client:
-    def __init__(self, server_url: str, api_key: str) -> None:
+    def __init__(self, server_url: str, api_key: str, skip_cert_check: bool = False) -> None:
         self.server_url = normalize_url(server_url)
         self.base = self.server_url + "/api"
         self._key = api_key
+        # Immich on the home network often has a self-signed certificate, or one for a domain name while Moonlight
+        # reaches it by IP address; the household can choose to skip the check rather than give up HTTPS.
+        self.verify = not skip_cert_check
 
     def http(self, timeout: httpx.Timeout = TIMEOUT) -> httpx.AsyncClient:
-        return httpx.AsyncClient(base_url=self.base, timeout=timeout, transport=transport, follow_redirects=False,
+        return httpx.AsyncClient(base_url=self.base, timeout=timeout, transport=transport, follow_redirects=False, verify=self.verify,
                                  headers={"x-api-key": self._key, "Accept": "application/json"})
 
     def _fail(self, r: httpx.Response, what: str) -> ImmichError:
@@ -109,6 +114,8 @@ class Client:
             return ImmichError(f"{self.server_url} answered {r.status_code} ({r.reason_phrase or 'gateway error'}): "
                                "Immich is starting, stopped, or behind a proxy that can't reach it. "
                                "Check Immich is running, or enter its own address and port (2283 by default)")
+        if r.status_code == 400 and "https" in r.text.lower() and self.server_url.startswith("http://"):
+            return ImmichError(f"{self.server_url} only speaks HTTPS: start the address with https://")
         if r.status_code == 404:
             return ImmichError(f"{self.server_url} has no Immich API (404). Enter the address you open Immich at, "
                                "without /photos or other paths")
@@ -122,6 +129,12 @@ class Client:
             tip = (" Addresses ending in .local often don't work from inside an add-on: use the IP address instead, "
                    "e.g. http://192.168.1.10:2283" if host.endswith(".local") else " Check the spelling, or use the IP address")
             return ImmichError(f"Couldn't find {host} on the network.{tip}")
+        if isinstance(cause, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(e):
+            return ImmichError(f"{self.server_url} has a certificate Moonlight can't check (self-signed, or made for a "
+                               "domain name rather than this address). Turn on \"Skip certificate check\", or use "
+                               "the name the certificate was made for")
+        if isinstance(cause, ssl.SSLError) or "WRONG_VERSION_NUMBER" in str(e):
+            return ImmichError(f"{self.server_url} doesn't speak HTTPS: start the address with http://")
         if isinstance(e, httpx.TimeoutException):
             return ImmichError(f"{self.server_url} didn't answer in time. Check the address and that Immich is running")
         if isinstance(e, httpx.ConnectError):
@@ -281,7 +294,7 @@ class Cache:
         if not cfg:
             return None
         return json.dumps([cfg["server_url"], cfg["api_key"], sorted(cfg["album_ids"]), cfg["favorites"],
-                           cfg["memories"]])
+                           cfg["memories"], cfg.get("skip_cert_check", False)])
 
     def _due(self, key: str | None) -> bool:
         now = time.monotonic()
@@ -329,7 +342,7 @@ class Cache:
             return self
 
     async def _fetch(self, cfg: dict, tz: str) -> tuple[list[dict], str | None]:
-        client = Client(cfg["server_url"], cfg["api_key"])
+        client = Client(cfg["server_url"], cfg["api_key"], cfg.get("skip_cert_check", False))
         found: dict[str, dict] = {}
 
         def add(assets: list[dict]) -> None:

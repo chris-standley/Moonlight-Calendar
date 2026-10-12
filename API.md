@@ -323,15 +323,17 @@ fields, falling back to the v3.2+ `filter` form if a server rejects them), `GET 
 and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already applied), all with the `x-api-key` header.
 The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
 
-ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool,
+ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool, skip_cert_check: bool,
 status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error", last_error|null, last_refresh|null, photo_count, version|null}`.
 The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 - `GET /api/immich` -> ImmichConfig
-- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?}` -> ImmichConfig. `api_key` may be left out
+- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out
   once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
-  `server_url` is the Immich address (`http://192.168.1.10:2283`; a trailing `/api` is dropped).
+  `server_url` is the Immich address (`http://192.168.1.10:2283`; a trailing `/api` is dropped). `skip_cert_check` (default
+  false) uses HTTPS without checking the certificate, for a self-signed one or one made for a domain name. The 502 detail
+  says what to try (IP instead of a `.local` name, http vs https, certificate, proxy answering 502, redirect, 404).
 - `DELETE /api/immich` `{pin}` -> `{ok: true}` (forgets address, key and choice; nothing changes in Immich)
-- `POST /api/immich/test` `{pin, server_url?, api_key?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
+- `POST /api/immich/test` `{pin, server_url?, api_key?, skip_cert_check?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
   `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.
 - `GET /api/immich/albums` -> `[ImmichAlbum]` live from Immich with the saved key (404 not connected, 400/502 as above)
 - `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, url}]}`.

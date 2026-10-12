@@ -83,7 +83,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
 
   // Starts connected to one album, so the preview's screensaver shows photos. Any address and key work;
   // the key "wrong" is rejected and an address containing "offline" can't be reached.
-  let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean } | null =
+  let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean; skip_cert_check?: boolean } | null =
     { server_url: "http://192.168.1.10:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
   let refreshed = ago(2);
   let painted: SlidePhoto[] | null = null;
@@ -110,8 +110,8 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   };
   const out = (): ImmichConfig => cfg
     ? { configured: true, server_url: cfg.server_url, key_set: true, album_ids: [...cfg.album_ids], favorites: cfg.favorites,
-        memories: cfg.memories, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
-    : { configured: false, server_url: "", key_set: false, album_ids: [], favorites: false, memories: false, status: "unconfigured",
+        memories: cfg.memories, skip_cert_check: !!cfg.skip_cert_check, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
+    : { configured: false, server_url: "", key_set: false, album_ids: [], favorites: false, memories: false, skip_cert_check: false, status: "unconfigured",
         last_error: null, last_refresh: null, photo_count: 0, version: null };
   const albums = () => ALBUMS.map(({ looks, ...a }) => ({ ...a }));
   async function check(url: string, key: string) {
@@ -157,13 +157,13 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
     immich: async () => out(),
-    async saveImmich({ pin, server_url, api_key, album_ids, favorites, memories }) {
+    async saveImmich({ pin, server_url, api_key, album_ids, favorites, memories, skip_cert_check }) {
       checkPin(pin);
       const url = server_url !== undefined ? clean(server_url) : cfg?.server_url ?? "";
       const key = api_key ? api_key.trim() : cfg?.key ?? "";
       if (!cfg || url !== cfg.server_url || key !== cfg.key) await check(url, key);
       cfg = { server_url: url, key, album_ids: album_ids ?? cfg?.album_ids ?? [], favorites: favorites ?? cfg?.favorites ?? false,
-        memories: memories ?? cfg?.memories ?? false };
+        memories: memories ?? cfg?.memories ?? false, skip_cert_check: skip_cert_check ?? cfg?.skip_cert_check ?? false };
       refreshed = ago(0);
       emit("photos");
       return out();
