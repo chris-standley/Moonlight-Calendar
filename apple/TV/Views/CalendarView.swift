@@ -193,6 +193,9 @@ struct CalendarView: View {
                     .padding(22)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                    // Each day is a focus section: up and down go to the next day's nearest card, even when
+                    // nothing sits straight above or below, instead of skipping days.
+                    .focusSection()
                 }
             }
             .padding(.horizontal, 24).padding(.vertical, 24)
