@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import time
 from datetime import date, datetime
 from typing import Any
@@ -100,13 +101,39 @@ class Client:
             return AuthFailed("Immich didn't accept the API key")
         if r.status_code == 403:
             return ImmichError(f"The API key isn't allowed to {what} (give it album.read, asset.read and asset.view)")
+        if r.is_redirect:
+            to = r.headers.get("location", "")
+            return ImmichError(f"{self.server_url} redirects to {to or 'another address'}. "
+                               "Enter Immich's own address instead, e.g. http://192.168.1.10:2283")
+        if r.status_code in (502, 503, 504):
+            return ImmichError(f"{self.server_url} answered {r.status_code} ({r.reason_phrase or 'gateway error'}): "
+                               "Immich is starting, stopped, or behind a proxy that can't reach it. "
+                               "Check Immich is running, or enter its own address and port (2283 by default)")
+        if r.status_code == 404:
+            return ImmichError(f"{self.server_url} has no Immich API (404). Enter the address you open Immich at, "
+                               "without /photos or other paths")
         return ImmichError(f"Immich answered {r.status_code} when asked to {what}")
+
+    def _unreachable(self, e: httpx.HTTPError) -> ImmichError:
+        """A message that says what to try, for a request that never got an answer."""
+        host = httpx.URL(self.server_url).host
+        cause = e.__cause__ or e.__context__
+        if isinstance(e, httpx.ConnectError) and isinstance(cause, socket.gaierror):
+            tip = (" Addresses ending in .local often don't work from inside an add-on: use the IP address instead, "
+                   "e.g. http://192.168.1.10:2283" if host.endswith(".local") else " Check the spelling, or use the IP address")
+            return ImmichError(f"Couldn't find {host} on the network.{tip}")
+        if isinstance(e, httpx.TimeoutException):
+            return ImmichError(f"{self.server_url} didn't answer in time. Check the address and that Immich is running")
+        if isinstance(e, httpx.ConnectError):
+            return ImmichError(f"Nothing answered at {self.server_url}. Check Immich is running and the port "
+                               "(2283 by default)")
+        return ImmichError(f"Couldn't reach Immich at {self.server_url} ({type(e).__name__})")
 
     async def _call(self, http: httpx.AsyncClient, method: str, path: str, what: str, **kw) -> Any:
         try:
             r = await http.request(method, path, **kw)
         except httpx.HTTPError as e:
-            raise ImmichError(f"Couldn't reach Immich at {self.server_url} ({type(e).__name__})") from None
+            raise self._unreachable(e) from None
         if r.status_code != 200:
             raise self._fail(r, what)
         try:
@@ -195,7 +222,7 @@ class Client:
                                 stream=True)
         except httpx.HTTPError as e:
             await http.aclose()
-            raise ImmichError(f"Couldn't reach Immich at {self.server_url} ({type(e).__name__})") from None
+            raise self._unreachable(e) from None
         if r.status_code != 200:
             await r.aclose()
             await http.aclose()

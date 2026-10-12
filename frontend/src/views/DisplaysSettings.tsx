@@ -450,7 +450,7 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
     </>}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); test(); }}>
         <label className="field-label">Immich address</label>
-        <input className="input" placeholder="http://homeassistant.local:2283" value={url} autoCapitalize="off" spellCheck={false}
+        <input className="input" placeholder="http://192.168.1.10:2283" value={url} autoCapitalize="off" spellCheck={false}
           onChange={(e) => { setUrl(e.target.value); setChecked(null); }} autoFocus={!cfg.configured} />
         <label className="field-label">API key</label>
         <input className="input" type="password" autoComplete="new-password" value={key}

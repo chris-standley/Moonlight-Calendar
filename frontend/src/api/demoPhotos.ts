@@ -84,7 +84,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   // Starts connected to one album, so the preview's screensaver shows photos. Any address and key work;
   // the key "wrong" is rejected and an address containing "offline" can't be reached.
   let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean } | null =
-    { server_url: "http://homeassistant.local:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
+    { server_url: "http://192.168.1.10:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
   let refreshed = ago(2);
   let painted: SlidePhoto[] | null = null;
   function library(): SlidePhoto[] {
@@ -116,7 +116,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   const albums = () => ALBUMS.map(({ looks, ...a }) => ({ ...a }));
   async function check(url: string, key: string) {
     await wait(700); // "talking to Immich"
-    if (!/^https?:\/\/[^/\s]+/.test(url)) throw new ApiError(400, "server_url must look like http://homeassistant.local:2283");
+    if (!/^https?:\/\/[^/\s]+/.test(url)) throw new ApiError(400, "server_url must look like http://192.168.1.10:2283");
     if (!key.trim()) throw new ApiError(400, "api_key is required");
     if (url.includes("offline")) throw new ApiError(502, `Couldn't reach Immich at ${url} (ConnectError)`);
     if (key.trim() === "wrong") throw new ApiError(400, "Immich didn't accept the API key");
