@@ -8,6 +8,7 @@ struct ChoresView: View {
     @State private var chores: [ChoreDay] = []
     @State private var points: [Balance] = []
     @State private var celebrating: Person?
+    @FocusState private var focused: String?
 
     var body: some View {
         let d = model.dates
@@ -45,8 +46,12 @@ struct ChoresView: View {
                     }
                 }
                 .padding(.bottom, 40)
+                // Down from the buttons above lands in the chart even when the column below them has no chores.
+                .focusSection()
             }
         }
+        // Start on the first chore still to do (in the first column that has one), not the buttons at the top.
+        .defaultFocus($focused, people.lazy.compactMap { p in ordered(p).first { !$0.completed }?.id }.first)
         .overlay { if let celebrating { Celebration(person: celebrating) } }
         .task(id: "\(day)|\(model.rev("chores", "points"))") {
             if let v = await model.call({ try await $0.chores(day) }) { chores = v }
@@ -56,7 +61,7 @@ struct ChoresView: View {
 
     private func column(_ p: Person, day: String) -> some View {
         let color = Color(hex: p.color)
-        let mine = chores.filter { $0.person_id == p.id }.sorted { $0.sort < $1.sort }
+        let mine = ordered(p)
         let done = mine.filter(\.completed).count
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 16) {
@@ -95,6 +100,12 @@ struct ChoresView: View {
         .focusSection()
     }
 
+    /// A person's chores in the order the column shows them: by time of day, then their own order.
+    private func ordered(_ p: Person) -> [ChoreDay] {
+        let mine = chores.filter { $0.person_id == p.id }.sorted { $0.sort < $1.sort }
+        return TimeOfDay.allCases.flatMap { tod in mine.filter { $0.time_of_day == tod.rawValue } }
+    }
+
     private func row(_ c: ChoreDay, person: Person, day: String) -> some View {
         let color = Color(hex: person.color)
         return Button { toggle(c, person: person, day: day) } label: {
@@ -129,6 +140,7 @@ struct ChoresView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.moonCard(radius: 18, ring: color))
+        .focused($focused, equals: c.id)
         .accessibilityLabel("\(c.title), \(c.completed ? "done" : "not done")")
     }
 

@@ -19,15 +19,19 @@ struct TodayView: View {
         let today = d.today
         Screen {
             HStack(alignment: .top, spacing: 36) {
+                // Each column is a focus section, so left and right move between them even when nothing lines up.
                 agenda(today: today)
                     .frame(maxWidth: .infinity)
+                    .focusSection()
                 VStack(spacing: 36) {
                     mealsPanel(today: today)
                     NowPlayingCard()
                 }
                 .frame(width: 520)
+                .focusSection()
                 choresPanel
                     .frame(width: 560)
+                    .focusSection()
             }
         }
         .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points"))") {
