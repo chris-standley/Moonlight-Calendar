@@ -197,7 +197,12 @@ struct PairingCard: View {
         let name = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
         while !Task.isCancelled {
             do {
-                let start = try await api.pairStart(layout: "app", name: name)
+                let start: PairStart
+                do {
+                    start = try await api.pairStart(layout: "app", name: name)
+                } catch APIError.server {
+                    start = try await api.pairStart(layout: "phone", name: name)  // add-ons before 0.4.0 only know screens
+                }
                 code = start.code
                 expires = Date().addingTimeInterval(TimeInterval(start.expires_in))
                 error = nil
