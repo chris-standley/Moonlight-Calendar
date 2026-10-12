@@ -138,7 +138,7 @@ jobs:
             sleep 2
           done
           curl -fsS http://localhost:8091/api/health | grep -F "\"version\":\"${VERSION}\""
-          curl -fsS http://localhost:8091/display/kitchen | grep -F '<div id="root">'
+          curl -fsS http://localhost:8091/display | grep -F '<div id="root">'
           curl -fsS http://localhost:8091/api/settings | grep -F '"timezone":"America/Chicago"'
           curl -fsS http://localhost:8091/api/people | grep -F '"name"'
 

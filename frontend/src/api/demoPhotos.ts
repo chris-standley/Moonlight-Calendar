@@ -1,9 +1,9 @@
 // Demo-mode screens and a simulated Immich server for the photo screensaver. Sample photos are painted on a canvas
 // at runtime (so the single-file preview stays small). Kept in memory only.
-import { Api, ApiError, Display, ImmichAlbum, ImmichConfig, SlidePhoto, Topic } from "./types";
+import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, Layout, SECTIONS, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
-type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "immich" | "saveImmich" | "disconnectImmich" |
+type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "updateDisplay" | "thisScreen" | "immich" | "saveImmich" | "disconnectImmich" |
   "testImmich" | "immichAlbums" | "screensaverPhotos">;
 
 interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number }
@@ -66,20 +66,25 @@ const ALBUMS: (ImmichAlbum & { looks: number[] })[] = [
 const FAVOURITES = [2, 3];
 const ON_THIS_DAY = [5];
 
-export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]) => void): Extras {
+/** `styleSetup`: what a screen of that style shows without choices of its own (from the demo's settings). */
+export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]) => void, styleSetup: (l: Layout) => DisplaySetup): Extras {
   const ago = (min: number) => isoDT(new Date(Date.now() - min * 60_000));
-  let displays: Display[] = [
-    { id: "ds_hall", name: "Hallway", layout: "hallway", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
-    { id: "ds_kitchen", name: "Kitchen", layout: "kitchen", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
+  type Stored = Omit<Display, "setup" | "own_setup"> & { own?: Partial<DisplaySetup> };
+  let displays: Stored[] = [
+    { id: "ds_hall", name: "Hallway", layout: "large", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
+    { id: "ds_kitchen", name: "Kitchen", layout: "compact", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
+    { id: "ds_ha", name: "Home Assistant", layout: "service", created_at: ago(60 * 24 * 19), last_seen: ago(1), revoked: false, current: false },
   ];
+  const out1 = ({ own, ...d }: Stored): Display => d.layout === "service" ? { ...d }
+    : { ...d, setup: { ...styleSetup(d.layout), ...own }, own_setup: !!own && Object.keys(own).length > 0 };
   let n = 0;
   const uid = (p: string) => `${p}_${Date.now().toString(36)}${(n++).toString(36)}`;
   const find = <T extends { id: string }>(xs: T[], id: string) => { const x = xs.find((a) => a.id === id); if (!x) throw new ApiError(404, "Not found"); return x; };
 
   // Starts connected to one album, so the preview's screensaver shows photos. Any address and key work;
   // the key "wrong" is rejected and an address containing "offline" can't be reached.
-  let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean } | null =
-    { server_url: "http://homeassistant.local:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
+  let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean; skip_cert_check?: boolean } | null =
+    { server_url: "http://192.168.1.10:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
   let refreshed = ago(2);
   let painted: SlidePhoto[] | null = null;
   function library(): SlidePhoto[] {
@@ -105,13 +110,13 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   };
   const out = (): ImmichConfig => cfg
     ? { configured: true, server_url: cfg.server_url, key_set: true, album_ids: [...cfg.album_ids], favorites: cfg.favorites,
-        memories: cfg.memories, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
-    : { configured: false, server_url: "", key_set: false, album_ids: [], favorites: false, memories: false, status: "unconfigured",
+        memories: cfg.memories, skip_cert_check: !!cfg.skip_cert_check, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
+    : { configured: false, server_url: "", key_set: false, album_ids: [], favorites: false, memories: false, skip_cert_check: false, status: "unconfigured",
         last_error: null, last_refresh: null, photo_count: 0, version: null };
   const albums = () => ALBUMS.map(({ looks, ...a }) => ({ ...a }));
   async function check(url: string, key: string) {
     await wait(700); // "talking to Immich"
-    if (!/^https?:\/\/[^/\s]+/.test(url)) throw new ApiError(400, "server_url must look like http://homeassistant.local:2283");
+    if (!/^https?:\/\/[^/\s]+/.test(url)) throw new ApiError(400, "server_url must look like http://192.168.1.10:2283");
     if (!key.trim()) throw new ApiError(400, "api_key is required");
     if (url.includes("offline")) throw new ApiError(502, `Couldn't reach Immich at ${url} (ConnectError)`);
     if (key.trim() === "wrong") throw new ApiError(400, "Immich didn't accept the API key");
@@ -119,25 +124,46 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   const clean = (u: string) => u.trim().replace(/\/+$/, "").replace(/\/api$/, "");
 
   return {
-    displays: async () => displays.map((d) => ({ ...d })),
+    displays: async () => displays.map(out1),
+    thisScreen: async () => null,
     async approveDisplay(code, name, layout, pin) {
       checkPin(pin);
       if (!/^\d{6}$/.test(code)) throw new ApiError(400, "Enter the 6-digit code shown on the screen");
-      const l = layout ?? "kitchen";
-      const d: Display = { id: uid("ds"), name: name || `${l[0].toUpperCase()}${l.slice(1)} screen`, layout: l, created_at: ago(0), last_seen: ago(0), revoked: false, current: false };
+      const l = layout ?? "compact";
+      const d: Stored = { id: uid("ds"), name: name || (l === "phone" ? "Phone" : `${l[0].toUpperCase()}${l.slice(1)} screen`), layout: l, created_at: ago(0), last_seen: ago(0), revoked: false, current: false };
       displays = [...displays, d];
       emit("displays");
-      return { ...d };
+      return out1(d);
+    },
+    async updateDisplay(id, { pin, name, layout, setup }) {
+      checkPin(pin);
+      const d = { ...find(displays, id) };
+      if (name !== undefined) { if (!name.trim()) throw new ApiError(400, "name is required"); d.name = name.trim().slice(0, 60); }
+      if (layout !== undefined) d.layout = layout;
+      if (setup === null) d.own = undefined;
+      else if (setup) {
+        const own = { ...d.own, ...setup };
+        if (own.sections) {
+          own.sections = SECTIONS.filter((x) => own.sections!.includes(x));
+          if (!own.sections.length) throw new ApiError(400, "setup.sections must not be empty");
+        }
+        const shown = own.sections ?? styleSetup(d.layout as Layout).sections;
+        if (!shown.includes(own.start ?? styleSetup(d.layout as Layout).start)) own.start = shown[0];
+        d.own = own;
+      }
+      displays = displays.map((x) => (x.id === id ? d : x));
+      emit("displays");
+      return out1(d);
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
     immich: async () => out(),
-    async saveImmich({ pin, server_url, api_key, album_ids, favorites, memories }) {
+    async saveImmich({ pin, server_url, api_key, album_ids, favorites, memories, skip_cert_check }) {
       checkPin(pin);
       const url = server_url !== undefined ? clean(server_url) : cfg?.server_url ?? "";
       const key = api_key ? api_key.trim() : cfg?.key ?? "";
       if (!cfg || url !== cfg.server_url || key !== cfg.key) await check(url, key);
       cfg = { server_url: url, key, album_ids: album_ids ?? cfg?.album_ids ?? [], favorites: favorites ?? cfg?.favorites ?? false,
-        memories: memories ?? cfg?.memories ?? false };
+        memories: memories ?? cfg?.memories ?? false, skip_cert_check: skip_cert_check ?? cfg?.skip_cert_check ?? false };
       refreshed = ago(0);
       emit("photos");
       return out();

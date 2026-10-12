@@ -1,14 +1,14 @@
 """Sign in with Home Assistant: pair a browser or the iPhone app with a Home Assistant login instead of a code.
 
 Home Assistant's own OAuth flow (the one its companion apps use, with the client's URL as client_id):
-1. `GET /api/auth/ha/start?layout=phone&name=iPhone[&app=1]` redirects to Home Assistant's login page
+1. `GET /api/auth/ha/start?layout=phone|compact|large&name=iPhone[&app=1]` redirects to Home Assistant's login page
    (`<ha>/auth/authorize`), with Moonlight's address (the page's own origin) as `client_id` and
    `<origin>/api/auth/ha/callback` as `redirect_uri`. Home Assistant only redirects back to the client's own host.
 2. After the person signs in (with Home Assistant's own MFA, if they use it), Home Assistant redirects to the
    callback with a one-time code. Moonlight swaps it for a token at `<ha>/auth/token`, reads who signed in over the
    WebSocket (`auth/current_user`), revokes that token straight away and pairs the device as a new screen named after
    them, which shows (and can be revoked) in Settings > Screens like any other.
-3. Browsers are sent to `/display/<layout>` with the screen cookie set; the app (`app=1`) to
+3. Browsers are sent to `/display` with the screen cookie set; the app (`app=1`) to
    `moonlight://signed-in?token=...&server=<origin>`, which only the app's sign-in sheet receives.
 
 Home Assistant's address for the login page: `MOONLIGHT_HA_LOGIN_URL` (add-on option `homeassistant_url`), else the
@@ -29,8 +29,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from .. import auth, security
-from ..common import hub
-from .displays import LAYOUTS, create_display
+from .. import db
+from ..common import LAYOUTS, hub
+from .displays import create_display
 
 log = logging.getLogger("moonlight.ha_login")
 router = APIRouter(prefix="/api/auth/ha")
@@ -133,6 +134,7 @@ async def revoke(base: str, refresh_token: str | None) -> None:
 
 @router.get("/start")
 async def start(request: Request, layout: str = "phone", name: str = "", app: int = 0):
+    layout = db.OLD_LAYOUTS.get(layout, layout)
     if layout not in LAYOUTS:
         layout = "phone"
     login = await ha_login_url()
@@ -179,13 +181,13 @@ async def callback(request: Request, state: str = "", code: str = "", error: str
         return _page("Moonlight couldn't finish signing in with Home Assistant. Try again.", 502)
 
     who = (user.get("name") or "Home Assistant user").strip()[:30]
-    device = entry["name"] or {"phone": "phone", "kitchen": "kitchen screen", "hallway": "hallway screen"}[entry["layout"]]
+    device = entry["name"] or {"phone": "phone", "compact": "screen", "large": "screen"}[entry["layout"]]
     token, d = create_display(f"{who}'s {device}", entry["layout"])
     log.info("%s signed in with Home Assistant as %s", d["name"], user.get("id"))
     await hub.broadcast("displays")
     if entry["app"]:
         return RedirectResponse(f"{APP_CALLBACK}?{urlencode({'token': token, 'server': entry['origin']})}", status_code=302)
-    resp = RedirectResponse(f"/display/{entry['layout']}", status_code=302)
+    resp = RedirectResponse("/display", status_code=302)
     resp.headers.append("set-cookie", auth.cookie_header(token, auth.is_secure(request)))
     return resp
 
@@ -198,5 +200,5 @@ def _page(message: str, status: int) -> HTMLResponse:
         "<title>Moonlight</title><style>body{font-family:system-ui,sans-serif;background:#0f1424;color:#e8ecf7;"
         "display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:28rem;padding:1rem;text-align:center}"
         "a{color:#9bb7ff}</style>"
-        f"<main><h1>Moonlight</h1><p>{escape(message)}</p><p><a href='/display/phone'>Back</a></p></main>",
+        f"<main><h1>Moonlight</h1><p>{escape(message)}</p><p><a href='/display'>Back</a></p></main>",
         status_code=status)

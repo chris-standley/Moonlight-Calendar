@@ -17,7 +17,7 @@ export function notifyUnpaired() {
   window.dispatchEvent(new Event(UNPAIRED_EVENT));
 }
 
-/** TouchKio setups can open `/display/kitchen?token=...` once: keep the token, then strip it from the URL. */
+/** TouchKio setups can open `/display?token=...` once: keep the token, then strip it from the URL. */
 export function adoptTokenFromUrl() {
   const url = new URL(location.href);
   const t = url.searchParams.get("token");

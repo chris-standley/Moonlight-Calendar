@@ -88,7 +88,7 @@ def test_pairing_flow(app_on, ha):
     r = ha.post("/api/displays/approve", json={"code": start["code"], "name": "Kitchen", "pin": PIN})
     assert r.status_code == 200
     d = r.json()
-    assert d["name"] == "Kitchen" and d["layout"] == "kitchen" and d["revoked"] is False
+    assert d["name"] == "Kitchen" and d["layout"] == "compact" and d["revoked"] is False
 
     r = screen.get(f"/api/pair/{start['pair_id']}")
     body = r.json()
@@ -159,7 +159,7 @@ def test_pair_start_validation(app_on, ha):
     assert ha.post("/api/displays/approve",
                    json={"code": start["code"], "layout": "service", "pin": PIN}).status_code == 400
     d = ha.post("/api/displays/approve", json={"code": start["code"], "pin": PIN}).json()
-    assert d["layout"] == "hallway" and d["name"] == "Landing"
+    assert d["layout"] == "large" and d["name"] == "Landing"
 
 
 def test_revoked_screen_is_rejected(app_on, ha):
@@ -190,3 +190,70 @@ def test_auth_off_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("MOONLIGHT_AUTH", "off")
     app = create_app(db_path=str(tmp_path / "t.db"), demo=False, static_dir=tmp_path / "x")
     assert lan(app).get("/api/people").status_code == 200
+
+
+def test_rename_screen(app_on, ha):
+    _, d = pair(ha, lan(app_on), name="Kitchen")
+    r = ha.patch(f"/api/displays/{d['id']}", json={"name": "Kitchen wall", "pin": PIN})
+    assert r.status_code == 200 and r.json()["name"] == "Kitchen wall"
+    assert [x["name"] for x in ha.get("/api/displays").json()] == ["Kitchen wall"]
+    assert ha.patch(f"/api/displays/{d['id']}", json={"name": "x", "pin": "0000"}).status_code == 403
+    assert ha.patch(f"/api/displays/{d['id']}", json={"name": " ", "pin": PIN}).status_code == 400
+    assert ha.patch("/api/displays/nope", json={"name": "x", "pin": PIN}).status_code == 404
+
+
+def test_one_address_and_per_screen_setup(app_on, ha):
+    s = lan(app_on)
+    assert s.get("/display").status_code == 200
+    token, d = pair(ha, s, name="Landing", layout="large")
+    assert d["layout"] == "large" and d["own_setup"] is False
+    assert d["setup"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"],
+                          "speaker": "", "idle_minutes": 5}
+    auth = {"Authorization": f"Bearer {token}"}
+    me = s.get("/api/auth/status", headers=auth).json()["display"]
+    assert me["name"] == "Landing" and me["current"] and me["setup"]["start"] == "calendar"
+
+    # Its own setup: other screens of the same style keep following the style.
+    _, other = pair(ha, lan(app_on), name="Study", layout="large")
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {
+        "sections": ["meals", "today"], "start": "meals", "speaker": "media_player.landing", "idle_minutes": 10}})
+    assert r.status_code == 200, r.text
+    assert r.json()["setup"] == {"start": "meals", "sections": ["today", "meals"], "speaker": "media_player.landing",
+                                 "idle_minutes": 10} and r.json()["own_setup"] is True
+    shown = {x["name"]: x for x in ha.get("/api/displays").json()}
+    assert shown["Study"]["setup"]["start"] == "calendar" and shown["Study"]["own_setup"] is False
+    # Style settings change the screens that follow them, not the one with its own setup.
+    ha.patch("/api/settings", json={"pin": PIN, "screens": {"large": {"start": "chores"}}})
+    shown = {x["name"]: x for x in ha.get("/api/displays").json()}
+    assert shown["Study"]["setup"]["start"] == "chores" and shown["Landing"]["setup"]["start"] == "meals"
+
+    # Hiding the start section moves the start; a new style keeps its own setup; null follows the style again.
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {"sections": ["today"]}}).json()
+    assert r["setup"]["start"] == "today"
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "layout": "kitchen", "name": "Kitchen"}).json()
+    assert (r["layout"], r["name"], r["setup"]["sections"]) == ("compact", "Kitchen", ["today"])
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": None}).json()
+    assert r["own_setup"] is False and r["setup"]["start"] == "today" and r["setup"]["idle_minutes"] == 3
+
+    for bad in ({"setup": {"sections": []}}, {"setup": {"start": "settings"}}, {"setup": {"speaker": "light.x"}},
+                {"setup": {"idle_minutes": -1}}, {"setup": {"colour": "red"}}, {"setup": []}, {"layout": "tv"}):
+        assert ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, **bad}).status_code == 400, bad
+    assert ha.patch(f"/api/displays/{other['id']}", json={"pin": "0000", "layout": "phone"}).status_code == 403
+
+
+def test_old_style_names_are_renamed(tmp_path):
+    import sqlite3
+
+    from moonlight import db
+
+    path = str(tmp_path / "old.db")
+    create_app(db_path=path, demo=False, static_dir=tmp_path / "x", auth_enabled=True)
+    with sqlite3.connect(path) as c:
+        c.execute("INSERT INTO displays(id, name, layout, token_hash, created_at, revoked) "
+                  "VALUES('ds_1', 'Hall', 'hallway', 'h1', '2026-10-01', 0), ('ds_2', 'Kit', 'kitchen', 'h2', '2026-10-01', 0)")
+        c.execute("INSERT INTO settings(key, value) VALUES('idle_minutes', '{\"hallway\": 9, \"kitchen\": 2, \"phone\": 0}')")
+    db.init_db()
+    with sqlite3.connect(path) as c:
+        assert dict(c.execute("SELECT id, layout FROM displays")) == {"ds_1": "large", "ds_2": "compact"}
+        assert c.execute("SELECT value FROM settings WHERE key = 'idle_minutes'").fetchone()[0] == \
+            '{"large": 9, "compact": 2, "phone": 0}'

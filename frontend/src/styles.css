@@ -52,6 +52,12 @@ h1, h2 { margin: 0; }
 .segmented { display: inline-flex; padding: 0.25rem; background: var(--surface-2); border-radius: 999px; }
 .segmented button { min-height: 2.4rem; padding: 0 1.1rem; border-radius: 999px; font-weight: 800; font-size: 0.95rem; color: var(--muted); }
 .segmented button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+/* In forms the options share the row and wrap onto a second one when the sheet is narrow (phones). */
+.form .segmented { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.4rem, 1fr)); gap: 0.2rem; border-radius: 1.3rem; max-width: 100%; }
+.form .segmented button { padding: 0 0.6rem; white-space: nowrap; }
+.edit-banner { margin: 0 1.6rem 0.6rem; padding: 0.5rem 0.9rem; border-radius: 0.8rem; background: #eef0fe; color: var(--accent); font-weight: 800; }
+.layout-phone .edit-banner { margin: 0 0.8rem 0.5rem; }
+.chore.editing { outline: 2px dashed color-mix(in srgb, var(--pc) 55%, transparent); outline-offset: -2px; }
 .avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; font-weight: 800; letter-spacing: 0.02em; transition: opacity 0.2s, filter 0.2s; }
 .avatar.dim { opacity: 0.35; filter: grayscale(0.6); }
 .avatar-btn { display: inline-flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.2rem; }
@@ -200,7 +206,8 @@ h1, h2 { margin: 0; }
 .reward { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 0.8rem; background: var(--surface); border-radius: 0.9rem; box-shadow: var(--shadow); }
 .rw-emoji { font-size: 1.8rem; width: 2.6rem; text-align: center; }
 .rw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
-.rw-title { font-weight: 800; }
+.rw-title { font-weight: 800; text-align: left; align-self: flex-start; }
+button.rw-emoji, button.rw-title { cursor: pointer; }
 .rw-bar { height: 0.45rem; border-radius: 1rem; background: var(--surface-2); overflow: hidden; }
 .rw-bar i { display: block; height: 100%; border-radius: 1rem; background: var(--pc); transition: width 0.5s; }
 .rw-cost { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.8rem; font-weight: 800; color: var(--muted); }
@@ -238,6 +245,14 @@ h1, h2 { margin: 0; }
 .rc-min { color: var(--muted); font-weight: 700; font-size: 0.85rem; }
 .recipe ul { margin: 0.3rem 0 0.6rem; padding-left: 1.1rem; font-size: 0.9rem; color: #4b4f5b; flex: 1; }
 .recipe .btn { align-self: flex-start; }
+.rc-head { display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; text-align: left; border-radius: 0.6rem; }
+.rc-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.recipe-box { padding-bottom: 6rem; }
+.rf-top { display: flex; gap: 0.6rem; }
+.rf-top .rf-emoji { width: 4.4rem; flex: none; text-align: center; padding-left: 0; padding-right: 0; }
+.rf-top .input:not(.rf-emoji) { flex: 1; min-width: 0; }
+.rf-minutes { width: 8rem; }
+.rf-ingredients { resize: vertical; min-height: 9rem; font: inherit; line-height: 1.45; }
 .recipe-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.5rem; }
 .rp { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem; border-radius: 0.8rem; background: var(--surface-2); font-weight: 800; text-align: left; }
 .rp span { font-size: 1.4rem; }
@@ -261,7 +276,7 @@ h1, h2 { margin: 0; }
 .item { display: flex; align-items: center; gap: 0.8rem; padding: 0.55rem 0.3rem; border-bottom: 1px solid var(--line); }
 .item-check { flex: none; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; border-radius: 0.7rem; box-shadow: inset 0 0 0 0.16rem var(--lc); color: #fff; }
 .item.done .item-check { background: var(--lc); box-shadow: none; }
-.item-title { flex: 1; font-weight: 700; font-size: 1.05rem; }
+.item-title { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; font-size: 1.05rem; }
 .item.done .item-title { color: var(--muted); text-decoration: line-through; }
 .item-due { font-size: 0.8rem; font-weight: 800; padding: 0.15rem 0.6rem; border-radius: 1rem; background: var(--surface-2); color: var(--muted); }
 .item-due.late { background: #fde8eb; color: var(--danger); }
@@ -280,15 +295,27 @@ h1, h2 { margin: 0; }
 .tm-next div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tm-next span { color: var(--muted); margin-right: 0.3rem; font-weight: 800; }
 .kid-progress { display: flex; flex-direction: column; gap: 0.6rem; }
-.kp { display: flex; align-items: center; gap: 0.8rem; padding: 0.6rem 0.8rem; border-radius: 0.9rem; text-align: left; }
+.kp { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.6rem 0.8rem; border-radius: 0.9rem; }
+.kp-head { display: flex; align-items: center; gap: 0.8rem; text-align: left; width: 100%; }
+.kp-chore { display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 2.6rem; padding: 0.3rem 0.4rem 0.3rem 0.6rem; border-radius: 0.7rem; background: var(--surface); text-align: left; font-weight: 800; }
+.kp-chore .ch-emoji { font-size: 1.3rem; }
+.kp-chore-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kp-check { flex: none; width: 1.8rem; height: 1.8rem; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--pc); }
+.kp-chore:active .kp-check { background: var(--pc); }
+.kp-more { align-self: flex-start; padding: 0.1rem 0.4rem; font-size: 0.85rem; font-weight: 800; color: var(--muted); }
 .kp-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .kp-main b { font-size: 1.1rem; }
 .kp-main span { font-size: 0.85rem; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- settings ---------- */
-.settings-body { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; padding: 0 1.6rem 1.6rem; align-content: start; }
+.settings-body { flex: 1; overflow-y: auto; overflow-x: hidden; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: 1rem; padding: 0 1.6rem 1.6rem; align-content: start; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); font-weight: 700; }
 .set-row > span { color: var(--muted); }
+.set-row > .set-pin { display: flex; align-items: center; gap: 0.7rem; color: inherit; min-width: 0; }
+.set-wx { display: flex; align-items: center; gap: 0.4rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-row .wx-icon { flex: none; width: 2.2rem; display: grid; place-items: center; }
+.wx-row .wx-temp { flex: none; font-size: 1.3rem; font-weight: 800; }
+.player-row:disabled { opacity: 0.5; }
 .people-list { display: flex; flex-direction: column; margin-top: 0.3rem; }
 .set-person { display: flex; align-items: center; gap: 0.4rem; border-bottom: 1px solid var(--line); }
 .set-person:last-child { border-bottom: 0; }
@@ -394,55 +421,60 @@ h1, h2 { margin: 0; }
 .ss-family { position: absolute; right: 3rem; bottom: 2.6rem; font-size: 1.2rem; font-weight: 800; opacity: 0.8; }
 
 /* ---------- kitchen (10in, 960x600 css px) ---------- */
-.layout-kitchen .rail { width: 4.9rem; padding: 0.6rem 0.3rem; gap: 0.15rem; }
-.layout-kitchen .rail-logo { margin-bottom: 0.3rem; }
-.layout-kitchen .rail-item { padding: 0.45rem 0.1rem; font-size: 0.7rem; }
-.layout-kitchen .topbar { padding: 0.5rem 1rem 0.2rem; gap: 0.8rem; }
-.layout-kitchen .tb-time { font-size: 1.8rem; }
-.layout-kitchen .tb-date { font-size: 1rem; }
-.layout-kitchen .tb-family { display: none; }
-.layout-kitchen .toolbar { padding: 0.3rem 1rem 0.6rem; gap: 0.5rem; }
-.layout-kitchen .toolbar-title { font-size: 1.25rem; }
-.layout-kitchen .toolbar-title .sub { display: none; }
-.layout-kitchen .filters { gap: 0.35rem; margin-right: 0.2rem; }
-.layout-kitchen .segmented button { padding: 0 0.75rem; min-height: 2.3rem; font-size: 0.85rem; }
-.layout-kitchen .cal-body, .layout-kitchen .chore-cols, .layout-kitchen .reward-cols, .layout-kitchen .meal-grid,
-.layout-kitchen .lists-body, .layout-kitchen .recipe-box, .layout-kitchen .settings-body { padding: 0 1rem 1rem; }
-.layout-kitchen .today-view { padding: 0 1rem 1rem; gap: 0.7rem; }
-.layout-kitchen .panel { padding: 0.8rem 0.9rem; }
-.layout-kitchen .week { gap: 0.35rem; }
-.layout-kitchen .day-head { padding: 0.45rem 0.5rem 0.3rem; }
-.layout-kitchen .dh-num { font-size: 1.3rem; }
-.layout-kitchen .day-head.today .dh-num { width: 1.9rem; height: 1.9rem; font-size: 1.05rem; }
-.layout-kitchen .dh-wx { display: none; }
-.layout-kitchen .week-events { padding: 0.1rem 0.3rem 0.4rem; gap: 0.3rem; }
-.layout-kitchen .ev { padding: 0.3rem 0.4rem 0.35rem 0.7rem; }
-.layout-kitchen .ev-title { font-size: 0.85rem; }
-.layout-kitchen .ev-time { font-size: 0.72rem; }
-.layout-kitchen .week-meal { margin: 0 0.3rem 0.3rem; font-size: 0.75rem; }
-.layout-kitchen .chore-cols, .layout-kitchen .reward-cols { gap: 0.6rem; }
-.layout-kitchen .lists-body { grid-template-columns: 13rem 1fr; }
-.layout-kitchen .meal-grid { grid-template-columns: 6.6rem repeat(7, minmax(0, 1fr)); gap: 0.35rem; }
-.layout-kitchen .mg-emoji { font-size: 1.2rem; }
-.layout-kitchen .mg-title { font-size: 0.8rem; }
-.layout-kitchen .mg-slot { font-size: 0.85rem; }
-.layout-kitchen .dayview { --hour: 3.4rem; --gutter: 3.6rem; }
-.layout-kitchen .month-cell { padding: 0.25rem 0.3rem; }
-.layout-kitchen .mc-ev { font-size: 0.7rem; }
-.layout-kitchen .mc-ev b { display: none; }
-.layout-kitchen .fab { width: 3.6rem; height: 3.6rem; right: 1rem; bottom: 1rem; }
-.layout-kitchen .kr-bal { font-size: 1.7rem; }
-.layout-kitchen .kr-history { display: none; }
-.layout-kitchen .ss-time { font-size: 4.5rem; }
-.layout-kitchen .sched-ev { grid-template-columns: 4.4rem 0.3rem 1fr auto; gap: 0.6rem; padding: 0.4rem 0.2rem; }
+.layout-compact .rail { width: 4.9rem; padding: 0.6rem 0.3rem; gap: 0.15rem; }
+.layout-compact .rail-logo { margin-bottom: 0.3rem; }
+.layout-compact .rail-item { padding: 0.45rem 0.1rem; font-size: 0.7rem; }
+.layout-compact .topbar { padding: 0.5rem 1rem 0.2rem; gap: 0.8rem; }
+.layout-compact .tb-time { font-size: 1.8rem; }
+.layout-compact .tb-date { font-size: 1rem; }
+.layout-compact .tb-family { display: none; }
+.layout-compact .toolbar { padding: 0.3rem 1rem 0.6rem; gap: 0.5rem; }
+.layout-compact .toolbar-title { font-size: 1.25rem; }
+.layout-compact .toolbar-title .sub { display: none; }
+.layout-compact .filters { gap: 0.35rem; margin-right: 0.2rem; }
+.layout-compact .segmented button { padding: 0 0.75rem; min-height: 2.3rem; font-size: 0.85rem; }
+.layout-compact .cal-body, .layout-compact .chore-cols, .layout-compact .reward-cols, .layout-compact .meal-grid,
+.layout-compact .lists-body, .layout-compact .recipe-box, .layout-compact .settings-body { padding: 0 1rem 1rem; }
+.layout-compact .today-view { padding: 0 1rem 1rem; gap: 0.7rem; }
+.layout-compact .panel { padding: 0.8rem 0.9rem; }
+.layout-compact .week { gap: 0.35rem; }
+.layout-compact .day-head { padding: 0.45rem 0.5rem 0.3rem; }
+.layout-compact .dh-num { font-size: 1.3rem; }
+.layout-compact .day-head.today .dh-num { width: 1.9rem; height: 1.9rem; font-size: 1.05rem; }
+.layout-compact .dh-wx { display: none; }
+.layout-compact .week-events { padding: 0.1rem 0.3rem 0.4rem; gap: 0.3rem; }
+.layout-compact .ev { padding: 0.3rem 0.4rem 0.35rem 0.7rem; }
+.layout-compact .ev-title { font-size: 0.85rem; }
+.layout-compact .ev-time { font-size: 0.72rem; }
+.layout-compact .week-meal { margin: 0 0.3rem 0.3rem; font-size: 0.75rem; }
+.layout-compact .chore-cols, .layout-compact .reward-cols { gap: 0.6rem; }
+.layout-compact .lists-body { grid-template-columns: 13rem 1fr; }
+.layout-compact .meal-grid { grid-template-columns: 6.6rem repeat(7, minmax(0, 1fr)); gap: 0.35rem; }
+.layout-compact .mg-emoji { font-size: 1.2rem; }
+.layout-compact .mg-title { font-size: 0.8rem; }
+.layout-compact .mg-slot { font-size: 0.85rem; }
+.layout-compact .dayview { --hour: 3.4rem; --gutter: 3.6rem; }
+.layout-compact .month-cell { padding: 0.25rem 0.3rem; }
+.layout-compact .mc-ev { font-size: 0.7rem; }
+.layout-compact .mc-ev b { display: none; }
+.layout-compact .fab { width: 3.6rem; height: 3.6rem; right: 1rem; bottom: 1rem; }
+.layout-compact .kr-bal { font-size: 1.7rem; }
+.layout-compact .kr-history { display: none; }
+.layout-compact .ss-time { font-size: 4.5rem; }
+.layout-compact .sched-ev { grid-template-columns: 4.4rem 0.3rem 1fr auto; gap: 0.6rem; padding: 0.4rem 0.2rem; }
 
 /* ---------- phone (HA Companion panel) ---------- */
 .layout-phone { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-.layout-phone .rail { grid-row: 2; flex-direction: row; width: auto; padding: 0.3rem 0.3rem calc(0.3rem + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); gap: 0; overflow-x: auto; }
+/* Compact tab bar; the home-indicator inset replaces the bottom padding rather than adding to it. */
+.layout-phone .rail { grid-row: 2; flex-direction: row; width: auto; padding: 0.15rem 0.2rem max(0.15rem, env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); gap: 0; overflow-x: auto; }
 .layout-phone .rail-logo { display: none; }
-.layout-phone .rail-item { padding: 0.4rem 0.1rem; font-size: 0.66rem; min-width: 3.4rem; }
+.layout-phone .rail-item { padding: 0.2rem 0.1rem 0.15rem; gap: 0.05rem; font-size: 0.62rem; min-width: 3.4rem; border-radius: 0.7rem; }
+.layout-phone.embedded .rail { padding-bottom: 0.15rem; }
 .layout-phone .main { grid-row: 1; }
 .layout-phone .topbar { padding: 0.8rem 1rem 0.2rem; flex-wrap: wrap; row-gap: 0; }
+/* The page slides up over the top bar as it scrolls (App.tsx sets the negative margin). */
+.layout-phone .content { z-index: 1; background: var(--bg); }
+.layout-phone .content.lifted { border-radius: 1.2rem 1.2rem 0 0; box-shadow: 0 -0.4rem 1.2rem rgba(0, 0, 0, 0.12); }
 .layout-phone .tb-time { font-size: 1.8rem; }
 .layout-phone .tb-family { display: none; }
 .layout-phone .toolbar { padding: 0.3rem 1rem 0.6rem; }
@@ -453,11 +485,17 @@ h1, h2 { margin: 0; }
 .layout-phone .week, .layout-phone .chore-cols, .layout-phone .reward-cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 0.8rem 0.8rem; gap: 0.6rem; }
 .layout-phone .week-col { flex: 0 0 46%; scroll-snap-align: start; }
 .layout-phone .chore-col, .layout-phone .kid-rewards { flex: 0 0 88%; scroll-snap-align: center; }
-.layout-phone .today-view { grid-template-columns: 1fr; overflow-y: auto; padding: 0 0.8rem 0.8rem; }
-.layout-phone .today-view .panel { overflow: visible; }
-.layout-phone .lists-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; padding: 0 0.8rem 0.8rem; }
-.layout-phone .list-nav { flex-direction: row; overflow-x: auto; }
-.layout-phone .list-tab { flex: none; }
+.layout-phone .today-view { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-x: hidden; align-content: start; overflow-y: auto; padding: 0 0.8rem 0.8rem; }
+/* One scrolling column: every card at its natural height (the wide screens squeeze them to fit instead). */
+.layout-phone .today-view .panel, .layout-phone .today-mid, .layout-phone .today-right { overflow: visible; min-height: auto; min-width: 0; flex: none; }
+.layout-phone .lists-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); padding: 0 0.8rem 0.8rem; }
+/* Tabs scroll sideways edge to edge; the ::after spacer keeps the last one clear of the edge (Safari ignores
+   end padding in a scrolling flex row). */
+.layout-phone .list-nav { flex-direction: row; overflow-x: auto; margin: 0 -0.8rem; padding: 0.2rem 0.8rem 0.5rem; scroll-padding: 0 0.8rem; }
+.layout-phone .list-nav::after { content: ""; flex: 0 0 0.1rem; }
+.layout-phone .list-tab { flex: none; padding: 0.55rem 0.8rem; gap: 0.5rem; }
+.layout-phone .list-panel { min-width: 0; padding: 0.8rem; }
+.layout-phone .item { gap: 0.6rem; }
 .layout-phone .meal-grid { grid-template-columns: 4.6rem repeat(7, 7rem); overflow-x: auto; padding: 0 0.8rem 0.8rem; }
 .layout-phone .sched-ev { grid-template-columns: 4.2rem 0.3rem 1fr auto; gap: 0.5rem; }
 .layout-phone .se-who > span:not(.avatar):not(.who) { display: none; }
@@ -497,9 +535,9 @@ h1, h2 { margin: 0; }
 .pair-screen.layout-phone .pair-code span { width: 2.9rem; height: 3.9rem; font-size: 2.3rem; }
 .pair-screen.layout-phone .pair-code span.gap { margin-left: 0.4rem; }
 .pair-screen.layout-phone h1 { font-size: 1.9rem; }
-.pair-screen.layout-kitchen { padding: 1rem; }
-.pair-screen.layout-kitchen .pair-card { gap: 0.6rem; }
-.pair-screen.layout-kitchen h1 { font-size: 2rem; }
+.pair-screen.layout-compact { padding: 1rem; }
+.pair-screen.layout-compact .pair-card { gap: 0.6rem; }
+.pair-screen.layout-compact h1 { font-size: 2rem; }
 
 /* Settings > Screens */
 .settings-body { grid-auto-rows: max-content; } /* rows must not shrink to the scroll box height */
@@ -511,7 +549,7 @@ h1, h2 { margin: 0; }
 .screen-list { display: flex; flex-direction: column; }
 .screen-row { display: flex; align-items: center; gap: 0.8rem; padding: 0.6rem 0; border-top: 1px solid var(--line); }
 .screen-ico { flex: none; width: 2.6rem; height: 1.8rem; border-radius: 0.35rem; border: 0.22rem solid var(--text); position: relative; opacity: 0.8; }
-.screen-ico.kitchen { width: 2.2rem; height: 1.5rem; }
+.screen-ico.compact { width: 2.2rem; height: 1.5rem; }
 .screen-ico.service { width: 1.8rem; height: 1.8rem; border-radius: 50%; margin: 0 0.4rem; }
 .screen-ico.phone { width: 1.1rem; height: 1.9rem; border-radius: 0.3rem; margin: 0 0.75rem; }
 .screen-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -519,12 +557,21 @@ h1, h2 { margin: 0; }
 .screen-main span { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
 .screen-this { margin-left: 0.5rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: #eef0fe; color: var(--accent); font-style: normal; font-size: 0.75rem; font-weight: 800; vertical-align: 0.1em; }
 .btn.ghost.danger { color: var(--danger); }
+.screen-device { width: 100%; text-align: left; }
+.screen-device .btn { pointer-events: none; }
+.screen-kind-note { margin-left: 0.4rem; font-style: normal; font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+.screen-note { font-size: 0.85rem; font-weight: 700; padding: 0.35rem 0; }
+.screens-sub { margin: 1rem 0 0.2rem; font-size: 1rem; font-weight: 800; }
+.screens-sub + .screen-list .screen-note { padding-left: 0; }
+.section-toggles .set-row { padding: 0.35rem 0; }
+.section-toggles .toggle:disabled { opacity: 0.5; }
 .pair-code-input { letter-spacing: 0.5em; font-variant-numeric: tabular-nums; text-align: center; font-size: 2rem; }
 .form-error { margin-top: 0.4rem; padding: 0.6rem 0.8rem; border-radius: 0.7rem; background: #fdecee; color: var(--danger); font-weight: 700; }
 .set-col { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); font-weight: 700; }
 .set-col > span { color: var(--muted); }
 .set-col .segmented { max-width: 100%; overflow-x: auto; }
 .set-col .segmented button { white-space: nowrap; flex: none; }
+.layout-phone .set-col .segmented { flex-wrap: wrap; overflow: visible; border-radius: 1.2rem; }
 
 /* Settings > Photo screensaver (Immich) */
 .immich-panel .acct { margin-bottom: 0.2rem; }
@@ -567,12 +614,13 @@ h1, h2 { margin: 0; }
 .acct-name span.s-auth_failed { color: var(--danger); }
 .acct-name span.s-error { color: #b7731c; }
 .acct-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.cal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: 0.2rem 1.4rem; margin-top: 0.6rem; }
+.settings-body > * { min-width: 0; }
+.cal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(21rem, 100%), 1fr)); gap: 0.2rem 1.4rem; margin-top: 0.6rem; }
 .cal-row { display: flex; align-items: center; gap: 0.7rem; min-height: 3.2rem; padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
 .cal-row.off .cal-name, .cal-row.off .cal-who, .cal-row.off .cal-swatch { opacity: 0.45; }
 .cal-swatch { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 0.45rem; }
-.cal-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem; text-align: left; font-weight: 800; }
-.cal-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-name { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.5rem; padding: 0.3rem 0; text-align: left; font-weight: 800; }
+.cal-name b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-who { display: flex; align-items: center; gap: 0.15rem; min-height: 2.4rem; padding: 0 0.3rem; font-size: 0.85rem; font-weight: 700; }
 .cal-none { padding: 0.6rem 0; font-weight: 700; }
 .tag { flex: none; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--surface-2); color: var(--muted); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -594,15 +642,15 @@ h1, h2 { margin: 0; }
 .sb-text b { font-weight: 800; }
 .sb-text span { font-size: 0.88rem; font-weight: 600; }
 .sync-banner .btn { background: #d9771f; box-shadow: none; }
-.layout-kitchen .sync-banner { margin: 0.1rem 1rem 0.4rem; }
+.layout-compact .sync-banner { margin: 0.1rem 1rem 0.4rem; }
 .layout-phone .sync-banner { margin: 0.1rem 0.8rem 0.4rem; }
 .layout-phone .sb-text span { display: none; }
-.layout-phone .cal-list { grid-template-columns: 1fr; }
+.layout-phone .cal-list { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------- music: Now playing (speaker via Home Assistant / Music Assistant) ---------- */
 .today-right { display: flex; flex-direction: column; gap: 0.9rem; min-height: 0; }
 .today-right > .panel:last-child { flex: 1; }
-.layout-kitchen .today-right { gap: 0.7rem; }
+.layout-compact .today-right { gap: 0.7rem; }
 .np-art { position: relative; flex: none; aspect-ratio: 1; border-radius: 0.6rem; overflow: hidden; background: linear-gradient(135deg, #3a3f62, #5a4f82); box-shadow: 0 0.2rem 0.7rem rgba(0, 0, 0, 0.25); }
 .np-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .np-art-none { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, 0.75); }
@@ -649,7 +697,7 @@ h1, h2 { margin: 0; }
 .np-pill-text span { font-size: 0.75rem; font-weight: 700; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .np-pill .np-btn.small { width: 2.3rem; height: 2.3rem; background: rgba(255, 255, 255, 0.14); }
 .np-pill + .tb-family { margin-left: 0.8rem; }
-.layout-hallway .np-pill { max-width: 26rem; }
+.layout-large .np-pill { max-width: 26rem; }
 
 /* Big sheet: album art over a blurred copy of itself */
 .np-scrim { background: rgba(12, 12, 20, 0.55); }
@@ -669,11 +717,11 @@ h1, h2 { margin: 0; }
 .np-fav-row { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.2rem; }
 .np-fav { flex: none; min-height: 2.8rem; padding: 0 1.1rem; border-radius: 999px; background: rgba(255, 255, 255, 0.14); color: #fff; font-weight: 800; }
 .np-fav:active { background: rgba(255, 255, 255, 0.26); }
-.layout-kitchen .sheet.np-sheet { max-height: 96%; }
-.layout-kitchen .np-sheet-in { gap: 1.4rem; padding: 1.2rem 1.4rem 1.3rem; }
-.layout-kitchen .np-art.big { width: 17rem; }
-.layout-kitchen .np-title { font-size: 1.7rem; }
-.layout-hallway .np-art.big { width: 22rem; }
+.layout-compact .sheet.np-sheet { max-height: 96%; }
+.layout-compact .np-sheet-in { gap: 1.4rem; padding: 1.2rem 1.4rem 1.3rem; }
+.layout-compact .np-art.big { width: 17rem; }
+.layout-compact .np-title { font-size: 1.7rem; }
+.layout-large .np-art.big { width: 22rem; }
 .layout-phone .np-sheet-in { grid-template-columns: 1fr; justify-items: center; gap: 1rem; padding: 1rem 1.1rem 1.4rem; }
 .layout-phone .np-art.big { width: min(17rem, 72%); }
 .layout-phone .np-detail { width: 100%; }
@@ -692,11 +740,11 @@ h1, h2 { margin: 0; }
 .ss-np-eq i:nth-child(2) { animation-delay: -0.4s; }
 .ss-np-eq i:nth-child(3) { animation-delay: -0.7s; }
 @keyframes eq { from { height: 20%; } to { height: 100%; } }
-.layout-kitchen .ss-np { right: 1.6rem; bottom: 1.6rem; max-width: 20rem; padding: 0.55rem 1rem 0.55rem 0.55rem; }
-.layout-kitchen .ss-np .np-art { width: 5.2rem; }
-.layout-kitchen .ss-np-text b { font-size: 1.15rem; }
-.layout-kitchen .ss-np-text > span:last-child { font-size: 0.95rem; }
-.layout-hallway .ss-np .np-art { width: 7.5rem; }
+.layout-compact .ss-np { right: 1.6rem; bottom: 1.6rem; max-width: 20rem; padding: 0.55rem 1rem 0.55rem 0.55rem; }
+.layout-compact .ss-np .np-art { width: 5.2rem; }
+.layout-compact .ss-np-text b { font-size: 1.15rem; }
+.layout-compact .ss-np-text > span:last-child { font-size: 0.95rem; }
+.layout-large .ss-np .np-art { width: 7.5rem; }
 .layout-phone .ss-np { left: 1.2rem; right: 1.2rem; bottom: auto; top: 1.4rem; max-width: none; }
 .layout-phone .ss-np .np-art { width: 4rem; }
 @media (prefers-reduced-motion: reduce) {
@@ -735,3 +783,48 @@ h1, h2 { margin: 0; }
 .connect-help li { margin: 0.1rem 0; }
 .cal-head-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
 .cal-name b { min-width: 3.5rem; }
+
+/* Repeat on chosen days */
+.day-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 0.6rem; }
+.day-picker .days { display: flex; gap: 0.35rem; }
+.day-picker .days button { width: 2.6rem; height: 2.6rem; border-radius: 50%; font-weight: 800; background: var(--surface-2); color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); }
+.day-picker .days button.on { background: var(--accent); color: #fff; box-shadow: none; }
+.day-picker .day-presets { display: flex; gap: 0.4rem; }
+.day-picker .day-presets button { padding: 0.35rem 0.8rem; border-radius: 999px; font-weight: 700; font-size: 0.85rem; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); }
+.day-picker .day-presets button.on { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.layout-phone .day-picker .days button { width: 2.4rem; height: 2.4rem; }
+.form > .set-row { margin-top: 0.6rem; }
+
+/* Work calendar busy time: a thin bar down the side of the Day view; one summary line in Week and Schedule. */
+.busy-bar { position: absolute; left: 0.12rem; width: 0.32rem; border-radius: 0.3rem; background: var(--ec); opacity: 0.75; z-index: 1; }
+.busy-bar.tentative { opacity: 1; background: repeating-linear-gradient(180deg, color-mix(in srgb, var(--ec) 55%, transparent) 0 0.3rem, transparent 0.3rem 0.5rem); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ec) 45%, transparent); }
+.ev.busy-day { background: color-mix(in srgb, var(--ec) 7%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ec) 18%, transparent); }
+.ev.busy-day::before { width: 0.22rem; background: var(--ec); opacity: 0.7; }
+.ev.busy-day .ev-title { font-weight: 700; font-size: 0.88rem; color: color-mix(in srgb, var(--ec) 40%, var(--text)); }
+.bd-meta, .sched-ev.busy-day .se-meta { font-size: 0.78rem; font-weight: 600; color: var(--muted); line-height: 1.25; }
+.sched-ev.busy-day .se-bar { width: 0.22rem; justify-self: center; background: var(--ec); opacity: 0.7; }
+.sched-ev.busy-day .se-meta { display: block; }
+.sched-ev.busy-day .ev-title { font-weight: 700; color: color-mix(in srgb, var(--ec) 40%, var(--text)); }
+.busy-day.b-tentative { opacity: 0.75; }
+
+/* Day view names: never wider than their column. */
+.dv-person { min-width: 0; padding: 0 0.3rem; }
+.dv-person .avatar { flex: none; }
+.dv-person > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layout-phone .dayview, .layout-compact .dayview { --gutter: 3.2rem; }
+.layout-phone .dv-person { flex-direction: column; gap: 0.15rem; font-size: 0.78rem; }
+.layout-phone .dv-hour span { right: 0.4rem; font-size: 0.7rem; }
+
+/* Phone calendar toolbar: people on one row, the view switch full width under them, nothing cut off. */
+.layout-phone .toolbar-r { flex-wrap: wrap; overflow: visible; justify-content: flex-start; row-gap: 0.7rem; }
+.layout-phone .toolbar-r .filters { flex-wrap: wrap; padding: 0.35rem; margin: 0; }
+.layout-phone .toolbar-r .segmented { width: 100%; }
+.layout-phone .toolbar-r .segmented button { flex: 1; padding: 0 0.4rem; }
+
+/* Cards keep their full height in a busy day (the list scrolls instead of squashing them). */
+.week-events > *, .dv-cell > *, .month-cell > * { flex: none; }
+/* Short Day view blocks: one line, tighter padding. */
+.ev.block.short { padding-top: 0.05rem; padding-bottom: 0; justify-content: center; }
+.ev.block.short .ev-title { -webkit-line-clamp: 1; font-size: 0.78rem; }
+.mc-dots { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+.mc-dots i { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--stripe); }

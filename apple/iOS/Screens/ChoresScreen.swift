@@ -285,6 +285,7 @@ struct ChoreEditor: View {
     @State private var points = 1
     @State private var tod = "anytime"
     @State private var type = "daily"
+    @State private var skipHolidays = false
     @State private var days: Set<String> = ["MO", "TU", "WE", "TH", "FR"]
     @State private var once = Date()
     @State private var error: String?
@@ -341,6 +342,7 @@ struct ChoreEditor: View {
                         }
                     }
                     if type == "once" { DatePicker("On", selection: $once, displayedComponents: .date) }
+                    if type != "once" { Toggle("Skip public holidays", isOn: $skipHolidays) }
                 }
                 if let error { Text(error).foregroundStyle(Theme.danger) }
             }
@@ -370,10 +372,12 @@ struct ChoreEditor: View {
         type = c.schedule.type
         if let d = c.schedule.days { days = Set(d) }
         if let d = c.schedule.date { once = model.dates.date(d) }
+        skipHolidays = c.schedule.skip_holidays == true
     }
 
     private func save() async {
-        let schedule = ChoreSchedule(type: type, days: weekdays.map(\.code).filter(days.contains), date: model.dates.iso(once))
+        let schedule = ChoreSchedule(type: type, days: weekdays.map(\.code).filter(days.contains), date: model.dates.iso(once),
+                                     skip_holidays: skipHolidays)
         let body: [String: Any] = [
             "title": title.trimmingCharacters(in: .whitespaces), "emoji": emoji, "person_id": person,
             "points": points, "time_of_day": tod, "schedule": schedule.json,

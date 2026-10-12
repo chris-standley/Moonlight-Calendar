@@ -19,12 +19,14 @@ ports:
   8091/tcp: 8091
   8443/tcp: null
 ports_description:
-  8091/tcp: Direct access for wall-mounted kiosk displays (e.g. http://homeassistant.local:8091/display/hallway)
+  8091/tcp: Direct access for wall-mounted kiosk displays (e.g. http://homeassistant.local:8091/display)
   8443/tcp: HTTPS for access from the internet (needs the ssl option; forward this port on your router)
 map:
   - data:rw
   - ssl
 homeassistant_api: true
+discovery:
+  - moonlight
 options:
   demo: true
   require_pairing: true
@@ -33,8 +35,6 @@ options:
   keyfile: privkey.pem
 schema:
   demo: bool
-  weather_entity: str?
-  media_player_entity: str?
   require_pairing: bool
   ssl: bool
   certfile: str

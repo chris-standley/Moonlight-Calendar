@@ -14,7 +14,7 @@ screensaver from Immich; speaker controls and album art through Music Assistant.
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
 | `tests/` | Tests for the integration (`python3 -m pytest tests`; `tests/ha/` needs pytest-homeassistant-custom-component) |
 | `apple/` | Native iPhone, iPad and Apple TV apps (SwiftUI, iOS/tvOS 18). Open `apple/Moonlight.xcodeproj` in Xcode 16+. See its [README](apple/README.md) |
-| `screenshots/` | Every view at hallway (2560x1440), kitchen (1920x1200 at 2x zoom) and phone sizes |
+| `screenshots/` | Every view at large (2560x1440), compact (1920x1200 at 2x zoom) and phone sizes |
 
 ## Install on Home Assistant
 
@@ -23,8 +23,8 @@ alongside the other apps there.
 
 1. Settings > Apps > App Store > ⋮ > Repositories, add `https://github.com/chris-standley/home-assistant-apps`.
 2. **Moonlight** > Install (⋮ > Check for updates if it is not listed yet), set the options, Start, Show in sidebar.
-3. Options: `demo` (seed the demo family into an empty database, default on), `weather_entity` (e.g. `weather.home`),
-   `media_player_entity` (the kitchen speaker, e.g. `media_player.kitchen` from Music Assistant), `require_pairing` (default on). The household timezone defaults to Home Assistant's.
+3. Options: `demo` (seed the demo family into an empty database, default on) and `require_pairing` (default on).
+   Weather and speakers are picked in Moonlight's Settings. The household timezone defaults to Home Assistant's.
 4. Pair wall screens on port 8091 (below) and connect iCloud in Settings > Calendars.
 
 The app page's Documentation tab ([addon/DOCS.md](addon/DOCS.md)) has the details.
@@ -45,9 +45,12 @@ needs the whole repo.
 
 ## Screens
 
-- Hallway: `http://<ha-host>:8091/display/hallway` (27in, 2560x1440, browser zoom 1, root font 20px). Opens on the week calendar.
-- Kitchen: `http://<ha-host>:8091/display/kitchen` (Touch Display 2, 1920x1200, run TouchKio at 2x zoom = 960x600 CSS px). Opens on Today.
-- Phone: `/display/phone`, or the HA sidebar via ingress.
+Every screen opens `http://<ha-host>:8091/display`; its style is set when it's paired (and can be changed in
+Settings > Screens), guessed from the window size until then. Older `/display/hallway` and `/display/kitchen`
+addresses still work.
+- Large: a big wall screen, e.g. 27in 2560x1440 at browser zoom 1 (root font 20px). Opens on the week calendar.
+- Compact: a small touch screen, e.g. Touch Display 2, 1920x1200, TouchKio at 2x zoom = 960x600 CSS px. Opens on Today.
+- Phone: a phone browser, or the HA sidebar and companion app via ingress.
 - iPhone, iPad and Apple TV: the native apps in [`apple/`](apple/README.md) find Moonlight on the network and pair with a code like the other screens.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.
 
@@ -59,12 +62,18 @@ against an in-browser copy of the API (`src/api/demo.ts`) seeded from `seed/demo
 ## Pairing wall screens
 
 On the add-on's LAN port every screen must be paired (HA users via ingress are already signed in). Open
-`http://<ha-host>:8091/display/kitchen` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
+`http://<ha-host>:8091/display` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
 go to Settings > Screens > Pair a new screen, enter the code and the PIN; the kiosk loads the app and remembers its
 token (localStorage + an HttpOnly cookie). Revoke a screen there too. For TouchKio you can instead copy a token into
-the URL once: `.../display/kitchen?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
-turns this off. The Home Assistant integration (`custom_components/moonlight`) pairs the same way: its setup dialog
-shows a code to enter there, and it is listed as "Home Assistant" (Integration) so it can be revoked too.
+the URL once: `.../display?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
+turns this off. In Settings > Screens each paired screen has a name, a style (large, compact, phone) and its own
+choice of menu sections, start section, speaker and screensaver delay. "In the Home Assistant app" sets the same per
+style for ingress, and paired screens follow those until they have their own.
+
+The Home Assistant integration (`custom_components/moonlight`, via HACS) doesn't need pairing with the add-on: the
+add-on announces itself, so Home Assistant shows Moonlight under Settings > Devices & services > Discovered, and
+Configure connects it. It is listed in Moonlight under Settings > Screens > Connections, where it can be
+disconnected. Set up by hand (Moonlight not running as an add-on), it pairs with a code like a screen.
 
 ## Access from the internet
 
@@ -114,12 +123,17 @@ served by `httpx.MockTransport`).
 
 ## Home Assistant
 
-- Weather: set the add-on option `weather_entity` (e.g. `weather.home`) to show that entity's forecast; empty = demo forecast.
-- Music: the kitchen screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
-  bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Set
-  the add-on option `media_player_entity` or pick a speaker per screen in Settings > Music. Works with any HA
-  `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. The hallway and phones
+- Weather: pick a Home Assistant weather entity in Settings > Display > Weather (it lists them with their current
+  conditions); until then the screens show a demo forecast.
+- Music: a compact screen shows what's playing on a speaker (album art, progress, play/pause, skip, volume; a
+  bigger player with shuffle, repeat and Music Assistant favourites when tapped; album art on the screensaver). Pick a
+  speaker per screen in Settings > Screens > Set up. Works with any HA
+  `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. Large screens and phones
   show a small player in the top bar only if given a speaker.
+- Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
+  energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.
+- Chores from automations: the integration's `moonlight.add_chore` action adds a one-off chore, for example
+  the night before bin day or when the dishwasher finishes (examples in its README).
 - Entities and services: install the `moonlight` integration through HACS, see `custom_components/moonlight/README.md`.
 
 ## Your family

@@ -25,7 +25,7 @@ struct APIClient: Sendable {
     var baseURL: URL
     let token: String?
     /// The screen layout this Apple TV was approved as; picks which speaker its Now playing card shows.
-    var layout = "hallway"
+    var layout = "large"
 
     private static let session: URLSession = {
         let config = URLSessionConfiguration.default

@@ -2,8 +2,8 @@
 
 Inside the add-on, `homeassistant_api: true` gives us SUPERVISOR_TOKEN and the Core API at
 http://supervisor/core/api. Outside an add-on set MOONLIGHT_HA_URL (e.g. http://homeassistant.local:8123/api)
-and MOONLIGHT_HA_TOKEN (a long-lived access token). MOONLIGHT_WEATHER_ENTITY picks the entity; empty means
-demo weather.
+and MOONLIGHT_HA_TOKEN (a long-lived access token). The entity is chosen in Settings (`weather_entity`);
+MOONLIGHT_WEATHER_ENTITY is the fallback when none is saved. No entity means demo weather.
 
 `get_weather(temp_unit)` returns the /api/weather shape:
   {source: "homeassistant"|"demo", entity: str|null, unit: "C"|"F",
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from datetime import date, datetime, tzinfo
 from typing import Any, Callable
@@ -108,7 +109,8 @@ def parse_ha(state: dict, forecast_response: dict, entity: str, today: date,
         temp = daily[0]["high"] if daily else None
     if temp is None:
         raise HAError(f"{entity} has no temperature")
-    return {"unit": unit, "current": {"temp": temp, "condition": _condition(st)}, "daily": daily}
+    return {"unit": unit, "name": attrs.get("friendly_name") or entity,
+            "current": {"temp": temp, "condition": _condition(st)}, "daily": daily}
 
 
 def convert(fc: dict, dst: str) -> dict:
@@ -187,40 +189,95 @@ class HAWeather:
         return None
 
 
-_client: HAWeather | None = None
-_configured = False
+ENTITY_RE = re.compile(r"^weather\.[a-z0-9_]+$")
+
+_override: HAWeather | None = None
+_overridden = False
+_clients: dict[str, HAWeather] = {}
+_transport: httpx.AsyncBaseTransport | None = None  # tests
 
 
-def from_env() -> HAWeather | None:
-    entity = os.environ.get("MOONLIGHT_WEATHER_ENTITY", "").strip()
-    if not entity:
-        return None
+def connection() -> tuple[str, str] | None:
+    """(Core API URL, token) when Moonlight can reach Home Assistant, else None."""
     token = os.environ.get("MOONLIGHT_HA_TOKEN") or os.environ.get("SUPERVISOR_TOKEN") or ""
-    url = os.environ.get("MOONLIGHT_HA_URL") or DEFAULT_URL
     if not token:
-        log.warning("MOONLIGHT_WEATHER_ENTITY=%s but no SUPERVISOR_TOKEN/MOONLIGHT_HA_TOKEN; using demo weather",
-                    entity)
         return None
-    return HAWeather(entity, url, token)
+    return (os.environ.get("MOONLIGHT_HA_URL") or DEFAULT_URL), token
+
+
+def env_entity() -> str:
+    return os.environ.get("MOONLIGHT_WEATHER_ENTITY", "").strip()
 
 
 def set_client(client: HAWeather | None) -> None:
     """Override the weather source (tests); None means demo weather."""
-    global _client, _configured
-    _client, _configured = client, True
+    global _override, _overridden
+    _override, _overridden = client, True
+
+
+def set_transport(transport: httpx.AsyncBaseTransport | None) -> None:
+    """Send Home Assistant requests through `transport` (tests)."""
+    global _transport
+    _transport = transport
+    _clients.clear()
 
 
 def reset() -> None:
-    """Forget any override so the next call re-reads the environment."""
-    global _client, _configured
-    _client, _configured = None, False
+    """Forget any override and cached clients so the next call re-reads settings and the environment."""
+    global _override, _overridden, _transport
+    _override, _overridden, _transport = None, False, None
+    _clients.clear()
 
 
-def client() -> HAWeather | None:
-    global _client, _configured
-    if not _configured:
-        _client, _configured = from_env(), True
-    return _client
+def client(entity: str | None = None) -> HAWeather | None:
+    """The source for `entity` (default: MOONLIGHT_WEATHER_ENTITY); None means demo weather."""
+    if _overridden:
+        return _override
+    entity = (env_entity() if entity is None else entity).strip()
+    if not entity:
+        return None
+    conn = connection()
+    if conn is None:
+        log.warning("Weather entity %s is set but there's no SUPERVISOR_TOKEN/MOONLIGHT_HA_TOKEN; using demo weather",
+                    entity)
+        return None
+    if entity not in _clients:
+        _clients[entity] = HAWeather(entity, *conn, transport=_transport)
+    return _clients[entity]
+
+
+async def list_entities() -> list[dict]:
+    """Home Assistant's weather entities with their current conditions (for the Settings picker).
+
+    Raises HAError when Home Assistant isn't configured or can't be reached."""
+    conn = connection()
+    if conn is None:
+        raise HAError("Moonlight isn't connected to Home Assistant")
+    url, token = conn
+    try:
+        async with httpx.AsyncClient(base_url=url.rstrip("/"), headers={"Authorization": f"Bearer {token}"},
+                                     timeout=10, transport=_transport) as http:
+            r = await http.get("/states")
+        r.raise_for_status()
+        states = r.json()
+    except Exception as e:
+        raise HAError(f"Couldn't list Home Assistant's weather entities ({e.__class__.__name__})")
+    out = []
+    for s in states if isinstance(states, list) else []:
+        eid = s.get("entity_id", "") if isinstance(s, dict) else ""
+        if not ENTITY_RE.match(eid):
+            continue
+        attrs = s.get("attributes") or {}
+        st = s.get("state")
+        available = st not in (None, "unavailable", "unknown")
+        temp = _num(attrs.get("temperature"))
+        out.append({"entity_id": eid, "name": attrs.get("friendly_name") or eid, "available": available,
+                    "condition": _condition(st) if available else None,
+                    "temperature": None if temp is None else round(temp, 1),
+                    "unit": _unit(attrs.get("temperature_unit")),
+                    "attribution": attrs.get("attribution")})
+    out.sort(key=lambda w: (not w["available"], str(w["name"]).lower()))
+    return out
 
 
 def demo(temp_unit: str) -> dict:
@@ -229,10 +286,11 @@ def demo(temp_unit: str) -> dict:
     return {"source": "demo", "entity": None, **out}
 
 
-async def get_weather(temp_unit: str = "C") -> dict:
-    c = client()
+async def get_weather(temp_unit: str = "C", entity: str | None = None) -> dict:
+    c = client(entity)
     if c is not None:
         fc = await c.get()
         if fc is not None:
-            return {"source": "homeassistant", "entity": c.entity, **convert(fc, temp_unit)}
+            return {"source": "homeassistant", "entity": c.entity, "name": fc.get("name") or c.entity,
+                    **convert(fc, temp_unit)}
     return demo(temp_unit)

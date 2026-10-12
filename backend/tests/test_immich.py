@@ -243,14 +243,14 @@ def test_immich_down(client, fake):
     fake.down = True
     # The cached list is kept until the next refresh; previews fail cleanly.
     r = client.get(photos[0]["url"])
-    assert r.status_code == 502 and "Couldn't reach Immich" in r.json()["detail"]
+    assert r.status_code == 502 and "Nothing answered at http://immich.test:2283" in r.json()["detail"]
     no_key(r)
     assert client.get("/api/immich").json()["status"] == "error"  # reported straight away
     immich.cache.fetched_at -= immich.REFRESH_SECONDS + 1  # time for a refresh
     body = client.get("/api/screensaver/photos").json()
     assert body["status"] == "error" and len(body["photos"]) == 3  # last good list
     cfg = client.get("/api/immich").json()
-    assert cfg["status"] == "error" and "Couldn't reach Immich" in cfg["last_error"]
+    assert cfg["status"] == "error" and "Nothing answered" in cfg["last_error"]
     r = client.post("/api/immich/test", json={"pin": PIN})
     assert r.status_code == 502
     no_key(r)
@@ -282,12 +282,12 @@ def test_key_revoked_in_immich(client, fake, monkeypatch):
 def test_screensaver_timing_settings(client):
     s = client.get("/api/settings").json()
     assert "screensaver_album" not in s and s["screensaver_seconds"] == 10
-    assert s["idle_minutes"] == {"hallway": 5, "kitchen": 3, "phone": 0}
+    assert s["idle_minutes"] == {"large": 5, "compact": 3, "phone": 0}
     r = client.patch("/api/settings", json={"pin": PIN, "screensaver_seconds": 20, "idle_minutes": {"kitchen": 10}})
     assert r.status_code == 200, r.text
-    assert r.json()["screensaver_seconds"] == 20 and r.json()["idle_minutes"] == {"hallway": 5, "kitchen": 10, "phone": 0}
+    assert r.json()["screensaver_seconds"] == 20 and r.json()["idle_minutes"] == {"large": 5, "compact": 10, "phone": 0}
     assert client.patch("/api/settings", json={"pin": PIN, "idle_minutes": 7}).json()["idle_minutes"] == \
-        {"hallway": 7, "kitchen": 7, "phone": 0}
+        {"large": 7, "compact": 7, "phone": 0}
     assert client.patch("/api/settings", json={"pin": PIN, "screensaver_seconds": 1}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "idle_minutes": {"attic": 1}}).status_code == 400
 
@@ -306,3 +306,84 @@ def test_paired_screen_gets_previews_unpaired_does_not(tmp_path, fake):
     assert TestClient(app, client=("192.168.1.51", 3)).get(url).status_code == 401
     # A screen can't change the source without the PIN.
     assert screen.put("/api/immich", json={"server_url": "http://evil.test", "api_key": "x"}).status_code == 403
+
+
+def test_connection_problems_say_what_to_try(client, monkeypatch):
+    import socket
+
+    def answer(req: httpx.Request) -> httpx.Response:
+        host = req.url.host
+        if host == "homeassistant.local":
+            raise httpx.ConnectError("[Errno -2] Name or service not known", request=req) from socket.gaierror(-2, "x")
+        if host == "slow.test":
+            raise httpx.ConnectTimeout("", request=req)
+        if host == "proxy.test":
+            return httpx.Response(502, text="<html>Bad Gateway</html>")
+        if host == "redirect.test":
+            return httpx.Response(301, headers={"location": "https://immich.example.com/api/albums"})
+        return httpx.Response(404, text="Not found")
+
+    def detail(url: str) -> str:
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": url, "api_key": KEY})
+        assert r.status_code == 502, r.text
+        no_key(r)
+        return r.json()["detail"]
+
+    monkeypatch.setattr(immich, "transport", httpx.MockTransport(answer))
+    client.put("/api/settings", json={"pin": PIN, "new_pin": PIN})
+    assert "use the IP address" in detail("http://homeassistant.local:2283")
+    assert "didn't answer in time" in detail("http://slow.test:2283")
+    assert "answered 502" in detail("http://proxy.test") and "Immich is running" in detail("http://proxy.test")
+    assert "redirects to https://immich.example.com/api/albums" in detail("http://redirect.test")
+    assert "no Immich API (404)" in detail("http://other.test/photos")
+
+
+def test_self_signed_https_needs_skip_cert_check(client, monkeypatch, tmp_path):
+    """A real HTTPS server with a self-signed certificate, like an Immich add-on with SSL reached by IP address."""
+    import json as _json
+    import ssl
+    import subprocess
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=immich.example",
+                    "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.headers.get("x-api-key") != KEY:
+                self.send_response(401); self.end_headers(); return  # noqa: E702
+            body = _json.dumps([{"id": "0b6c2e0a-1f3d-4c5e-9a7b-2d4e6f8a0c1e", "albumName": "Garden", "assetCount": 3}] if self.path == "/api/albums"
+                               else {"major": 2, "minor": 1, "patch": 0}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()  # noqa: E702
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(str(cert), str(key))
+    server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        monkeypatch.setattr(immich, "transport", None)  # the real network stack, so TLS is really checked
+        for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+            monkeypatch.delenv(var, raising=False)
+        url = f"https://127.0.0.1:{server.server_port}"
+        client.put("/api/settings", json={"pin": PIN, "new_pin": PIN})
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": url, "api_key": KEY})
+        assert r.status_code == 502 and "Skip certificate check" in r.json()["detail"], r.text
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": url, "api_key": KEY, "skip_cert_check": True})
+        assert r.status_code == 200 and r.json()["albums"][0]["name"] == "Garden", r.text
+        r = client.put("/api/immich", json={"pin": PIN, "server_url": url, "api_key": KEY, "album_ids": ["0b6c2e0a-1f3d-4c5e-9a7b-2d4e6f8a0c1e"],
+                                            "skip_cert_check": True})
+        assert r.status_code == 200 and r.json()["skip_cert_check"] is True, r.text
+        assert client.get("/api/immich/albums").status_code == 200  # the saved setting is used
+        # Plain http:// to the HTTPS port says to use https://.
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": f"http://127.0.0.1:{server.server_port}",
+                                                  "api_key": KEY})
+        assert r.status_code == 502, r.text
+    finally:
+        server.shutdown()

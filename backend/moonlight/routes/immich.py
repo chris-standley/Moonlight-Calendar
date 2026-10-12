@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
 from .. import db, immich
-from ..common import as_int, bad, body_dict, hub, not_found, require_pin
+from ..common import as_int, bad, body_dict, hub, layout_name, not_found, require_pin
 
 router = APIRouter(prefix="/api")
 
@@ -29,12 +29,11 @@ def apply_settings(c, body: dict) -> None:
         val = body["idle_minutes"]
         cur = dict(db.get_setting(c, "idle_minutes", db.DEFAULT_SETTINGS["idle_minutes"]))
         if isinstance(val, (int, float)) and not isinstance(val, bool):
-            val = {k: val for k in ("hallway", "kitchen")}  # one number: both wall screens
+            val = {k: val for k in ("large", "compact")}  # one number: both wall screen styles
         if not isinstance(val, dict):
-            raise bad("idle_minutes must be a number or {hallway, kitchen, phone}")
+            raise bad("idle_minutes must be a number or {large, compact, phone}")
         for k, v in val.items():
-            if k not in ("hallway", "kitchen", "phone"):
-                raise bad("idle_minutes keys are hallway, kitchen, phone")
+            k = layout_name(k, "idle_minutes keys")
             v = as_int(v, f"idle_minutes.{k}")
             if not 0 <= v <= 1440:
                 raise bad("idle_minutes must be between 0 (never) and 1440")
@@ -50,11 +49,12 @@ def config_out(cfg: dict | None, cache: immich.Cache | None = None) -> dict:
     fresh = cache.key is not None and cache.key == immich.Cache.config_key(cfg)
     if not cfg:
         return {"configured": False, "server_url": "", "key_set": False, "album_ids": [], "favorites": False,
-                "memories": False, "status": "unconfigured", "last_error": None, "last_refresh": None,
+                "memories": False, "skip_cert_check": False, "status": "unconfigured", "last_error": None, "last_refresh": None,
                 "photo_count": 0, "version": None}
     return {
         "configured": True, "server_url": cfg["server_url"], "key_set": bool(cfg["api_key"]),
         "album_ids": cfg["album_ids"], "favorites": cfg["favorites"], "memories": cfg["memories"],
+        "skip_cert_check": cfg.get("skip_cert_check", False),
         "status": cache.status if fresh else "pending", "last_error": cache.error if fresh else None,
         "last_refresh": cache.last_refresh if fresh else None, "photo_count": len(cache.photos) if fresh else 0,
         "version": cache.version if fresh else None,
@@ -67,7 +67,7 @@ def _url(body: dict) -> str:
         raise bad("server_url is required")
     url = immich.normalize_url(raw)
     if not re.match(r"^https?://[^/\s?#]+", url) or any(ch in url for ch in "?#") or "@" in url.split("/")[2]:
-        raise bad("server_url must look like http://homeassistant.local:2283")
+        raise bad("server_url must look like http://192.168.1.10:2283")
     return url
 
 
@@ -111,25 +111,26 @@ async def get_immich():
 
 @router.put("/immich")
 async def save_immich(body: dict = Body(...)):
-    """Connect or change: {pin, server_url, api_key (optional once saved), album_ids, favorites, memories}.
+    """Connect or change: {pin, server_url, api_key (optional once saved), album_ids, favorites, memories, skip_cert_check}.
     A new URL or key is checked against Immich before it is saved."""
     body = body_dict(body)
     with db.connect() as c:
         require_pin(c, body.get("pin"))
         cur = immich.load_config(c)
-    cfg = dict(cur) if cur else {"server_url": "", "api_key": "", "album_ids": [], "favorites": False, "memories": False}
+    cfg = dict(cur) if cur else {"server_url": "", "api_key": "", "album_ids": [], "favorites": False, "memories": False,
+                                 "skip_cert_check": False}
     if "server_url" in body or not cur:
         cfg["server_url"] = _url(body)
     if body.get("api_key") not in (None, "") or not cur:
         cfg["api_key"] = _key(body)
     if "album_ids" in body:
         cfg["album_ids"] = _album_ids(body)
-    for k in ("favorites", "memories"):
+    for k in ("favorites", "memories", "skip_cert_check"):
         if k in body:
             cfg[k] = _bool(body, k)
-    if not cur or cfg["server_url"] != cur["server_url"] or cfg["api_key"] != cur["api_key"]:
+    if not cur or any(cfg[k] != cur.get(k) for k in ("server_url", "api_key", "skip_cert_check")):
         try:
-            await immich.Client(cfg["server_url"], cfg["api_key"]).albums()
+            await immich.Client(cfg["server_url"], cfg["api_key"], cfg["skip_cert_check"]).albums()
         except immich.ImmichError as e:
             raise _error(e)
     with db.connect() as c:
@@ -162,8 +163,9 @@ async def test_immich(body: dict = Body(...)):
     key = _key(body) if body.get("api_key") else (cur or {}).get("api_key")
     if not url or not key:
         raise bad("Enter the Immich address and an API key")
+    skip = _bool(body, "skip_cert_check") if "skip_cert_check" in body else bool((cur or {}).get("skip_cert_check"))
     try:
-        return await immich.Client(url, key).test()
+        return await immich.Client(url, key, skip).test()
     except immich.ImmichError as e:
         raise _error(e)
 
@@ -176,7 +178,7 @@ async def immich_albums():
     if not cfg:
         raise not_found("Immich isn't connected")
     try:
-        return await immich.Client(cfg["server_url"], cfg["api_key"]).albums()
+        return await immich.Client(cfg["server_url"], cfg["api_key"], cfg["skip_cert_check"]).albums()
     except immich.ImmichError as e:
         raise _error(e)
 
@@ -202,7 +204,7 @@ async def immich_preview(asset_id: str):
     if not cfg:
         raise not_found("Photo not found")
     try:
-        http, r = await immich.Client(cfg["server_url"], cfg["api_key"]).preview(asset_id)
+        http, r = await immich.Client(cfg["server_url"], cfg["api_key"], cfg["skip_cert_check"]).preview(asset_id)
     except immich.ImmichError as e:
         cache.mark_failed(e)
         raise HTTPException(status_code=502, detail=str(e))

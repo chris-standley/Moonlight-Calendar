@@ -28,6 +28,7 @@ struct Repeat: Codable, Hashable {
     let interval: Int
     let byday: [String]?
     let until: String?
+    let skip_holidays: Bool?
 }
 
 struct Occurrence: Codable, Identifiable, Hashable {
@@ -72,11 +73,13 @@ struct ChoreSchedule: Codable, Hashable {
     var type: String
     var days: [String]?
     var date: String?
+    var skip_holidays: Bool? = nil
 
     var json: [String: Any] {
         var out: [String: Any] = ["type": type]
         if type == "weekly" { out["days"] = days ?? [] }
         if type == "once", let date { out["date"] = date }
+        if type != "once" && skip_holidays == true { out["skip_holidays"] = true }
         return out
     }
 }

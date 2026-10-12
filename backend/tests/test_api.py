@@ -1,6 +1,7 @@
 """API tests: run from backend/ with `python -m pytest`."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 from datetime import date, timedelta
@@ -150,6 +151,24 @@ def test_event_patch_delete_and_sorting(client):
                                              "repeat": {"freq": "weekly", "interval": 0}}).status_code == 400
 
 
+def test_stale_person_ids_are_dropped(client, db_file):
+    a, b = person(client, "Ann"), person(client, "Ben")
+    ev = event(client, title="Swim", person_ids=[a["id"], b["id"]])
+    # An id left behind by a person who no longer exists (e.g. removed sample data).
+    with sqlite3.connect(db_file) as c:
+        c.execute("UPDATE events SET person_ids = ? WHERE id = ?",
+                  (json.dumps([a["id"], b["id"], "p_gone"]), ev["id"]))
+    assert client.get(f"/api/events/{ev['id']}").json()["person_ids"] == [a["id"], b["id"]]
+    assert occ(client, "2026-10-05", "2026-10-06")[0]["person_ids"] == [a["id"], b["id"]]
+    # A screen still holding the stale id can take someone off the event.
+    r = client.patch(f"/api/events/{ev['id']}", json={"person_ids": [a["id"], "p_gone"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["person_ids"] == [a["id"]]
+    r = client.post("/api/events", json={"title": "x", "person_ids": ["p_gone"], "start": "2026-10-05T09:00",
+                                         "end": "2026-10-05T10:00"})
+    assert r.status_code == 200 and r.json()["person_ids"] == []
+
+
 # ---------------------------------------------------------------- chores
 
 def test_chore_due_dates(client):
@@ -293,6 +312,26 @@ def test_meals_range(client):
     assert client.post("/api/meals", json={"date": "2026-10-05", "slot": "brunch", "title": "x"}).status_code == 400
 
 
+def test_recipe_edit_and_delete(client):
+    rc = client.post("/api/recipes", json={"title": "Chilli", "emoji": "🌶️", "minutes": 40,
+                                           "ingredients": ["Beans", " ", "Mince"]}).json()
+    assert rc["ingredients"] == ["Beans", "Mince"]
+    r = client.patch(f"/api/recipes/{rc['id']}", json={"title": "Veggie chilli", "ingredients": ["Beans", "Peppers"],
+                                                      "minutes": None, "url": "https://example.com/chilli"})
+    assert r.json() == {"id": rc["id"], "title": "Veggie chilli", "emoji": "🌶️", "minutes": None,
+                        "ingredients": ["Beans", "Peppers"], "url": "https://example.com/chilli"}
+    assert client.patch(f"/api/recipes/{rc['id']}", json={"title": " "}).status_code == 400
+    assert client.patch(f"/api/recipes/{rc['id']}", json={"minutes": -5}).status_code == 400
+    assert client.patch("/api/recipes/nope", json={"title": "x"}).status_code == 404
+    meal = client.post("/api/meals", json={"date": "2026-10-12", "slot": "dinner", "title": "Veggie chilli",
+                                           "recipe_id": rc["id"]}).json()
+    assert client.delete(f"/api/recipes/{rc['id']}").json() == {"ok": True}
+    assert client.delete(f"/api/recipes/{rc['id']}").status_code == 404
+    assert all(x["id"] != rc["id"] for x in client.get("/api/recipes").json())
+    kept = [m for m in client.get("/api/meals?start=2026-10-12&end=2026-10-13").json() if m["id"] == meal["id"]][0]
+    assert kept["title"] == "Veggie chilli" and kept["recipe_id"] is None
+
+
 def test_recipe_to_list(client):
     rc = client.post("/api/recipes", json={"title": "Tacos", "emoji": "🌮", "minutes": 25,
                                            "ingredients": ["Tortillas", "Lime"], "url": None}).json()
@@ -307,6 +346,17 @@ def test_recipe_to_list(client):
 
 
 # ---------------------------------------------------------------- settings / PIN
+
+def test_change_pin(client):
+    bad = client.patch("/api/settings", json={"pin": PIN, "new_pin": "12a4"})
+    assert bad.status_code == 400 and "4 digits" in bad.json()["detail"]
+    assert client.patch("/api/settings", json={"pin": "0000", "new_pin": "2468"}).status_code == 403
+    assert client.post("/api/pin/verify", json={"pin": PIN}).json() == {"ok": True}  # unchanged so far
+    assert client.patch("/api/settings", json={"pin": PIN, "new_pin": "2468"}).status_code == 200
+    assert client.post("/api/pin/verify", json={"pin": "2468"}).json() == {"ok": True}
+    assert client.post("/api/pin/verify", json={"pin": PIN}).json() == {"ok": False}
+    assert client.patch("/api/settings", json={"week_start": "sunday", "pin": PIN}).status_code == 403
+
 
 def test_settings_pin(client, db_file):
     s = client.get("/api/settings").json()
@@ -480,3 +530,110 @@ def test_demo_seed(tmp_path):
     # Re-opening a non-empty DB doesn't seed again.
     with TestClient(create_app(db_path=str(tmp_path / "d.db"), demo=True, seed_path=SEED, today=today)) as c:
         assert len(c.get("/api/people").json()) == 4
+
+
+def test_remove_sample_data(tmp_path):
+    from moonlight import seed as seed_mod
+    app = create_app(db_path=str(tmp_path / "s.db"), demo=True, static_dir=tmp_path / "no-dist")
+    with TestClient(app) as c:
+        pin = json.load(open(seed_mod.default_seed_path()))["settings"]["pin"]
+        total = c.get("/api/sample-data").json()["remaining"]
+        assert total > 50
+        # The family deleted the demo people already, added their own person, event and grocery item.
+        for p in c.get("/api/people").json():
+            assert c.request("DELETE", f"/api/people/{p['id']}", json={"pin": pin}).status_code == 200
+        me = c.post("/api/people", json={"name": "Chris", "color": "#5B8DEF", "role": "adult", "pin": pin}).json()
+        ev = c.post("/api/events", json={"title": "Dentist", "person_ids": [me["id"]], "start": "2026-10-14T09:00",
+                                         "end": "2026-10-14T09:30"}).json()
+        c.post("/api/lists/l_grocery/items", json={"title": "Coffee"})
+        assert c.post("/api/sample-data/remove", json={"pin": "0000"}).status_code == 403
+        assert c.post("/api/sample-data/remove", json={"pin": pin}).json()["removed"] > 40
+        assert c.get("/api/sample-data").json() == {"remaining": 0}
+        events = c.get("/api/events?start=2026-01-01&end=2027-12-31").json()
+        assert [e["id"] for e in events if not e.get("calendar_id")] == [ev["id"]]
+        assert [p["name"] for p in c.get("/api/people").json()] == ["Chris"]
+        assert c.get("/api/chores").json() == [] and c.get("/api/recipes").json() == []
+        lists = c.get("/api/lists").json()
+        assert [l["id"] for l in lists] == ["l_grocery"]
+        assert [i["title"] for i in c.get("/api/lists/l_grocery/items").json()] == ["Coffee"]
+
+
+def test_list_and_reward_edit(client):
+    lst = client.post("/api/lists", json={"name": "Jobs", "emoji": "🔧", "kind": "todo"}).json()
+    r = client.patch(f"/api/lists/{lst['id']}", json={"name": "House jobs", "emoji": "🏠", "kind": "grocery"})
+    assert r.status_code == 200, r.text
+    assert (r.json()["name"], r.json()["emoji"], r.json()["kind"]) == ("House jobs", "🏠", "grocery")
+    assert client.patch(f"/api/lists/{lst['id']}", json={"name": ""}).status_code == 400
+    assert client.patch(f"/api/lists/{lst['id']}", json={"kind": "other"}).status_code == 400
+    assert client.patch("/api/lists/nope", json={"name": "x"}).status_code == 404
+
+    kid = person(client)["id"]
+    rw = client.post("/api/rewards", json={"title": "Film night", "emoji": "🎬", "cost": 20, "person_id": None}).json()
+    r = client.patch(f"/api/rewards/{rw['id']}", json={"title": "Cinema trip", "cost": 40, "person_id": kid})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"id": rw["id"], "title": "Cinema trip", "emoji": "🎬", "cost": 40, "person_id": kid}
+    assert client.get("/api/rewards").json()[0]["title"] == "Cinema trip"
+    assert client.patch(f"/api/rewards/{rw['id']}", json={"cost": -1}).status_code == 400
+    assert client.patch(f"/api/rewards/{rw['id']}", json={"person_id": "nobody"}).status_code == 400
+    assert client.patch(f"/api/rewards/{rw['id']}", json={"person_id": None}).json()["person_id"] is None
+    assert client.delete(f"/api/rewards/{rw['id']}").status_code == 200
+
+
+def test_screen_sections_setting(client):
+    s = client.get("/api/settings").json()["screens"]
+    assert s["large"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]}
+    r = client.patch("/api/settings", json={"pin": PIN, "screens": {
+        "kitchen": {"sections": ["lists", "today", "meals"], "start": "meals"}}})
+    assert r.status_code == 200, r.text
+    s = r.json()["screens"]
+    assert s["compact"] == {"start": "meals", "sections": ["today", "meals", "lists"]}
+    assert s["large"]["start"] == "calendar"  # untouched
+    # Hiding the start section moves the start to the first one still shown.
+    s = client.patch("/api/settings", json={"pin": PIN, "screens": {"kitchen": {"sections": ["lists", "today"]}}}).json()
+    assert s["screens"]["compact"] == {"start": "today", "sections": ["today", "lists"]}
+    for bad in ({"kitchen": {"sections": []}}, {"kitchen": {"sections": ["settings"]}}, {"tv": {}},
+                {"kitchen": {"start": "rewards"}}, {"kitchen": {"start": "nope"}}, []):
+        assert client.patch("/api/settings", json={"pin": PIN, "screens": bad}).status_code == 400, bad
+    assert client.patch("/api/settings", json={"pin": "0000", "screens": {}}).status_code == 403
+
+
+def test_public_holidays_and_skipping_them(client):
+    s = client.get("/api/settings").json()
+    assert s["holidays"] == {"country": "GB", "subdiv": "ENG"}  # Europe/London default
+    hols = client.get("/api/holidays?start=2026-12-01&end=2027-01-05").json()
+    assert [h["date"] for h in hols] == ["2026-12-25", "2026-12-26", "2026-12-28", "2027-01-01"]
+    assert hols[0]["name"] == "Christmas Day"
+    countries = {x["code"]: x for x in client.get("/api/holidays/countries").json()}
+    assert countries["GB"]["name"] == "United Kingdom"
+    assert {"code": "SCT", "name": "Scotland"} in countries["GB"]["subdivs"]
+    assert "GBR" not in countries and "UK" not in countries
+    preview = client.get("/api/holidays?start=2027-01-01&end=2027-01-05&country=GB&subdiv=SCT").json()
+    assert [h["date"] for h in preview] == ["2027-01-01", "2027-01-02", "2027-01-04"]  # Scotland keeps 2 January
+    assert client.get("/api/holidays?start=2027-01-01&end=2027-01-05&country=XX").status_code == 400
+
+    # Chores on chosen days, skipping public holidays.
+    kid = person(client)
+    ch = chore(client, kid["id"], schedule={"type": "weekly", "days": ["MO", "FR"], "skip_holidays": True})
+    assert ch["schedule"] == {"type": "weekly", "days": ["MO", "FR"], "skip_holidays": True}
+    due = lambda d: any(x["id"] == ch["id"] for x in client.get(f"/api/chores?date={d}").json())  # noqa: E731
+    assert due("2026-12-21") and not due("2026-12-22") and not due("2026-12-28") and due("2027-01-04")
+    plain = chore(client, kid["id"], title="Feed fish", schedule={"type": "daily"})
+    assert any(x["id"] == plain["id"] for x in client.get("/api/chores?date=2026-12-25").json())
+
+    # Repeating events too.
+    ev = event(client, title="Swim club", start="2026-12-21T17:00", end="2026-12-21T18:00",
+               repeat={"freq": "daily", "skip_holidays": True})
+    days = [o["start"][:10] for o in occ(client, "2026-12-24", "2026-12-29") if o["id"] == ev["id"]]
+    assert days == ["2026-12-24", "2026-12-27"]
+
+    # Another region; none at all.
+    client.patch("/api/settings", json={"pin": PIN, "holidays": {"country": "GB", "subdiv": "SCT"}})
+    assert "2027-01-04" in [h["date"] for h in client.get("/api/holidays?start=2027-01-01&end=2027-01-05").json()]
+    assert not due("2027-01-04")
+    client.patch("/api/settings", json={"pin": PIN, "holidays": {"country": ""}})
+    assert client.get("/api/holidays?start=2026-12-01&end=2026-12-31").json() == []
+    assert due("2026-12-28")
+    for bad in ({"country": "XX"}, {"country": "GB", "subdiv": "XYZ"}, {"subdiv": "ENG"}, "GB"):
+        assert client.patch("/api/settings", json={"pin": PIN, "holidays": bad}).status_code == 400, bad
+    assert client.post("/api/chores", json={"title": "x", "person_id": kid["id"], "points": 1, "time_of_day": "morning",
+                                            "schedule": {"type": "daily", "skip_holidays": "yes"}}).status_code == 400

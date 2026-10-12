@@ -3,7 +3,7 @@
 import seed from "../../../seed/demo.json";
 import {
   Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
-  Person, PersonIn, Recipe, Reward, Settings, TaskList, Topic, Weather,
+  DEFAULT_IDLE, DEFAULT_SCREENS, HolidayCountry, HolidayRegion, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
@@ -117,9 +117,15 @@ function buildSeed(): State {
 
 const WORK_CAL = "cal_work";
 /** Free/busy blocks as an Outlook "Can view when I'm busy" feed publishes them (titles are just the status). */
+const HA_CALENDARS: [string, string][] = [
+  ["calendar.bin_collections", "Bin collections"],
+  ["calendar.free_electricity_sessions", "Free electricity sessions"],
+  ["calendar.workday_alex", "Workday Alex"],
+];
+
 function busyBlocks(calendarId: string, mon: string): CalEvent[] {
   const B: [number, string, string, BusyStatus][] = [
-    [0, "10:30", "11:30", "busy"], [0, "14:00", "15:30", "busy"], [1, "09:00", "10:30", "busy"], [1, "13:00", "14:00", "tentative"],
+    [0, "10:30", "11:30", "busy"], [0, "11:00", "12:00", "busy"], [0, "14:00", "15:30", "busy"], [0, "15:30", "16:30", "tentative"], [1, "09:00", "10:30", "busy"], [1, "13:00", "14:00", "tentative"],
     [2, "11:00", "12:00", "busy"], [2, "12:30", "13:00", "free"], [2, "15:00", "17:00", "busy"], [3, "09:30", "11:00", "busy"],
     [3, "13:30", "14:00", "tentative"], [4, "10:00", "12:00", "busy"], [7, "10:30", "11:30", "busy"], [7, "14:00", "16:00", "busy"],
     [9, "09:00", "10:00", "busy"], [9, "13:00", "15:00", "tentative"], [10, "11:00", "12:30", "busy"], [11, "15:00", "16:00", "busy"],
@@ -142,8 +148,54 @@ function maskUrl(url: string): string {
   } catch { return "link"; }
 }
 
+// England and Wales bank holidays, the only public holidays the demo knows (the add-on covers ~200 countries).
+const BANK_HOLIDAYS: Record<string, string> = {
+  "2025-01-01": "New Year's Day",
+  "2025-04-18": "Good Friday",
+  "2025-04-21": "Easter Monday",
+  "2025-05-05": "May Day",
+  "2025-05-26": "Spring Bank Holiday",
+  "2025-08-25": "Late Summer Bank Holiday",
+  "2025-12-25": "Christmas Day",
+  "2025-12-26": "Boxing Day",
+  "2026-01-01": "New Year's Day",
+  "2026-04-03": "Good Friday",
+  "2026-04-06": "Easter Monday",
+  "2026-05-04": "May Day",
+  "2026-05-25": "Spring Bank Holiday",
+  "2026-08-31": "Late Summer Bank Holiday",
+  "2026-12-25": "Christmas Day",
+  "2026-12-26": "Boxing Day",
+  "2026-12-28": "Boxing Day (observed)",
+  "2027-01-01": "New Year's Day",
+  "2027-03-26": "Good Friday",
+  "2027-03-29": "Easter Monday",
+  "2027-05-03": "May Day",
+  "2027-05-31": "Spring Bank Holiday",
+  "2027-08-30": "Late Summer Bank Holiday",
+  "2027-12-25": "Christmas Day",
+  "2027-12-26": "Boxing Day",
+  "2027-12-27": "Christmas Day (observed)",
+  "2027-12-28": "Boxing Day (observed)",
+  "2028-01-01": "New Year's Day",
+  "2028-01-03": "New Year's Day (observed)",
+  "2028-04-14": "Good Friday",
+  "2028-04-17": "Easter Monday",
+  "2028-05-01": "May Day",
+  "2028-05-29": "Spring Bank Holiday",
+  "2028-08-28": "Late Summer Bank Holiday",
+  "2028-12-25": "Christmas Day",
+  "2028-12-26": "Boxing Day",
+};
+export const DEMO_HOLIDAY_COUNTRIES: HolidayCountry[] = [
+  { code: "GB", name: "United Kingdom", subdivs: [{ code: "ENG", name: "England" }, { code: "WLS", name: "Wales" }] },
+];
+let holidayRegion: HolidayRegion = { country: "GB", subdiv: "ENG" };
+const holidayOn = (date: string): string | undefined => (holidayRegion.country ? BANK_HOLIDAYS[date] : undefined);
+
 function isDue(c: Chore, date: string): boolean {
   const s = c.schedule;
+  if (s.type !== "once" && s.skip_holidays && holidayOn(date)) return false;
   if (s.type === "daily") return true;
   if (s.type === "weekly") return s.days.includes(dayCode(date));
   return s.date === date;
@@ -174,7 +226,7 @@ export function expand(e: CalEvent, start: string, end: string): Occurrence[] {
       const a = parse(d), b = parse(first);
       ok = a.getDate() === b.getDate() && ((a.getFullYear() - b.getFullYear()) * 12 + a.getMonth() - b.getMonth()) % interval === 0;
     }
-    if (!ok) continue;
+    if (!ok || (r.skip_holidays && holidayOn(d))) continue;
     const os = parse(`${d}T${time}`);
     const oe = new Date(os.getTime() + durMin * 60000);
     const ostr = isoDT(os), oestr = isoDT(oe);
@@ -206,11 +258,28 @@ export function demoApi(): Api {
     const parsed = raw ? (JSON.parse(raw) as State) : null;
     st = parsed && parsed.seededOn === today() ? parsed : buildSeed();
   } catch { st = buildSeed(); }
+  holidayRegion = st.settings.holidays ?? { country: "GB", subdiv: "ENG" };
 
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* private mode */ } };
   const emit = (...topics: Topic[]) => { save(); topics.forEach((t) => listeners.forEach((l) => l(t))); };
   const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
   const ok = async <T>(x: T): Promise<T> => clone(x);
+  // Same rules as the backend's recipe_fields (POST: all fields; PATCH: only those given).
+  const recipeFields = (b: Partial<RecipeIn>, partial = false): Partial<RecipeIn> => {
+    const out: Partial<RecipeIn> = {};
+    if (!partial || "title" in b) {
+      if (!b.title?.trim()) throw new ApiError(400, "title is required");
+      out.title = b.title.trim();
+    }
+    if (!partial || "emoji" in b) out.emoji = (b.emoji ?? "").trim();
+    if (!partial || "minutes" in b) {
+      if (b.minutes != null && (!Number.isInteger(b.minutes) || b.minutes < 0)) throw new ApiError(400, "minutes must be a whole number");
+      out.minutes = b.minutes ?? null;
+    }
+    if (!partial || "ingredients" in b) out.ingredients = (b.ingredients ?? []).map((i) => i.trim()).filter(Boolean);
+    if (!partial || "url" in b) out.url = b.url?.trim() || null;
+    return out;
+  };
   const find = <T extends { id: string }>(arr: T[], id: string): T => {
     const x = arr.find((a) => a.id === id);
     if (!x) throw new ApiError(404, "Not found");
@@ -272,27 +341,55 @@ export function demoApi(): Api {
     return e.calendar_id ?? null;
   };
 
-  // The demo kitchen screen has a (pretend) Music Assistant speaker; other screens have none until set in Settings.
-  const mediaPlayers = () => ({ hallway: "", kitchen: "media_player.kitchen", phone: "", ...st.settings.media_players });
+  // Compact demo screens have a (pretend) Music Assistant kitchen speaker; others have none until set in Settings.
+  const mediaPlayers = () => ({ large: "", compact: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
-    return { ...rest, media_players: mediaPlayers(), pin_set: !!pin };
+    return { weather_entity: "", holidays: holidayRegion, ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
   };
 
   return {
     mode: "demo",
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     settings: async () => settingsOut(),
-    async updateSettings({ pin, ...patch }) {
+    async updateSettings({ pin, new_pin, ...patch }) {
       checkPin(pin);
-      const { media_players, ...rest } = patch;
+      if (new_pin != null && new_pin !== "" && !/^\d{4}$/.test(new_pin)) throw new ApiError(400, "new_pin must be 4 digits");
+      const { media_players, idle_minutes, screens, ...rest } = patch;
+      if (rest.weather_entity != null && rest.weather_entity !== "" && !/^weather\.[a-z0-9_]+$/.test(rest.weather_entity))
+        throw new ApiError(400, "weather_entity must be a weather entity id like weather.home, or empty for demo weather");
+      if (rest.weather_entity === null) rest.weather_entity = "";
+      if (rest.holidays) {
+        const { country = "", subdiv = "" } = rest.holidays;
+        const known = DEMO_HOLIDAY_COUNTRIES.find((x) => x.code === country);
+        if (country && !known) throw new ApiError(400, `No public holidays known for country ${country}`);
+        if (subdiv && !known?.subdivs.some((x) => x.code === subdiv)) throw new ApiError(400, `${subdiv} isn't a region of ${country}`);
+        rest.holidays = { country, subdiv };
+        holidayRegion = rest.holidays;
+      }
       Object.assign(st.settings, rest);
       if (media_players) {
-        if (Object.entries(media_players).some(([k, v]) => !["hallway", "kitchen", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
-          throw new ApiError(400, "media_players must map hallway/kitchen/phone to a media_player entity id or empty");
+        if (Object.entries(media_players).some(([k, v]) => !["large", "compact", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
+          throw new ApiError(400, "media_players must map large/compact/phone to a media_player entity id or empty");
         st.settings.media_players = { ...st.settings.media_players, ...media_players };
       }
-      emit("settings", "media");
+      if (idle_minutes) st.settings.idle_minutes = { ...st.settings.idle_minutes, ...idle_minutes };
+      if (screens) {
+        const cur = { ...DEFAULT_SCREENS, ...st.settings.screens };
+        for (const [k, conf] of Object.entries(screens) as [Layout, Partial<ScreenSetup>][]) {
+          const next = { ...cur[k], ...conf };
+          next.sections = SECTIONS.filter((x) => next.sections.includes(x));
+          if (!next.sections.length) throw new ApiError(400, `screens.${k}.sections must not be empty`);
+          if (!next.sections.includes(next.start)) {
+            if (conf.start) throw new ApiError(400, `screens.${k}.start must be one of its sections`);
+            next.start = next.sections[0];
+          }
+          cur[k] = next;
+        }
+        st.settings.screens = cur;
+      }
+      if (new_pin) st.settings.pin = new_pin;
+      emit("settings", "media", ...(patch.holidays ? (["events", "chores"] as const) : []));
       return settingsOut();
     },
     verifyPin: async (pin) => pin === st.settings.pin,
@@ -353,6 +450,13 @@ export function demoApi(): Api {
       const ch: Chore = { ...c, id: uid("ch"), sort: st.chores.length };
       st.chores.push(ch); emit("chores"); return clone(ch);
     },
+    async updateChore(id, patch) {
+      const ch = find(st.chores, id);
+      if ("title" in patch && !patch.title?.trim()) throw new ApiError(400, "title is required");
+      if (patch.person_id && !st.people.some((p) => p.id === patch.person_id)) throw new ApiError(400, "person_id must be an existing person");
+      Object.assign(ch, patch);
+      emit("chores"); return clone(ch);
+    },
     async deleteChore(id) { st.chores = st.chores.filter((c) => c.id !== id); emit("chores"); },
     async completeChore(id, date) {
       const c = find(st.chores, id);
@@ -383,6 +487,13 @@ export function demoApi(): Api {
     },
     rewards: () => ok(st.rewards),
     async createReward(r) { const rw = { ...r, id: uid("rw") }; st.rewards.push(rw); emit("rewards"); return clone(rw); },
+    async updateReward(id, patch) {
+      const rw = find(st.rewards, id);
+      if (patch.title !== undefined && !patch.title.trim()) throw new ApiError(400, "title is required");
+      if (patch.cost !== undefined && !(patch.cost >= 0)) throw new ApiError(400, "cost must be >= 0");
+      Object.assign(rw, patch); emit("rewards"); return clone(rw);
+    },
+    async deleteReward(id) { find(st.rewards, id); st.rewards = st.rewards.filter((r) => r.id !== id); emit("rewards"); },
     async redeem(rid, pid, pin) {
       checkPin(pin);
       const r = find(st.rewards, rid);
@@ -402,6 +513,18 @@ export function demoApi(): Api {
       const nl = { ...l, id: uid("ls"), sort: st.lists.length };
       st.lists.push(nl); emit("lists");
       return { ...clone(nl), open_count: 0, done_count: 0 };
+    },
+    async updateList(id, patch) {
+      const l = find(st.lists, id);
+      if (patch.name !== undefined && !patch.name.trim()) throw new ApiError(400, "name is required");
+      Object.assign(l, patch); emit("lists");
+      return (await this.lists()).find((x) => x.id === id)!;
+    },
+    async deleteList(id) {
+      find(st.lists, id);
+      st.lists = st.lists.filter((l) => l.id !== id);
+      st.items = st.items.filter((i) => i.list_id !== id);
+      emit("lists");
     },
     async items(lid) {
       const its = st.items.filter((i) => i.list_id === lid);
@@ -429,6 +552,27 @@ export function demoApi(): Api {
     async updateMeal(id, patch) { const ml = find(st.meals, id); Object.assign(ml, patch); emit("meals"); return clone(ml); },
     async deleteMeal(id) { st.meals = st.meals.filter((m) => m.id !== id); emit("meals"); },
     recipes: () => ok(st.recipes),
+    // The preview is all sample data; it has its own Reset instead (Settings > Demo).
+    sampleData: async () => ({ remaining: 0 }),
+    removeSampleData: async () => 0,
+    async createRecipe(r) {
+      const rec = { id: uid("rc"), ...recipeFields(r) } as Recipe;
+      st.recipes.push(rec);
+      emit("recipes");
+      return clone(rec);
+    },
+    async updateRecipe(id, patch) {
+      const rec = find(st.recipes, id);
+      Object.assign(rec, recipeFields(patch, true));
+      emit("recipes");
+      return clone(rec);
+    },
+    async deleteRecipe(id) {
+      find(st.recipes, id);
+      st.recipes = st.recipes.filter((r) => r.id !== id);
+      for (const m of st.meals) if (m.recipe_id === id) m.recipe_id = null;
+      emit("recipes", "meals");
+    },
     async recipeToList(rid, lid) {
       const r = find(st.recipes, rid);
       for (const ing of r.ingredients) {
@@ -437,8 +581,32 @@ export function demoApi(): Api {
       emit("lists");
       return r.ingredients.length;
     },
-    weather: async () => demoWeather(),
-    ...demoExtras(checkPin, emit), // screens + simulated Immich, kept in memory
+    async weather() {
+      const w = demoWeather();
+      const e = st.settings.weather_entity;
+      const names: Record<string, string> = { "weather.forecast_home": "Forecast Home", "weather.met_office_london": "Met Office London" };
+      return e ? { ...w, source: "homeassistant" as const, entity: e, name: names[e] ?? e } : w;
+    },
+    async holidays(start, end, r) {
+      if (end < start) throw new ApiError(400, "end must not be before start");
+      if (r?.country && !DEMO_HOLIDAY_COUNTRIES.some((x) => x.code === r.country)) throw new ApiError(400, `No public holidays known for country ${r.country}`);
+      if (!(r ?? holidayRegion).country) return [];
+      return Object.entries(BANK_HOLIDAYS).filter(([d]) => d >= start && d <= end).map(([date, name]) => ({ date, name }));
+    },
+    holidayCountries: async () => DEMO_HOLIDAY_COUNTRIES,
+    // A pretend Home Assistant with a few weather integrations (the forecast itself stays the demo one).
+    weatherEntities: async () => {
+      const now = demoWeather().current;
+      return [
+        { entity_id: "weather.forecast_home", name: "Forecast Home", available: true, condition: now.condition, temperature: now.temp, unit: "C", attribution: "Weather forecast from met.no" },
+        { entity_id: "weather.met_office_london", name: "Met Office London", available: true, condition: "rainy", temperature: now.temp - 1, unit: "C", attribution: "Met Office" },
+        { entity_id: "weather.openweathermap", name: "OpenWeatherMap", available: false, condition: null, temperature: null, unit: "C", attribution: null },
+      ];
+    },
+    ...demoExtras(checkPin, emit, (l) => { // screens + simulated Immich, kept in memory
+      const s = settingsOut();
+      return { ...(s.screens?.[l] ?? DEFAULT_SCREENS[l]), speaker: s.media_players?.[l] ?? "", idle_minutes: s.idle_minutes?.[l] ?? DEFAULT_IDLE[l] };
+    }),
     ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {
@@ -446,7 +614,7 @@ export function demoApi(): Api {
       await wait(900); // "checking with iCloud"
       if (!a.username.trim() || !a.password.trim()) throw new ApiError(400, "Enter the Apple ID and app-specific password");
       if (accts().some((x) => x.username === a.username && x.kind === a.kind)) throw new ApiError(400, "That account is already connected");
-      const first = !accts().some((x) => x.kind !== "ics");
+      const first = !accts().some((x) => x.kind !== "ics" && x.kind !== "ha");
       const acct = {
         id: uid("acct"), kind: a.kind, label: a.label || a.username, username: a.username, password: a.password,
         server_url: a.kind === "icloud" ? "https://caldav.icloud.com/" : a.server_url ?? "",
@@ -494,7 +662,7 @@ export function demoApi(): Api {
       const mine = new Set(cals().filter((c) => c.account_id === id).map((c) => c.id));
       // A real removal forgets the cached iCloud events; the demo keeps them as local events instead
       // (except a calendar link's, which are dropped like the real thing).
-      if (find(accts(), id).kind === "ics") st.events = st.events.filter((e) => !e.calendar_id || !mine.has(e.calendar_id));
+      if (["ics", "ha"].includes(find(accts(), id).kind)) st.events = st.events.filter((e) => !e.calendar_id || !mine.has(e.calendar_id));
       for (const e of st.events) if (e.calendar_id && mine.has(e.calendar_id)) e.calendar_id = null;
       st.calendars = cals().filter((c) => !mine.has(c.id));
       st.accounts = accts().filter((a) => a.id !== id);
@@ -505,6 +673,38 @@ export function demoApi(): Api {
       await wait(600);
       if (acct.status !== "auth_failed") { acct.last_sync = nowDT(); acct.status = "ok"; acct.last_error = null; }
       emit("accounts");
+      return acctOut(acct);
+    },
+    // A pretend Home Assistant with a few calendar integrations.
+    haCalendars: async () => {
+      await wait(400);
+      const added = new Set(accts().filter((a) => a.kind === "ha").map((a) => a.username));
+      return HA_CALENDARS.map(([entity_id, name]) => ({ entity_id, name, added: added.has(entity_id) }));
+    },
+    async addHaCalendar(f) {
+      checkPin(f.pin);
+      const found = HA_CALENDARS.find(([id]) => id === f.entity_id);
+      if (!found) throw new ApiError(400, `Home Assistant has no calendar called ${f.entity_id}`);
+      if (accts().some((a) => a.kind === "ha" && a.username === f.entity_id)) throw new ApiError(400, "That calendar is already added");
+      await wait(600);
+      const label = f.label?.trim() || found[1];
+      const acct = { id: uid("acct"), kind: "ha" as const, label, username: f.entity_id, password: "", server_url: f.entity_id, status: "ok" as const, last_error: null, last_sync: nowDT(), calendar_count: 1 };
+      const person = st.people.find((x) => x.id === f.person_ids[0]);
+      const cal: SyncCalendar = {
+        id: uid("cal"), account_id: acct.id, name: label, color: f.color ?? person?.color ?? "#8A94A6", person_ids: f.person_ids, visible: true,
+        read_only: true, busy_blocks: false, busy_blocks_auto: false, busy_blocks_set: false,
+      };
+      accts().push(acct); cals().push(cal);
+      const mon = weekStart(today(), "monday");
+      const allDay = (d: string, title: string) => ({ id: uid("ev"), title, person_ids: [], start: `${d}T00:00`, end: `${addDays(d, 1)}T00:00`, all_day: true, location: "", notes: "", repeat: null, calendar_id: cal.id });
+      if (f.entity_id === "calendar.bin_collections") {
+        for (let w = 0; w < 8; w++) st.events.push(allDay(addDays(mon, 1 + w * 7), w % 2 ? "General waste" : "Recycling and garden"));
+      } else if (f.entity_id.startsWith("calendar.workday")) {
+        for (let d = 0; d < 21; d++) if (d % 7 < 5) st.events.push(allDay(addDays(mon, d), "Workday"));
+      } else {
+        [2, 9].forEach((d) => st.events.push({ ...allDay(addDays(mon, d), "Free electricity"), start: `${addDays(mon, d)}T13:00`, end: `${addDays(mon, d)}T15:00`, all_day: false }));
+      }
+      emit("accounts", "events");
       return acctOut(acct);
     },
     async previewFeed(raw) {
@@ -558,12 +758,20 @@ export function demoApi(): Api {
         Object.assign(cal, { busy_blocks: patch.busy_blocks ?? auto, busy_blocks_set: patch.busy_blocks !== null });
         delete patch.busy_blocks;
       }
+      if (patch.name !== undefined) {
+        cal.source_name ??= cal.name;
+        cal.name = patch.name?.trim() || cal.source_name;
+        delete patch.name;
+        const acct = find(accts(), cal.account_id);
+        if (acct.kind === "ics" || acct.kind === "ha") acct.label = cal.name;
+      }
       Object.assign(cal, patch);
       emit("accounts", "events");
       return clone(cal);
     },
     async resetDemo() {
       st = buildSeed();
+      holidayRegion = { country: "GB", subdiv: "ENG" };
       emit("people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "accounts");
     },
   };

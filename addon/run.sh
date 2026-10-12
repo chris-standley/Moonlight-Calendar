@@ -8,21 +8,8 @@ else
     export MOONLIGHT_DEMO=0
 fi
 
-# Weather from an HA weather entity (e.g. weather.home) via the Supervisor API; empty = demo forecast.
+# Weather and speakers are chosen in Moonlight (Settings > Display > Weather, Settings > Music).
 # homeassistant_api: true in config.yaml provides SUPERVISOR_TOKEN for http://supervisor/core/api.
-export MOONLIGHT_WEATHER_ENTITY=""
-if bashio::config.has_value 'weather_entity'; then
-    MOONLIGHT_WEATHER_ENTITY="$(bashio::config 'weather_entity')"
-fi
-export MOONLIGHT_WEATHER_ENTITY
-
-# Speaker for the kitchen screen's "Now playing" card (e.g. media_player.kitchen from Music Assistant).
-# Other screens can be given a player in Moonlight's Settings > Music.
-export MOONLIGHT_MEDIA_ENTITY=""
-if bashio::config.has_value 'media_player_entity'; then
-    MOONLIGHT_MEDIA_ENTITY="$(bashio::config 'media_player_entity')"
-fi
-export MOONLIGHT_MEDIA_ENTITY
 
 # Wall screens on the LAN port must be paired (Settings > Screens); HA ingress is always allowed.
 if bashio::config.false 'require_pairing'; then
@@ -76,7 +63,7 @@ else
 fi
 
 export MOONLIGHT_DB="${MOONLIGHT_DB:-/data/moonlight.db}"
-bashio::log.info "Starting Moonlight on port ${MOONLIGHT_PORT:-8091} (db: ${MOONLIGHT_DB}, demo: ${MOONLIGHT_DEMO}, weather: ${MOONLIGHT_WEATHER_ENTITY:-demo}, music: ${MOONLIGHT_MEDIA_ENTITY:-none}, pairing: ${MOONLIGHT_AUTH}, https: ${https_state}, timezone: ${MOONLIGHT_TIMEZONE:-default})"
+bashio::log.info "Starting Moonlight on port ${MOONLIGHT_PORT:-8091} (db: ${MOONLIGHT_DB}, demo: ${MOONLIGHT_DEMO}, pairing: ${MOONLIGHT_AUTH}, https: ${https_state}, timezone: ${MOONLIGHT_TIMEZONE:-default})"
 
 cd /app/backend
 exec python3 -m moonlight

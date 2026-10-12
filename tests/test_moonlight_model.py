@@ -246,3 +246,18 @@ def test_contract_with_backend_pairing(tmp_path):
     paired = TestClient(app, client=("192.168.1.9", 2), headers=model.auth_headers(token))
     assert not model.needs_pairing(paired.get("/api/auth/status").json())
     model.parse_summary(paired.get("/api/summary").json())
+
+
+def test_open_once_chore():
+    due = [
+        {"id": "a", "title": "🍽️ Empty the dishwasher", "person_id": "p1", "completed": False,
+         "schedule": {"type": "once", "date": "2026-10-10"}},
+        {"id": "b", "title": "Empty the dishwasher", "person_id": "p2", "completed": True,
+         "schedule": {"type": "once", "date": "2026-10-10"}},
+        {"id": "c", "title": "Empty the dishwasher", "person_id": "p3", "completed": False,
+         "schedule": {"type": "daily"}},
+    ]
+    assert model.open_once_chore(due, "p1", "empty the DISHWASHER")["id"] == "a"
+    assert model.open_once_chore(due, "p2", "Empty the dishwasher") is None  # done: a new run adds another
+    assert model.open_once_chore(due, "p3", "Empty the dishwasher") is None  # a daily chore isn't reused
+    assert model.open_once_chore(due, "p1", "Put the bins out") is None

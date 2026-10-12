@@ -1,19 +1,21 @@
-"""Calendar accounts (iCloud / CalDAV / published ICS links), their calendars and sync status.
-See caldav_sync.py and ics_feed.py."""
+"""Calendar accounts (iCloud / CalDAV / published ICS links / Home Assistant calendars), their calendars and
+sync status. See caldav_sync.py, ics_feed.py and ha_calendar.py."""
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, ics_feed
+from .. import caldav_sync, db, ha_calendar, ics_feed
 from ..common import bad, body_dict, hub, not_found, opt_str, person_exists, req_str, require_pin
 
 router = APIRouter(prefix="/api")
 
-KINDS = ("icloud", "caldav", "ics")
+KINDS = ("icloud", "caldav", "ics", "ha")
+SINGLE = ("ics", "ha")  # kinds holding one read-only calendar named after the account
 
 
 def account_out(c, r: dict) -> dict:
@@ -28,7 +30,8 @@ def account_out(c, r: dict) -> dict:
 
 def calendar_out(r: dict) -> dict:
     return {
-        "id": r["id"], "account_id": r["account_id"], "name": r["name"], "color": r["color"],
+        "id": r["id"], "account_id": r["account_id"], "name": r.get("display_name") or r["name"],
+        "source_name": r["name"], "color": r["color"],
         "person_ids": json.loads(r["person_ids"]), "visible": bool(r["visible"]), "read_only": bool(r["read_only"]),
         "busy_blocks": bool(r["busy_blocks"] if r.get("busy_blocks") is not None else r.get("busy_auto")),
         "busy_blocks_auto": bool(r.get("busy_auto")), "busy_blocks_set": r.get("busy_blocks") is not None,
@@ -120,14 +123,64 @@ async def _create_feed(body: dict) -> dict:
     return out
 
 
+async def _ha(fn, *args):
+    try:
+        return await asyncio.to_thread(fn, *args)
+    except ha_calendar.NotConnected as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except caldav_sync.SyncError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/ha/calendars")
+async def ha_calendars():
+    """Home Assistant's calendar entities that can be added (409 when not connected to HA)."""
+    return await _ha(ha_calendar.list_calendars)
+
+
+async def _create_ha(body: dict) -> dict:
+    entity = req_str(body, "entity_id").strip()
+    if not re.fullmatch(r"calendar\.[a-z0-9_]+", entity):
+        raise bad("entity_id must be a calendar entity like calendar.bins")
+    with db.connect() as c:
+        require_pin(c, body.get("pin"))
+        person_ids = _person_ids(c, body)
+        if db.row(c, "SELECT id FROM accounts WHERE kind = 'ha' AND username = ?", (entity,)):
+            raise bad("That calendar is already added")
+        first = db.row(c, "SELECT color FROM people WHERE id = ?", (person_ids[0],)) if person_ids else None
+    color = _color(body, first["color"].upper() if first else "#8A94A6")
+    found = {e["entity_id"]: e for e in await _ha(ha_calendar.list_calendars)}
+    if entity not in found:
+        raise bad("Home Assistant has no calendar called " + entity)
+    fetched = await _ha(ha_calendar.fetch, entity)
+    label = opt_str(body, "label").strip() or found[entity]["name"]
+    with db.connect() as c:
+        aid = db.new_id("acct")
+        c.execute("INSERT INTO accounts(id, kind, label, username, password, server_url, status, created_at) "
+                  "VALUES(?, 'ha', ?, ?, '', ?, 'ok', ?)", (aid, label, entity, entity, db.now_iso()))
+        cid = db.new_id("cal")
+        c.execute("INSERT INTO calendars(id, account_id, url, name, color, person_ids, visible, read_only, busy_auto) "
+                  "VALUES(?,?,?,?,?,?,1,1,0)", (cid, aid, ics_feed.FEED_CALENDAR_URL, label, color,
+                                                json.dumps(person_ids)))
+    await asyncio.to_thread(ics_feed.store, cid, fetched)
+    with db.connect() as c:
+        c.execute("UPDATE accounts SET last_sync = ? WHERE id = ?", (db.now_iso(), aid))
+        out = account_out(c, db.row(c, "SELECT * FROM accounts WHERE id = ?", (aid,)))
+    caldav_sync.mark_synced(aid)
+    await hub.broadcast("accounts", "events")
+    return out
+
+
 @router.post("/accounts")
 async def create_account(body: dict = Body(...)):
     body = body_dict(body)
     kind = body.get("kind", "icloud")
     if kind not in KINDS:
-        raise bad("kind must be icloud, caldav or ics")
+        raise bad("kind must be icloud, caldav, ics or ha")
     if kind == "ics":
         return await _create_feed(body)
+    if kind == "ha":
+        return await _create_ha(body)
     username = req_str(body, "username")
     password = req_str(body, "password", allow_empty=False)
     if kind == "icloud":
@@ -175,7 +228,7 @@ async def update_account(account_id: str, body: dict = Body(...)):
         await asyncio.to_thread(ics_feed.store, cal["id"], p["fetched"])
         caldav_sync.mark_synced(account_id)
         await hub.broadcast("events")
-    elif r["kind"] != "ics" and ("password" in body or "username" in body):
+    elif r["kind"] not in SINGLE and ("password" in body or "username" in body):
         username = req_str(body, "username") if "username" in body else r["username"]
         password = req_str(body, "password") if "password" in body else r["password"]
         home, found = await _verify(r["server_url"], username, password, r["kind"])
@@ -187,8 +240,9 @@ async def update_account(account_id: str, body: dict = Body(...)):
     with db.connect() as c:
         if "label" in body:
             c.execute("UPDATE accounts SET label = ? WHERE id = ?", (req_str(body, "label"), account_id))
-            if r["kind"] == "ics":  # a link's single calendar carries its name
-                c.execute("UPDATE calendars SET name = ? WHERE account_id = ?", (req_str(body, "label"), account_id))
+            if r["kind"] in SINGLE:  # a link's single calendar carries its name
+                c.execute("UPDATE calendars SET name = ?, display_name = NULL WHERE account_id = ?",
+                          (req_str(body, "label"), account_id))
         out = account_out(c, db.row(c, "SELECT * FROM accounts WHERE id = ?", (account_id,)))
     await hub.broadcast("accounts")
     return out
@@ -248,12 +302,20 @@ async def update_calendar(calendar_id: str, body: dict = Body(...)):
             if not (len(color) == 7 and color.startswith("#")):
                 raise bad("color must look like #RRGGBB")
             r["color"] = color
+        if "name" in body:  # a name to show instead of the source's; "" or null goes back to the source's
+            if body["name"] is not None and not isinstance(body["name"], str):
+                raise bad("name must be text")
+            r["display_name"] = (body["name"] or "").strip()[:80] or None
         if "busy_blocks" in body:  # true / false, or null to follow the automatic guess
             if body["busy_blocks"] is not None and not isinstance(body["busy_blocks"], bool):
                 raise bad("busy_blocks must be true, false or null")
             r["busy_blocks"] = None if body["busy_blocks"] is None else int(body["busy_blocks"])
-        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ? WHERE id = ?",
-                  (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"), calendar_id))
+        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ?, display_name = ? "
+                  "WHERE id = ?", (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"),
+                                   r.get("display_name"), calendar_id))
+        if "name" in body:  # a link or Home Assistant calendar is its account: keep the two names the same
+            c.execute("UPDATE accounts SET label = ? WHERE id = ? AND kind IN ('ics', 'ha')",
+                      (r.get("display_name") or r["name"], r["account_id"]))
     await hub.broadcast("accounts", "events")
     return calendar_out(r)
 

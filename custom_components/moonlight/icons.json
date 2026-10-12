@@ -23,6 +23,7 @@
   "services": {
     "complete_chore": { "service": "mdi:check-bold" },
     "award_stars": { "service": "mdi:star-plus" },
+    "add_chore": { "service": "mdi:broom" },
     "add_list_item": { "service": "mdi:playlist-plus" }
   }
 }

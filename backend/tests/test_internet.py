@@ -104,9 +104,9 @@ def test_pairing_codes_are_limited(tmp_path):
     app = make(tmp_path, auth_enabled=True)
     s = home(app)
     for _ in range(10):
-        assert s.post("/api/pair/start", json={"layout": "kitchen"}).status_code == 200
-    assert s.post("/api/pair/start", json={"layout": "kitchen"}).status_code == 429
-    assert home(app, ip="192.168.1.51").post("/api/pair/start", json={"layout": "kitchen"}).status_code == 200
+        assert s.post("/api/pair/start", json={"layout": "compact"}).status_code == 200
+    assert s.post("/api/pair/start", json={"layout": "compact"}).status_code == 429
+    assert home(app, ip="192.168.1.51").post("/api/pair/start", json={"layout": "compact"}).status_code == 200
 
 
 # ---------------------------------------------------------------- Sign in with Home Assistant
@@ -150,7 +150,7 @@ def test_sign_in_with_home_assistant(tmp_path, https_env, fake_ha):
     assert q["client_id"] == "https://moonlight.example.com/"
     assert q["redirect_uri"] == "https://moonlight.example.com/api/auth/ha/callback"
     r = s.get("/api/auth/ha/callback", params={"state": q["state"], "code": "good"}, follow_redirects=False)
-    assert r.status_code == 302 and r.headers["location"] == "/display/phone"
+    assert r.status_code == 302 and r.headers["location"] == "/display"
     assert "Secure" in r.headers["set-cookie"]
     assert fake_ha["exchange"] == ("good", "https://moonlight.example.com/", "https://ha.example.com")
     assert fake_ha["revoked"] == "refresh"

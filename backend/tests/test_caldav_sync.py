@@ -455,3 +455,89 @@ def test_background_loop_syncs(db_file, tmp_path, server, dav, monkeypatch):
         for b in c.bodies:
             assert PASSWORD not in b
     assert caldav_sync.manager is None
+
+
+def test_network_blips_are_retried_before_showing_an_error(client, server, dav, monkeypatch, no_retry_waits):
+    dav.make_calendar(name="Family", cal_id="family").save_event(
+        ics("e1", "Swim", "20261010T090000", "20261010T100000"))
+    acct = connect(client, server)
+    real = caldav_sync.Remote.list_calendars
+    blips = {"left": 2}
+
+    def flaky(self, home):
+        if blips["left"]:
+            blips["left"] -= 1
+            return self._call(lambda: (_ for _ in ()).throw(ConnectionError("reset by peer")))
+        return real(self, home)
+
+    monkeypatch.setattr(caldav_sync.Remote, "list_calendars", flaky)
+    # Two blips in a row: retried quietly, and the sync still succeeds.
+    assert sync(client, acct)["status"] == "ok"
+    assert no_retry_waits == list(caldav_sync.RETRY_WAITS)
+
+    # Still unreachable after every retry: now it's shown.
+    blips["left"] = len(caldav_sync.RETRY_WAITS) + 1
+    r = client.post(f"/api/accounts/{acct['id']}/sync").json()
+    assert r["status"] == "error" and "Couldn't reach" in r["last_error"] and "ConnectionError" in r["last_error"]
+    assert sync(client, acct)["status"] == "ok"
+
+
+def test_a_save_whose_reply_was_lost_is_not_a_conflict(client, server, dav, monkeypatch):
+    alex_cal = dav.make_calendar(name="Alex", cal_id="alex")
+    acct = connect(client, server)
+    sync(client, acct)
+    p = client.people
+    ev = client.post("/api/events", json={"title": "Gym", "person_ids": [p["Alex"]], "start": "2026-10-12T07:00",
+                                          "end": "2026-10-12T08:00"}).json()
+    real_put = caldav_sync.Remote.put
+    lose = {"n": 1}
+
+    def put_then_drop(self, url, ics, etag=None, create=False):
+        out = real_put(self, url, ics, etag, create)
+        if lose["n"]:
+            lose["n"] -= 1
+            raise caldav_sync.Unreachable("Couldn't reach the server: ConnectionError")
+        return out
+
+    monkeypatch.setattr(caldav_sync.Remote, "put", put_then_drop)
+    # The change reached the server but its reply was lost: still a success.
+    r = client.patch(f"/api/events/{ev['id']}", json={"title": "Gym class"})
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Gym class" and "SUMMARY:Gym class" in alex_cal.events()[0].data
+
+    # A retry of a save that already landed (stale etag) isn't "changed on another device" either.
+    with sqlite3.connect(caldav_sync.db.db_path()) as c:
+        c.execute("UPDATE events SET etag = '\"stale\"' WHERE id = ?", (ev["id"],))
+    r = client.patch(f"/api/events/{ev['id']}", json={"title": "Gym class"})
+    assert r.status_code == 200, r.text
+    # A real change made elsewhere still is.
+    with sqlite3.connect(caldav_sync.db.db_path()) as c:
+        c.execute("UPDATE events SET etag = '\"stale\"' WHERE id = ?", (ev["id"],))
+    r = client.patch(f"/api/events/{ev['id']}", json={"title": "Swimming"})
+    assert r.status_code == 409
+
+    # A new event whose reply was lost isn't created twice when it did land.
+    lose["n"] = 1
+    r = client.post("/api/events", json={"title": "Dentist", "person_ids": [p["Alex"]], "start": "2026-10-14T09:00",
+                                         "end": "2026-10-14T10:00"})
+    assert r.status_code == 200, r.text
+    assert sum("SUMMARY:Dentist" in e.data for e in alex_cal.events()) == 1
+
+
+def test_skip_public_holidays_round_trips_through_caldav(client, server, dav):
+    alex_cal = dav.make_calendar(name="Alex", cal_id="alex")
+    acct = connect(client, server)
+    sync(client, acct)
+    client.patch("/api/settings", json={"pin": PIN, "holidays": {"country": "GB", "subdiv": "ENG"}})
+    r = client.post("/api/events", json={
+        "title": "School run", "person_ids": [client.people["Alex"]], "start": "2026-12-21T08:30",
+        "end": "2026-12-21T09:00", "repeat": {"freq": "weekly", "byday": ["MO", "TU", "WE", "TH", "FR"],
+                                               "skip_holidays": True}})
+    assert r.status_code == 200, r.text
+    data = alex_cal.events()[0].data
+    assert "X-MOONLIGHT-SKIP-HOLIDAYS:1" in data and "EXDATE" in data and "20261225T083000" in data
+    days = [e["start"][:10] for e in events(client, "2026-12-21", "2027-01-02") if e["title"] == "School run"]
+    assert days == ["2026-12-21", "2026-12-22", "2026-12-23", "2026-12-24", "2026-12-29", "2026-12-30", "2026-12-31"]
+    sync(client, acct)  # read back from the server: still a simple, editable repeat
+    ev = by_title(events(client, "2026-12-21", "2026-12-22"), "School run")[0]
+    assert ev["custom_repeat"] is False and ev["repeat"]["skip_holidays"] is True

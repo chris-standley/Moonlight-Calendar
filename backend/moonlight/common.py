@@ -104,6 +104,14 @@ def as_datetime(value: Any, key: str) -> str:
         raise bad(f"{key} must be an ISO datetime (YYYY-MM-DDTHH:MM)")
 
 
+# Screen styles: a big wall screen, a small touch screen, a phone. "hallway" and "kitchen" are their old names.
+LAYOUTS = ("large", "compact", "phone")
+
+
+def layout_name(value: Any, key: str = "layout") -> str:
+    return choice(db.OLD_LAYOUTS.get(value, value) if isinstance(value, str) else value, key, LAYOUTS)
+
+
 def choice(value: Any, key: str, options: tuple[str, ...]) -> str:
     if value not in options:
         raise bad(f"{key} must be one of: {', '.join(options)}")

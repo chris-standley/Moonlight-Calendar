@@ -136,7 +136,7 @@ def test_now_playing_mapping(client, fake):
     assert r["position_updated_at"] == "2026-10-10T09:00:00+00:00"
     assert r["volume"] == 0.35 and r["muted"] is False and r["shuffle"] is False and r["repeat"] == "off"
     assert r["music_assistant"] is True and r["app"] == "music_assistant" and r["source"] == "Music Assistant Queue"
-    assert r["has_art"] and r["art_url"].startswith("/api/media/art?layout=kitchen&v=")
+    assert r["has_art"] and r["art_url"].startswith("/api/media/art?layout=compact&v=")
     assert r["supports"] == {"play_pause": True, "previous": True, "next": True, "volume": True, "mute": True,
                              "shuffle": True, "repeat": True, "seek": True}
     assert r["reachable"] and r["error"] is None and r["server_time"]
@@ -305,12 +305,12 @@ def test_players_list(client):
 
 def test_settings_per_layout(client, fake):
     s = client.get("/api/settings").json()
-    assert s["media_players"] == {"hallway": "", "kitchen": KITCHEN, "phone": ""}
+    assert s["media_players"] == {"large": "", "compact": KITCHEN, "phone": ""}
     r = client.patch("/api/settings", json={"pin": PIN, "media_players": {"hallway": LOUNGE}})
-    assert r.status_code == 200 and r.json()["media_players"]["hallway"] == LOUNGE
+    assert r.status_code == 200 and r.json()["media_players"]["large"] == LOUNGE
     assert client.get("/api/media/now-playing?layout=hallway").json()["entity"] == LOUNGE
     r = client.patch("/api/settings", json={"pin": PIN, "media_players": {"kitchen": ""}})
-    assert r.json()["media_players"]["kitchen"] == ""
+    assert r.json()["media_players"]["compact"] == ""
     assert client.get("/api/media/now-playing?layout=kitchen").json()["configured"] is False
     for bad in ({"kitchen": "light.kitchen"}, {"attic": KITCHEN}, "media_player.x", {"kitchen": 3}):
         assert client.patch("/api/settings", json={"pin": PIN, "media_players": bad}).status_code == 400
@@ -494,3 +494,23 @@ def test_state_copy_is_not_shared(fake):
     b = copy.deepcopy(a)
     b["attributes"]["volume_level"] = 0.9
     assert svc._store(KITCHEN, b) is True
+
+
+def test_a_paired_screen_uses_its_own_speaker(tmp_path, fake, monkeypatch):
+    monkeypatch.setenv("MOONLIGHT_MEDIA_ENTITY", KITCHEN)
+    media.reset()
+    media.set_service(make_service(fake))
+    app = create_app(db_path=str(tmp_path / "t.db"), demo=False, auth_enabled=True)
+    ha = TestClient(app, client=("172.30.32.2", 1), headers={"X-Ingress-Path": "/x"})
+    ha.patch("/api/settings", json={"pin": PIN})
+    screen = TestClient(app, client=("192.168.1.9", 1))
+    start = screen.post("/api/pair/start", json={"layout": "compact"}).json()
+    d = ha.post("/api/displays/approve", json={"code": start["code"], "pin": PIN}).json()
+    screen.headers["Authorization"] = "Bearer " + screen.get(f"/api/pair/{start['pair_id']}").json()["token"]
+    assert screen.get("/api/media/now-playing?layout=compact").json()["entity"] == KITCHEN
+    ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {"speaker": LOUNGE}})
+    assert screen.get("/api/media/now-playing?layout=compact").json()["entity"] == LOUNGE
+    assert ha.get("/api/media/now-playing?layout=compact").json()["entity"] == KITCHEN  # the style's
+    ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {"speaker": ""}})
+    assert screen.get("/api/media/now-playing?layout=compact").json()["configured"] is False
+    media.reset()

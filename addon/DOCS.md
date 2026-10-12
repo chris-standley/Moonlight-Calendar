@@ -14,10 +14,6 @@ New versions show up as an update on the app page.
 
 - `demo` (default `true`): seed the demo family (people, events, chores, lists, meals) into an **empty** database
   on first start. Turn it off before the first start for a blank household; it does nothing once data exists.
-- `weather_entity` (optional, e.g. `weather.home`): show that Home Assistant weather entity and its daily forecast.
-  Empty = a built-in demo forecast.
-- `media_player_entity` (optional, e.g. `media_player.kitchen`): the speaker the kitchen screen shows and controls
-  (see Music below). Other screens can be given one in Moonlight's Settings > Music.
 - `require_pairing` (default `true`): wall screens on port 8091 must be paired before they can use Moonlight.
   Moonlight in the Home Assistant sidebar is always signed in.
 - `ssl` (default `false`), `certfile` (default `fullchain.pem`), `keyfile` (default `privkey.pem`): serve Moonlight
@@ -28,13 +24,24 @@ New versions show up as an update on the app page.
   Assistant". Empty = the external URL set in Home Assistant (Settings > System > Network).
 
 The household timezone defaults to Home Assistant's (Settings > System > General) and can be changed in
-Moonlight's Settings.
+Moonlight's Settings. The weather comes from a Home Assistant weather entity you pick in Moonlight
+(Settings > Display > Weather, which lists them with their current conditions); until then it shows a demo forecast.
 
 ## Wall screens
 
-On the screen's browser open `http://<ha-host>:8091/display/hallway` (or `kitchen`, `phone`). It shows a 6-digit
-code: in Moonlight (sidebar or phone) go to Settings > Screens > Pair a new screen and enter the code and the PIN.
-The screen remembers its pairing; revoke it in the same place.
+Every screen opens the same address: `http://<ha-host>:8091/display`. It shows a 6-digit code: in Moonlight (sidebar
+or phone) go to Settings > Screens > Pair a new screen, enter the code and the PIN, and give the screen a name. The
+screen remembers its pairing. Tap it in Settings > Screens to rename it, pick its style (Large for a big wall screen,
+Compact for a small touch screen, Phone) and choose what it shows: the sections in its menu, the one it opens on, its
+speaker and when the photo screensaver starts. Remove it there too.
+
+Below the screens, "In the Home Assistant app" sets the same choices per style for Moonlight opened from Home
+Assistant's sidebar or phone app. Paired screens follow those until they're given choices of their own.
+
+For Home Assistant automations and entities, install the Moonlight integration through HACS (custom repository
+`https://github.com/chris-standley/Moonlight-Calendar`, type Integration) and restart Home Assistant. The add-on
+announces itself, so Moonlight appears under Settings > Devices & services as discovered: select Configure. No pairing
+code is needed.
 
 ## Access from the internet
 
@@ -64,7 +71,7 @@ Signing in away from home:
   two-factor authentication, if you use it); afterwards the device appears in Settings > Screens as "<name>'s phone"
   and can be revoked there. Any Home Assistant user can sign in, so only give Home Assistant accounts to people who
   may use Moonlight.
-- **A pairing code** works too: open `https://moonlight.example.com/display/phone` and approve the code from the Home
+- **A pairing code** works too: open `https://moonlight.example.com/display` and approve the code from the Home
   Assistant app (Moonlight in the sidebar > Settings > Screens).
 
 Wall screens at home can stay on `http://<ha-host>:8091`. If they should use the https name instead, the router has
@@ -72,7 +79,7 @@ to send that name back into the house (most do; otherwise add a local DNS record
 
 ## Music
 
-The kitchen screen can show what's playing on a speaker (album art, title, progress, play/pause, skip, volume) and
+A screen can show what's playing on a speaker (album art, title, progress, play/pause, skip, volume) and
 put the album art on the screensaver. Moonlight drives the speaker through Home Assistant, so anything that is a
 `media_player` entity works; for Sonos the recommended route is Music Assistant:
 
@@ -84,9 +91,8 @@ put the album art on the screensaver. Moonlight drives the speaker through Home 
    automatically; otherwise Add integration > Music Assistant. It creates a `media_player` entity for each Music
    Assistant player (e.g. `media_player.kitchen`). Use that entity rather than the one from Home Assistant's own Sonos
    integration: it knows Music Assistant's queue, and Moonlight can then offer your Music Assistant favourites.
-3. Pick it: set the add-on option `media_player_entity`, or in Moonlight go to Settings > Music and choose a speaker
-   for the kitchen (Music Assistant players are marked). The hallway and phones can get one too; they show a small
-   player in the top bar.
+3. Pick it: in Moonlight go to Settings > Screens, tap the screen and choose its speaker (Music Assistant players are
+   marked). Compact screens show a card on Today; large screens and phones show a small player in the top bar.
 
 Moonlight follows the speaker over Home Assistant's WebSocket API, so changes made in the Sonos or Music Assistant
 apps appear straight away; while Home Assistant restarts it falls back to checking every few seconds. Album art is
@@ -101,16 +107,26 @@ belongs to. Moonlight syncs every 2 minutes and writes changes made on the scree
 Settings > Calendars > Add calendar link shows a read-only published calendar (an ICS / webcal link), such
 as a work calendar, school term dates or bin days, refreshed every 15 minutes. For an Outlook / Microsoft 365
 work calendar: Outlook on the web > Settings > Calendar > Shared calendars > Publish a calendar, choose
-"Can view when I'm busy" and copy the ICS link; its events show as "busy" blocks. Some workplaces block
+"Can view when I'm busy" and copy the ICS link; its busy time shows as a thin bar down the side of the Day view and one line per day in Week and Schedule (first start, last finish and the free gaps). Some workplaces block
 publishing. Treat the link like a password.
+
+Settings > Calendars > Home Assistant shows one of Home Assistant's own calendars (bin collections, Workday,
+energy saving sessions), read-only and refreshed every 15 minutes. Pick everyone as its people for household
+things like bin day. To turn calendar events or appliances into chores (bins out the night before, empty the
+dishwasher when it finishes), use the Moonlight integration's `moonlight.add_chore` action in an automation.
+
+Repeating events and chores can repeat on chosen days (tap the days under Weekly or Chosen days) and can skip
+public holidays. Pick the country and region in Settings > Display > Public holidays (England's bank holidays
+until you choose, when Home Assistant's timezone is Europe/London). Skipped dates are written to iCloud too, so
+the event is also missing on those days on phones.
 
 ## Photo screensaver
 
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter
-Immich's address (e.g. `http://homeassistant.local:2283`) and an API key made in Immich (Account Settings > API Keys;
+Immich's address (e.g. `http://192.168.1.10:2283`, using your server's IP address: `.local` names often don't work from inside an add-on, and a reverse-proxy address only works if that proxy can reach Immich) and an API key made in Immich (Account Settings > API Keys;
 permissions `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on this day"), test the connection and
 choose albums. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
-painted landscapes.
+painted landscapes. If Immich is itself a Home Assistant add-on, check its port (2283) is filled in under the add-on's Network settings; Immich opened only through the Home Assistant sidebar can't be reached by Moonlight. If Immich uses HTTPS, start the address with `https://`; when its certificate is self-signed or made for a domain name rather than the IP address, turn on Skip certificate check.
 
 ## Data
 

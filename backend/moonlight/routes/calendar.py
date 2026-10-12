@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, media, security
+from .. import caldav_sync, db, ha_client, media, public_holidays, security, seed
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
 )
 from ..recurrence import expand_event, normalize_repeat
+from . import displays as displays_routes
 from . import immich as immich_routes
 
 router = APIRouter(prefix="/api")
@@ -26,6 +28,9 @@ def settings_out(c) -> dict:
     out = {k: db.get_setting(c, k, v) for k, v in db.default_settings().items()}
     out["pin_set"] = bool(db.get_setting(c, "pin_hash"))
     out["media_players"] = media.players_setting(c)
+    out["holidays"] = public_holidays.region(c)
+    saved_wx = db.get_setting(c, "weather_entity", None)
+    out["weather_entity"] = ha_client.env_entity() if saved_wx is None else saved_wx
     return out
 
 
@@ -35,12 +40,39 @@ def get_settings():
         return settings_out(c)
 
 
+@router.get("/holidays")
+def get_holidays(start: str, end: str, country: str | None = None, subdiv: str = ""):
+    """Public holidays start..end inclusive, in the household's region or the `country`/`subdiv` given (to preview one
+    in Settings before saving it)."""
+    try:
+        lo, hi = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise bad("start and end must be dates like 2026-12-01")
+    if hi < lo or (hi - lo).days > 800:
+        raise bad("end must be after start, at most two years later")
+    if country is not None:
+        r = public_holidays.validate({"country": country, "subdiv": subdiv})
+    else:
+        with db.connect() as c:
+            r = public_holidays.region(c)
+    return public_holidays.between(r, lo, hi)
+
+
+@router.get("/holidays/countries")
+def holiday_countries():
+    """Countries (and their regions) with known public holidays, for Settings."""
+    return public_holidays.countries()
+
+
 @router.patch("/settings")
 async def patch_settings(body: dict = Body(...)):
     body = body_dict(body)
     pin = body.get("pin")
     if pin is None or str(pin) == "":
         raise bad("pin is required")
+    new_pin = body.get("new_pin")
+    if new_pin not in (None, "") and not re.fullmatch(r"\d{4}", str(new_pin)):
+        raise bad("new_pin must be 4 digits")
     with db.connect() as c:
         if db.get_setting(c, "pin_hash"):
             require_pin(c, pin)
@@ -58,6 +90,15 @@ async def patch_settings(body: dict = Body(...)):
             db.set_setting(c, "chore_approval", body["chore_approval"])
         immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes
         media_changed = media.apply_settings(c, body)  # media_players
+        displays_routes.apply_settings(c, body)  # screens
+        if "weather_entity" in body:
+            wx = "" if body["weather_entity"] is None else body["weather_entity"]
+            if not isinstance(wx, str) or (wx.strip() and not ha_client.ENTITY_RE.match(wx.strip())):
+                raise bad("weather_entity must be a weather entity id like weather.home, or empty for demo weather")
+            db.set_setting(c, "weather_entity", wx.strip())
+        holidays_changed = "holidays" in body and public_holidays.validate(body["holidays"]) != public_holidays.region(c)
+        if "holidays" in body:
+            db.set_setting(c, public_holidays.KEY, public_holidays.validate(body["holidays"]))
         tz_changed = False
         if "timezone" in body:
             try:
@@ -66,17 +107,46 @@ async def patch_settings(body: dict = Body(...)):
                 raise bad("timezone must be an IANA zone name like Europe/London")
             tz_changed = db.get_setting(c, "timezone", db.default_timezone()) != body["timezone"]
             db.set_setting(c, "timezone", str(body["timezone"]))
-        if body.get("new_pin") not in (None, ""):
-            db.set_pin(c, str(body["new_pin"]))
+        if new_pin not in (None, ""):
+            db.set_pin(c, str(new_pin))
         out = settings_out(c)
     if tz_changed:
         await asyncio.to_thread(caldav_sync.reparse_all)
         await hub.broadcast("events")
+    if holidays_changed:
+        await hub.broadcast("events", "chores")
     if media_changed:
         media.settings_changed()
         await hub.broadcast("media")
     await hub.broadcast("settings")
     return out
+
+
+def _sample_data() -> dict:
+    path = os.environ.get("MOONLIGHT_SEED") or seed.default_seed_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except OSError:
+        return {}
+
+
+@router.get("/sample-data")
+def sample_data():
+    """How much of the demo family (seeded on first start) is still here, for Settings > Sample data."""
+    with db.connect() as c:
+        return {"remaining": seed.count_sample(c, _sample_data())}
+
+
+@router.post("/sample-data/remove")
+async def remove_sample_data(body: dict = Body(...)):
+    body = body_dict(body)
+    with db.connect() as c:
+        require_pin(c, body.get("pin"))
+        removed = seed.remove_sample(c, _sample_data())
+    for topic in ("people", "events", "chores", "points", "rewards", "lists", "meals", "recipes"):
+        await hub.broadcast(topic)
+    return {"removed": removed}
 
 
 @router.post("/pin/verify")
@@ -210,7 +280,13 @@ EVENT_SELECT = ("SELECT e.*, cal.person_ids AS cal_person_ids, cal.color AS cal_
                 "LEFT JOIN accounts a ON a.id = cal.account_id")
 
 
-def event_out(r: dict) -> dict:
+def known_people(c) -> set[str]:
+    return {r["id"] for r in db.rows(c, "SELECT id FROM people")}
+
+
+def event_out(r: dict, known: set[str] | None = None) -> dict:
+    """`known` (the people who still exist) drops stale ids, e.g. from a synced event's X-MOONLIGHT-PEOPLE or a
+    calendar mapping written before someone was removed."""
     out = {
         "id": r["id"], "title": r["title"], "person_ids": json.loads(r["person_ids"]),
         "start": r["start"], "end": r["end"], "all_day": bool(r["all_day"]),
@@ -222,8 +298,12 @@ def event_out(r: dict) -> dict:
         # Only on calendars shown as free/busy blocks: busy | tentative | away | elsewhere | free.
         "busy": (r.get("busy") or "busy") if r.get("cal_busy_blocks") else None,
     }
+    if known is not None:
+        out["person_ids"] = [p for p in out["person_ids"] if p in known]
     if out["calendar_id"] and not out["person_ids"]:
         out["person_ids"] = json.loads(r.get("cal_person_ids") or "[]")
+        if known is not None:
+            out["person_ids"] = [p for p in out["person_ids"] if p in known]
     return out
 
 
@@ -244,10 +324,8 @@ def _apply_event_fields(c, ev: dict, body: dict, creating: bool) -> dict:
         ids = body.get("person_ids") or []
         if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
             raise bad("person_ids must be a list of ids")
-        for i in ids:
-            if not person_exists(c, i):
-                raise bad(f"Unknown person {i}")
-        ev["person_ids"] = list(dict.fromkeys(ids))
+        # Ids of people who were removed (a screen showing an older copy of the event) are dropped, not refused.
+        ev["person_ids"] = [i for i in dict.fromkeys(ids) if person_exists(c, i)]
     if "all_day" in body or creating:
         ev["all_day"] = bool(body.get("all_day", False))
     if creating or "start" in body:
@@ -308,12 +386,14 @@ def list_events(start: str, end: str):
             'OR e.custom_repeat = 1 OR (e.start < ? AND (e."end" > ? OR e.start >= ?)))',
             (re_s, rs_s, rs_s),
         )
+        known = known_people(c)
+        is_holiday = public_holidays.checker(c)
     out = []
     for r in candidates:
         if r.get("custom_repeat") and r.get("raw_ics"):
-            out.extend(caldav_sync.expand_custom(event_out(r), r["raw_ics"], f"{r['id']}:{r['etag']}", rs, re_))
+            out.extend(caldav_sync.expand_custom(event_out(r, known), r["raw_ics"], f"{r['id']}:{r['etag']}", rs, re_))
         else:
-            out.extend(expand_event(event_out(r), rs, re_))
+            out.extend(expand_event(event_out(r, known), rs, re_, is_holiday))
     out = [o for o in out if o.get("busy") != "free"]  # free time on a busy-blocks calendar isn't shown
     out.sort(key=lambda o: (o["start"], not o["all_day"], o["end"], o["title"]))
     return out
@@ -323,9 +403,10 @@ def list_events(start: str, end: str):
 def get_event(event_id: str):
     with db.connect() as c:
         r = _load_event(c, event_id)
+        known = known_people(c)
     if not r:
         raise not_found("Event not found")
-    return event_out(r)
+    return event_out(r, known)
 
 
 @router.post("/events")
@@ -346,7 +427,7 @@ async def create_event(body: dict = Body(...)):
             await hub.broadcast("accounts")
             raise _sync_error(e)
     with db.connect() as c:
-        out = event_out(_load_event(c, ev["id"]))
+        out = event_out(_load_event(c, ev["id"]), known_people(c))
     await hub.broadcast("events")
     return out
 
@@ -358,7 +439,7 @@ async def update_event(event_id: str, body: dict = Body(...)):
         r = _load_event(c, event_id)
         if not r:
             raise not_found("Event not found")
-        ev = _apply_event_fields(c, event_out(r), body, creating=False)
+        ev = _apply_event_fields(c, event_out(r, known_people(c)), body, creating=False)
         try:
             target = caldav_sync.target_calendar(c, body, ev["person_ids"], current=r["calendar_id"])
         except ValueError as e:
@@ -375,7 +456,7 @@ async def update_event(event_id: str, body: dict = Body(...)):
             with db.connect() as c:
                 _save_event(c, ev, insert=False)
     with db.connect() as c:
-        out = event_out(_load_event(c, event_id))
+        out = event_out(_load_event(c, event_id), known_people(c))
     await hub.broadcast("events")
     return out
 

@@ -323,6 +323,15 @@ def resolve_chore(chores: list[dict], person_id: str, ref: str) -> dict:
     return next((c for c in matches if not c.get("completed")), matches[0])
 
 
+def open_once_chore(chores: list[dict], person_id: str, title: str) -> dict | None:
+    """An unfinished one-off chore with this title (emoji and case ignored) for the person, from
+    GET /api/chores?date=. moonlight.add_chore reuses it, so an automation that fires twice adds one chore."""
+    t = _norm(_strip_emoji(title))
+    return next((c for c in chores if c.get("person_id") == person_id and not c.get("completed")
+                 and (c.get("schedule") or {}).get("type") == "once"
+                 and _norm(_strip_emoji(c.get("title", ""))) == t), None)
+
+
 def resolve_list(lists: list[dict] | tuple[TodoList, ...], ref: str) -> Any:
     """Find a list by id or name; emoji and case are ignored ("groceries" matches "🛒 Groceries")."""
     get = (lambda x, k: x[k]) if lists and isinstance(lists[0], dict) else getattr

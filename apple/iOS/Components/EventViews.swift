@@ -121,6 +121,19 @@ struct EventDetailSheet: View {
     }
 }
 
+extension EventEditor {
+    /// The repeat to save. Keeps what the app can't edit (interval, weekdays, end date) while the frequency is unchanged.
+    fileprivate func repeatBody() -> [String: Any] {
+        var out: [String: Any] = ["freq": freq, "interval": 1, "skip_holidays": skipHolidays]
+        if let r = event?.`repeat`, r.freq == freq {
+            out["interval"] = r.interval
+            if let byday = r.byday { out["byday"] = byday }
+            if let until = r.until { out["until"] = until }
+        }
+        return out
+    }
+}
+
 func repeatText(_ r: Repeat?) -> String {
     guard let r else { return "Repeats" }
     let unit = ["daily": "day", "weekly": "week", "monthly": "month"][r.freq] ?? r.freq
@@ -143,6 +156,7 @@ struct EventEditor: View {
     @State private var location = ""
     @State private var notes = ""
     @State private var freq = "none"
+    @State private var skipHolidays = false
     @State private var saving = false
     @State private var error: String?
     @State private var loaded = false
@@ -183,6 +197,9 @@ struct EventEditor: View {
                         Text("Every month").tag("monthly")
                     }
                     .disabled(event?.custom_repeat == true)
+                    if freq != "none" && event?.custom_repeat != true {
+                        Toggle("Skip public holidays", isOn: $skipHolidays)
+                    }
                 }
                 Section {
                     TextField("Location", text: $location)
@@ -221,6 +238,7 @@ struct EventEditor: View {
             location = e.location ?? ""
             notes = e.notes ?? ""
             freq = e.`repeat`?.freq ?? "none"
+            skipHolidays = e.`repeat`?.skip_holidays == true
         } else {
             let base = day ?? d.today
             let now = d.calendar.dateComponents([.hour], from: Date()).hour ?? 9
@@ -250,7 +268,7 @@ struct EventEditor: View {
             body["end"] = d.isoDT(max(end, start))
         }
         if event?.custom_repeat != true {
-            body["repeat"] = freq == "none" ? NSNull() as Any : ["freq": freq, "interval": 1] as [String: Any] as Any
+            body["repeat"] = freq == "none" ? NSNull() as Any : repeatBody() as Any
         }
         do {
             try await api.saveEvent(id: event?.id, body)

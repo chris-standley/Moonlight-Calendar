@@ -1,4 +1,4 @@
-import { Api, ApiError, NowPlaying, ScreensaverPhotos, Topic } from "./types";
+import { Api, ApiError, Display, NowPlaying, ScreensaverPhotos, Topic } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -18,7 +18,9 @@ export function httpApi(base = ""): Api {
     if (res.status === 401) notifyUnpaired(); // revoked or never paired: back to the pairing screen
     if (!res.ok) {
       let msg = res.statusText;
-      try { msg = (await res.json()).detail ?? msg; } catch { /* not json */ }
+      try { msg = (await res.json()).detail ?? msg; } catch { /* not json, e.g. a proxy's error page */ }
+      // Never an empty toast: proxies (Home Assistant ingress) often send no status text.
+      if (!String(msg ?? "").trim()) msg = res.status >= 500 ? `Moonlight didn't answer properly (error ${res.status}). Try again in a moment.` : `Request failed (error ${res.status})`;
       throw new ApiError(res.status, String(msg));
     }
     return res.json() as Promise<T>;
@@ -68,6 +70,7 @@ export function httpApi(base = ""): Api {
     allChores: () => get("/api/chores/all"),
     chores: (date) => get("/api/chores" + q({ date })),
     createChore: (c) => req("POST", "/api/chores", c),
+    updateChore: (id, patch) => req("PATCH", `/api/chores/${id}`, patch),
     deleteChore: async (id) => { await req("DELETE", `/api/chores/${id}`); },
     completeChore: async (id, date) => (await req<{ balance: number }>("POST", `/api/chores/${id}/complete`, { date })).balance,
     uncompleteChore: async (id, date) => (await req<{ balance: number }>("DELETE", `/api/chores/${id}/complete` + q({ date }))).balance,
@@ -77,9 +80,13 @@ export function httpApi(base = ""): Api {
       (await req<{ balance: number }>("POST", "/api/points/adjust", { person_id, change, reason, pin })).balance,
     rewards: () => get("/api/rewards"),
     createReward: (r) => req("POST", "/api/rewards", r),
+    updateReward: (id, patch) => req("PATCH", `/api/rewards/${id}`, patch),
+    deleteReward: async (id) => { await req("DELETE", `/api/rewards/${id}`); },
     redeem: async (rid, person_id, pin) => (await req<{ balance: number }>("POST", `/api/rewards/${rid}/redeem`, { person_id, pin })).balance,
     lists: () => get("/api/lists"),
     createList: (l) => req("POST", "/api/lists", l),
+    updateList: (id, patch) => req("PATCH", `/api/lists/${id}`, patch),
+    deleteList: async (id) => { await req("DELETE", `/api/lists/${id}`); },
     items: (lid) => get(`/api/lists/${lid}/items`),
     addItem: (lid, title, person_id = null, due = null) => req("POST", `/api/lists/${lid}/items`, { title, person_id, due }),
     updateItem: (id, patch) => req("PATCH", `/api/items/${id}`, patch),
@@ -90,11 +97,21 @@ export function httpApi(base = ""): Api {
     updateMeal: (id, m) => req("PATCH", `/api/meals/${id}`, m),
     deleteMeal: async (id) => { await req("DELETE", `/api/meals/${id}`); },
     recipes: () => get("/api/recipes"),
+    createRecipe: (r) => req("POST", "/api/recipes", r),
+    sampleData: () => get("/api/sample-data"),
+    removeSampleData: async (pin) => (await req<{ removed: number }>("POST", "/api/sample-data/remove", { pin })).removed,
+    updateRecipe: (id, patch) => req("PATCH", `/api/recipes/${id}`, patch),
+    deleteRecipe: async (id) => { await req("DELETE", `/api/recipes/${id}`); },
     recipeToList: async (rid, list_id) => (await req<{ added: number }>("POST", `/api/recipes/${rid}/to-list`, { list_id })).added,
     weather: () => get("/api/weather"),
+    weatherEntities: () => get("/api/weather/entities"),
+    holidays: (start, end, r) => get(`/api/holidays?start=${start}&end=${end}${r ? `&country=${encodeURIComponent(r.country)}&subdiv=${encodeURIComponent(r.subdiv)}` : ""}`),
+    holidayCountries: () => get("/api/holidays/countries"),
     displays: () => get("/api/displays"),
     approveDisplay: (code, name, layout, pin) => req("POST", "/api/displays/approve", { code, name, layout, pin }),
     revokeDisplay: async (id, pin) => { await req("DELETE", `/api/displays/${id}`, { pin }); },
+    updateDisplay: (id, patch) => req("PATCH", `/api/displays/${id}`, patch),
+    thisScreen: async () => (await get<{ display: Display | null }>("/api/auth/status")).display,
     immich: () => get("/api/immich"),
     saveImmich: (c) => req("PUT", "/api/immich", c),
     disconnectImmich: async (pin) => { await req("DELETE", "/api/immich", { pin }); },
@@ -111,6 +128,8 @@ export function httpApi(base = ""): Api {
     syncAccount: (id) => req("POST", `/api/accounts/${id}/sync`),
     previewFeed: (url) => req("POST", "/api/accounts/feed-preview", { url }),
     addFeed: (f) => req("POST", "/api/accounts", { kind: "ics", ...f }),
+    haCalendars: () => get("/api/ha/calendars"),
+    addHaCalendar: (f) => req("POST", "/api/accounts", { kind: "ha", ...f }),
     updateFeed: (id, patch) => req("PATCH", `/api/accounts/${id}`, patch),
     calendars: () => get("/api/calendars"),
     updateCalendar: (id, patch) => req("PATCH", `/api/calendars/${id}`, patch),

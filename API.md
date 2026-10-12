@@ -5,25 +5,45 @@ Ids are strings. Every mutation broadcasts `{"type":"changed","topic":<topic>}` 
 (topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`, `media`).
 `media` is also sent whenever the configured speaker changes in Home Assistant (see Music).
 Errors: `{"detail": "..."}` with 400 (bad input / not enough points), 401 (screen not paired, see Screens),
-403 (wrong PIN), 404, 502 (a connected service such as iCloud or Immich can't be reached).
+403 (wrong PIN), 404, 502 (a connected service such as iCloud or Immich can't be reached), and 500 for anything
+unexpected (still `{"detail"}`: "Something went wrong (…). The add-on log has the details.").
 
 The frontend has two interchangeable clients: HTTP (talks to this API) and Demo (in-browser
 implementation of the same contract, used for the published preview). Keep them in step.
 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
-  screensaver_seconds: int, idle_minutes: {hallway, kitchen, phone},
-  media_players: {hallway, kitchen, phone}}`
-  `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per layout, 0 = never
-  (default `{hallway: 5, kitchen: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
+  screensaver_seconds: int, idle_minutes: {large, compact, phone},
+  media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv}}`
+  Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
+  `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
+  screen uses until it has its own setup (see Screens).
+  `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per style, 0 = never
+  (default `{large: 5, compact: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
-  `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each layout shows; the kitchen defaults to
-  the add-on option `media_player_entity`, the others to none.
+  `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
+  `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
+  `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
+  chores, rewards, meals, lists` (Settings is always shown), and the one it opens on (default large
+  `{start: "calendar", sections: all but today}`, compact and phone `{start: "today", sections: all}`).
+  `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
+  until one is saved).
+  `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
+  code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
+  (otherwise none). Dates come from the `holidays` package (see Public holidays).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, media_players`, plus `pin` (required) -> settings. `media_players` may be partial
-  (`{hallway: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{kitchen: 10}`,
-  merged) or one number (applies to hallway and kitchen).
+  screensaver_seconds, idle_minutes, media_players, screens, weather_entity, holidays`, plus `pin` (required) -> settings.
+  An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
+  `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
+  must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
+  (`{large: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{compact: 10}`,
+  merged) or one number (applies to large and compact). `new_pin` (4 digits) replaces the parent PIN; with no PIN set
+  yet, the first `pin` sent becomes it.
 - `POST /api/pin/verify` `{pin}` -> `{ok: bool}`
+- `GET /api/sample-data` -> `{remaining: int}`: rows of the demo family (seeded on first start) still present.
+- `POST /api/sample-data/remove` `{pin}` -> `{removed: int}`: deletes the demo family's people, events, chores, stars,
+  rewards, list items, recipes and meals; keeps anything added since (a demo list the family added items to stays)
+  and leaves settings alone.
 
 ## People
 - `GET /api/people` -> `[Person]` sorted by `sort`
@@ -44,7 +64,9 @@ implementation of the same contract, used for the published preview). Keep them 
   Occurrence = Event fields + `{occurrence_id: "<id>@<YYYY-MM-DD>", recurring: bool}` with `start`/`end`
   shifted to that occurrence.
   Event = `{id, title, person_ids: [id], start, end, all_day, location, notes, repeat}`
-  `repeat` = null | `{freq: "daily"|"weekly"|"monthly", interval: int>=1, byday: ["MO",..] (weekly only, optional), until: date|null}`
+  `repeat` = null | `{freq: "daily"|"weekly"|"monthly", interval: int>=1, byday: ["MO",..] (weekly only, optional), until: date|null,
+  skip_holidays?: bool}`. `skip_holidays` leaves out occurrences on public holidays (Settings `holidays`); synced to
+  iCloud/CalDAV as EXDATEs for the next 3 years plus an `X-MOONLIGHT-SKIP-HOLIDAYS` marker, so other apps skip them too.
   All-day events: `start` = `YYYY-MM-DDT00:00`, `end` = next day `T00:00` (exclusive), may span days.
   An occurrence is included if it overlaps [start, end).
 - `POST /api/events` Event without id -> Event
@@ -65,8 +87,9 @@ account whose login is rejected gets `status: "auth_failed"` and is not retried 
 
 Account = `{id, kind: "icloud"|"caldav"|"ics", label, username, server_url, status: "ok"|"auth_failed"|"error",
 last_error: str|null, last_sync: datetime|null, calendar_count}`. The password is never returned.
-Calendar = `{id, account_id, name, color, person_ids: [id], visible: bool, read_only: bool,
+Calendar = `{id, account_id, name, source_name, color, person_ids: [id], visible: bool, read_only: bool,
 busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks: see Calendar links).
+`name` is the household's own name for it when one was set, else `source_name` (the server's name).
 - `GET /api/accounts` -> `[Account]`
 - `POST /api/accounts` `{kind, username, password, server_url (caldav only), label?, pin}` -> Account.
   Logs in and discovers event calendars first: 400 if the login is rejected, 502 if the server can't be
@@ -77,8 +100,9 @@ busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks:
 - `DELETE /api/accounts/{id}` `{pin}` -> `{ok: true}`. Forgets the account and its cached events (nothing
   is deleted in iCloud).
 - `POST /api/accounts/{id}/sync` -> Account (after syncing now; check `status`).
-- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{person_ids?, visible?, color?,
-  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic).
+- `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{name?, person_ids?, visible?, color?,
+  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic; `name` "" or `null` = the server's name
+  again). The name survives syncs.
   Hidden calendars keep syncing but their events are left out of `GET /api/events`.
 - `GET /api/sync/status` -> `{running, interval_seconds, needs_reconnect: bool,
   accounts: [{id, label, kind, status, last_sync, last_error}]}`
@@ -124,15 +148,29 @@ dropped.
   placeholder; `busy_blocks` = the household's choice (`busy_blocks_set`) or the automatic value. On such
   calendars events carry `busy` and screens show "Alex – busy" blocks; free ones are not returned.
 
+## Home Assistant calendars (read-only)
+An account of `kind: "ha"` is one read-only calendar from a Home Assistant calendar entity (bin collections,
+Workday, energy saving sessions). `username` and `server_url` are the entity id. Events come from HA's
+`GET /api/calendars/{entity}` (already expanded into occurrences) over the same connection as the weather
+(Supervisor token in the add-on, or `MOONLIGHT_HA_URL` + `MOONLIGHT_HA_TOKEN`), are stored like a calendar
+link's (same window, only changed events rewritten, `source: "ha"`) and polled every `MOONLIGHT_FEED_SECONDS`.
+Errors set `status: "error"` and keep the cached events.
+- `GET /api/ha/calendars` -> `[{entity_id, name, added: bool}]`, sorted by name. Moonlight's own entities
+  (`calendar.moonlight_*`) are left out. 409 when Moonlight isn't connected to Home Assistant, 502 when HA errors.
+- `POST /api/accounts` `{kind: "ha", entity_id, label?, person_ids?, color?, pin}` -> Account. `label` defaults
+  to the entity's name. 400 not a `calendar.` entity, unknown to HA, or already added; 403 wrong PIN.
+- `PATCH /api/accounts/{id}` `{pin, label}` renames it (and its calendar); `DELETE` and `/sync` work as for links.
+
 ## Chores
 Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon"|"evening"|"anytime", schedule, sort}`
-`schedule` = `{type: "daily"}` | `{type: "weekly", days: ["MO",..]}` | `{type: "once", date}`
+`schedule` = `{type: "daily"}` | `{type: "weekly", days: ["MO",..]}` | `{type: "once", date}`; daily and weekly may add
+`skip_holidays: true` (not due on public holidays, which also don't break a streak).
 - `GET /api/chores/all` -> `[Chore]`
 - `GET /api/chores?date=YYYY-MM-DD` -> `[ChoreDay]`: chores due that date,
   ChoreDay = Chore + `{date, completed: bool, completed_at: str|null, streak: int}`.
   `streak` = number of consecutive due dates, walking back from `date` (counting `date` only if completed;
   if `date` is not completed, start at the previous due date), that were completed. Look back max 60 days.
-- `POST /api/chores` / `PATCH /api/chores/{id}` / `DELETE /api/chores/{id}`
+- `POST /api/chores` / `PATCH /api/chores/{id}` (any of title, emoji, person_id, points, time_of_day, schedule, sort) / `DELETE /api/chores/{id}` (also drops its completions)
 - `POST /api/chores/{id}/complete` `{date}` -> `{completed: true, balance}`; idempotent; adds ledger `+points`
   with reason `"<emoji> <title>"`.
 - `DELETE /api/chores/{id}/complete?date=` -> `{completed: false, balance}`; adds ledger `-points`, reason `"Undo: <title>"`.
@@ -142,14 +180,16 @@ Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon
 - `GET /api/points/{person_id}/ledger` -> `[{id, person_id, change, reason, at}]` newest first, max 100
 - `POST /api/points/adjust` `{person_id, change, reason, pin}` -> `{balance}`
 Reward = `{id, title, emoji, cost, person_id: id|null (null = any child)}`
-- `GET /api/rewards`; `POST /api/rewards`; `DELETE /api/rewards/{id}`
+- `GET /api/rewards`; `POST /api/rewards`; `PATCH /api/rewards/{id}` (any of title, emoji, cost, person_id);
+  `DELETE /api/rewards/{id}`
 - `POST /api/rewards/{id}/redeem` `{person_id, pin}` -> `{balance}`; 403 bad PIN, 400 if balance < cost;
   ledger `-cost`, reason `"<emoji> <title>"`.
 
 ## Lists
 List = `{id, name, emoji, color, kind: "grocery"|"todo", sort, open_count, done_count}`
 Item = `{id, list_id, title, done, person_id|null, due: date|null, created_at, sort}`
-- `GET /api/lists`; `POST /api/lists` `{name, emoji, color, kind}`; `DELETE /api/lists/{id}`
+- `GET /api/lists`; `POST /api/lists` `{name, emoji, color, kind}`; `PATCH /api/lists/{id}` (any of name, emoji,
+  color, kind, sort) -> List; `DELETE /api/lists/{id}` (and its items)
 - `GET /api/lists/{id}/items` -> open items first (by sort), then done items (by done time desc)
 - `POST /api/lists/{id}/items` `{title, person_id?, due?}` -> Item
 - `PATCH /api/items/{id}` `{title?, done?, person_id?, due?}`; `DELETE /api/items/{id}`
@@ -159,24 +199,35 @@ Item = `{id, list_id, title, done, person_id|null, due: date|null, created_at, s
 Meal = `{id, date, slot: "breakfast"|"lunch"|"dinner"|"snack", title, notes, recipe_id|null}`
 - `GET /api/meals?start&end` (end exclusive); `POST /api/meals`; `PATCH /api/meals/{id}`; `DELETE /api/meals/{id}`
 Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
-- `GET /api/recipes`; `POST /api/recipes`
+- `GET /api/recipes`; `POST /api/recipes` `{title, emoji?, minutes?, ingredients?, url?}` -> Recipe
+- `PATCH /api/recipes/{id}` (any of those fields) -> Recipe; `DELETE /api/recipes/{id}` -> `{ok: true}`. Meals planned
+  from a deleted recipe keep their title and get `recipe_id: null`.
 - `POST /api/recipes/{id}/to-list` `{list_id}` -> `{added: int}` adds each ingredient as an item
 
 ## Weather
-- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`
+- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`
   up to 10 days from today. Temperatures are whole numbers in the settings' `temp_unit`.
   `condition` uses HA's names: `sunny, partlycloudy, cloudy, rainy, pouring, snowy, fog, windy, lightning-rainy, clear-night`
   (HA's `snowy-rainy`/`hail` -> `snowy`, `windy-variant` -> `windy`, `exceptional` -> `cloudy`).
-  With the add-on option `weather_entity` (env `MOONLIGHT_WEATHER_ENTITY`) set, read from that HA weather entity
+  With Settings `weather_entity` set (or env `MOONLIGHT_WEATHER_ENTITY` before one is saved), read from that HA weather entity
   (state + `weather.get_forecasts` daily) via the Supervisor API, cached 10 minutes; if HA can't be reached the
   last good forecast is kept for up to an hour, then it falls back to the deterministic demo forecast (`source: "demo"`).
+- `GET /api/weather/entities` -> `[{entity_id, name, available, condition|null, temperature|null, unit: "C"|"F",
+  attribution|null}]`, HA's `weather.*` entities (available first, then by name) for Settings > Weather.
+  409 when Moonlight has no Home Assistant connection, 502 when HA can't be reached.
+
+## Public holidays
+- `GET /api/holidays?start=YYYY-MM-DD&end=YYYY-MM-DD[&country=GB&subdiv=SCT]` (end inclusive, at most ~2 years) ->
+  `[{date, name}]` sorted by date, for Settings `holidays` or the `country`/`subdiv` given (a preview before saving).
+- `GET /api/holidays/countries` -> `[{code, name, subdivs: [{code, name}]}]` sorted by name, for the Settings picker.
 
 ## Music (now playing on a Home Assistant speaker)
 The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a
-Sonos speaker). Screens only name their `layout` (`hallway|kitchen|phone`, default `kitchen`); the backend maps it to
-the entity in `settings.media_players`, so a screen can't read or control any other entity. Without Home Assistant
+Sonos speaker). Screens only name their `layout` (`large|compact|phone`, default `compact`); the backend maps it to
+the paired screen's own speaker (its setup), else the style's entity in `settings.media_players`, so a screen can't
+read or control any other entity. Without Home Assistant
 (`SUPERVISOR_TOKEN`, or `MOONLIGHT_HA_URL` + `MOONLIGHT_HA_TOKEN`) the commands return 409.
-- `GET /api/media/now-playing?layout=kitchen` -> NowPlaying:
+- `GET /api/media/now-playing?layout=compact` -> NowPlaying:
   `{layout, configured: bool, entity: str|null, name, state, show: bool, title, artist, album, duration, position,
   position_updated_at, volume: 0..1|null, muted: bool|null, shuffle: bool|null, repeat: "off"|"all"|"one"|null,
   source, app, music_assistant: bool, has_art: bool, art_url: str|null, supports: {play_pause, previous, next, volume,
@@ -187,7 +238,7 @@ the entity in `settings.media_players`, so a screen can't read or control any ot
   `supports` comes from the entity's `supported_features`. `music_assistant` = the entity has Music Assistant's
   `mass_player_type` attribute (or `app_id: music_assistant`). If HA is unreachable the last state is kept for 90 s,
   then `state: "unavailable", reachable: false`.
-- `GET /api/media/art?layout=kitchen&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
+- `GET /api/media/art?layout=compact&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
   `entity_picture_local`/`entity_picture` (a `/api/media_player_proxy/...` path, with its own HA token, or a public
   URL fetched without any token) and caches the last 12 images. `v` is a hash of the picture URL; only the layout's
   current (or recently cached) picture is served, and no HA token ever reaches the screen. Cache-Control: immutable.
@@ -197,7 +248,7 @@ the entity in `settings.media_players`, so a screen can't read or control any ot
   `repeat_set` (`off|all|one`). 400 bad action/value, 409 no speaker for that layout, 502 HA unreachable or refused.
 - `GET /api/media/players` -> `[{entity_id, name, state, music_assistant}]` every `media_player` in HA (Music
   Assistant ones first), for the Settings picker. 502 if HA can't be reached.
-- `GET /api/media/favourites?layout=kitchen` -> `[{uri, name, media_type}]` Music Assistant favourite playlists (10)
+- `GET /api/media/favourites?layout=compact` -> `[{uri, name, media_type}]` Music Assistant favourite playlists (10)
   and radio stations (6), via `music_assistant.get_library` (favorite: true) on the first loaded Music Assistant
   config entry; cached 15 minutes. Empty for non-Music Assistant players or on any error.
 - `POST /api/media/play` `{layout, uri}` -> NowPlaying. Plays one of those favourites with
@@ -240,29 +291,44 @@ Otherwise `/api/*` returns 401 `{"detail": "This screen is not paired", "pairing
 open without auth: `/api/health`, `/api/auth/status`, `/api/pair/*`. HTML and assets are always served so the pairing
 screen loads. A 401 makes the frontend show the pairing screen (so revoking kicks a screen back to pairing).
 
-Display = `{id, name, layout: "hallway"|"kitchen"|"phone"|"service", created_at, last_seen|null, revoked, current: bool}`
-(`current` = the screen making the request; `last_seen` updated at most once a minute).
+Every screen opens the same address, `/display`, and is told apart by the token it got when it was paired (a browser
+can't read a MAC address). Each paired screen has a name, a style and its own setup.
+
+Display = `{id, name, layout: "large"|"compact"|"phone"|"service", created_at, last_seen|null, revoked, current: bool,
+setup?: {start, sections, speaker, idle_minutes}, own_setup?: bool}`
+(`current` = the screen making the request; `last_seen` updated at most once a minute). Screens only: `setup` is what it
+shows, its own choices over its style's (Settings `screens`, `media_players`, `idle_minutes`); `own_setup` says whether
+it has choices of its own. The frontend takes the style from `GET /api/auth/status` and switches when it changes.
 - `GET /api/auth/status` -> `{required: bool, authorised: bool, via: "ingress"|"display"|"open"|null, display: Display|null}`
-- `POST /api/pair/start` `{layout, name?}` -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
+- `POST /api/pair/start` `{layout, name?}` (`layout` = the style the screen guesses from its size) -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
   `layout: "service"` is for a non-screen client (the Home Assistant integration sends `{layout: "service", name: "Home Assistant"}`);
   `name` is a suggestion used if the approver leaves the name blank.
 - `GET /api/pair/{pair_id}` -> `{status: "pending", expires_in}` | `{status: "expired"}` |
   `{status: "approved", token, display}` (once only; also sets the cookie). The screen stores the token in localStorage and reloads.
 - `POST /api/displays/approve` `{code, name?, layout?, pin}` (authorised session) -> Display. 404 if no screen waits with that code.
-  `layout` defaults to what the screen asked for; `name` to the suggested name, else "<Layout> screen". A `service`
+  `layout` defaults to what the screen asked for; `name` to the suggested name, else "Large screen" and so on. A `service`
   pairing always stays `service` (the approver's `layout` is ignored), and a screen can't be approved as `service`.
 - `GET /api/displays` -> `[Display]` (not revoked)
+- `PATCH /api/displays/{id}` `{pin, name?, layout?, setup?}` -> Display. `setup` = `{start?, sections?, speaker?,
+  idle_minutes?}` merged into the screen's own setup (`speaker` a `media_player.*` id or `""` for none; hiding the start
+  section moves it to the first one left), or `null` to follow its style again. A `service` has no style or setup.
 - `DELETE /api/displays/{id}` `{pin}` -> `{ok: true}`; that token stops working on its next request.
+
+Home Assistant discovery: inside the add-on (`SUPERVISOR_TOKEN` set, `discovery: [moonlight]` in config.yaml) Moonlight
+POSTs `{service: "moonlight", config: {host, port: 8091, token}}` to the Supervisor's `/discovery` on start (retrying
+while HA starts). `host` is the add-on's hostname (`/addons/self/info`), `token` a `service` display named "Home
+Assistant", kept in the settings table (never returned) and reused while it isn't revoked; after a revoke the next start
+makes a new one. HA then offers the Moonlight integration under Devices & services. `MOONLIGHT_HA_DISCOVERY=0` turns it off.
 Tokens are 256-bit random strings, stored as SHA-256 hashes.
 
 Sign in with Home Assistant (open, no auth; needs Home Assistant's address: `MOONLIGHT_HA_LOGIN_URL`, else HA's
 external URL via the Supervisor):
-- `GET /api/auth/ha/start?layout=phone|kitchen|hallway&name=&app=0|1` -> 302 to `<ha>/auth/authorize` with
+- `GET /api/auth/ha/start?layout=phone|compact|large&name=&app=0|1` -> 302 to `<ha>/auth/authorize` with
   `client_id=<origin>/`, `redirect_uri=<origin>/api/auth/ha/callback` (origin = `MOONLIGHT_EXTERNAL_URL` when the
   request came in on its host, else the request's own). 404 without an HA address.
 - `GET /api/auth/ha/callback?state&code` -> swaps the code at `<ha>/auth/token` (inside the add-on
   `http://homeassistant:8123` first), reads `auth/current_user` over HA's WebSocket, revokes the HA token, and creates a
-  Display named "<user>'s <name or layout>". Browser: 302 to `/display/<layout>` with the cookie. `app=1`: 302 to
+  Display named "<user>'s <name or layout>". Browser: 302 to `/display` with the cookie. `app=1`: 302 to
   `moonlight://signed-in?token=<token>&server=<origin>`. A bad or used state, a refused code or a cancelled login: an
   HTML page with status 400.
 
@@ -275,15 +341,17 @@ fields, falling back to the v3.2+ `filter` form if a server rejects them), `GET 
 and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already applied), all with the `x-api-key` header.
 The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
 
-ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool,
+ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool, skip_cert_check: bool,
 status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error", last_error|null, last_refresh|null, photo_count, version|null}`.
 The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 - `GET /api/immich` -> ImmichConfig
-- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?}` -> ImmichConfig. `api_key` may be left out
+- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out
   once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
-  `server_url` is the Immich address (`http://homeassistant.local:2283`; a trailing `/api` is dropped).
+  `server_url` is the Immich address (`http://192.168.1.10:2283`; a trailing `/api` is dropped). `skip_cert_check` (default
+  false) uses HTTPS without checking the certificate, for a self-signed one or one made for a domain name. The 502 detail
+  says what to try (IP instead of a `.local` name, http vs https, certificate, proxy answering 502, redirect, 404).
 - `DELETE /api/immich` `{pin}` -> `{ok: true}` (forgets address, key and choice; nothing changes in Immich)
-- `POST /api/immich/test` `{pin, server_url?, api_key?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
+- `POST /api/immich/test` `{pin, server_url?, api_key?, skip_cert_check?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
   `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.
 - `GET /api/immich/albums` -> `[ImmichAlbum]` live from Immich with the saved key (404 not connected, 400/502 as above)
 - `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, url}]}`.
@@ -298,4 +366,5 @@ The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 Changes broadcast the `photos` topic.
 
 ## Display
-- `GET /display/{hallway|kitchen|phone}` and every non-`/api` path serve the SPA `index.html`.
+- `GET /display` and every non-`/api` path serve the SPA `index.html`. Older `/display/hallway`, `/display/kitchen` and
+  `/display/phone` addresses keep working; a paired screen's style comes from the server either way.

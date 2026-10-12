@@ -1,6 +1,7 @@
 """FastAPI app: JSON API under /api, WebSocket at /api/ws, SPA everywhere else."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import date
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, media, security
+from . import __version__, auth, caldav_sync, db, ha_discovery, media, security
 from . import immich as immich_source
 from .common import hub, log
 from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals
@@ -85,6 +86,13 @@ def create_app(
             msgs.append(f"{loc}: {e.get('msg')}" if loc else str(e.get("msg")))
         return JSONResponse({"detail": "; ".join(msgs) or "Invalid request"}, status_code=400)
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request, exc: Exception):
+        # A JSON detail, so screens show a message instead of an empty toast (the traceback goes to the log).
+        log.error("Unexpected error", exc_info=exc)
+        return JSONResponse({"detail": f"Something went wrong ({exc.__class__.__name__}). The add-on log has the "
+                                       "details."}, status_code=500)
+
     for module in (calendar, chores, lists, meals, displays, ha_login, immich, accounts):
         app.include_router(module.router)
     app.include_router(summary_routes.router)
@@ -104,6 +112,19 @@ def create_app(
 
     app.router.on_startup.append(start_media)
     app.router.on_shutdown.append(stop_media)
+
+    # Inside the add-on: offer the Moonlight integration in Home Assistant (Devices & services > Discovered).
+    async def start_discovery():
+        if ha_discovery.enabled():
+            app.state.discovery = asyncio.get_running_loop().create_task(ha_discovery.announce())
+
+    async def stop_discovery():
+        task = getattr(app.state, "discovery", None)
+        if task:
+            task.cancel()
+
+    app.router.on_startup.append(start_discovery)
+    app.router.on_shutdown.append(stop_discovery)
 
     if sync:
         async def start_sync():

@@ -11,7 +11,7 @@ repeat = None | {freq: daily|weekly|monthly, interval: int>=1, byday: [MO..SU] (
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import Iterator
+from typing import Callable, Iterator
 
 WEEKDAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 FREQS = ("daily", "weekly", "monthly")
@@ -43,6 +43,10 @@ def normalize_repeat(rep: dict | None) -> dict | None:
     if until is not None:
         date.fromisoformat(until)  # raises ValueError
     out: dict = {"freq": freq, "interval": interval, "until": until}
+    if rep.get("skip_holidays"):
+        if not isinstance(rep["skip_holidays"], bool):
+            raise ValueError("repeat.skip_holidays must be true or false")
+        out["skip_holidays"] = True
     byday = rep.get("byday")
     if freq == "weekly" and byday:
         if not isinstance(byday, list) or any(d not in WEEKDAYS for d in byday):
@@ -91,8 +95,10 @@ def occurrence_dates(start: date, rep: dict, lo: date, hi: date) -> Iterator[dat
             m += 1
 
 
-def expand_event(ev: dict, range_start: datetime, range_end: datetime) -> list[dict]:
-    """Occurrences of `ev` overlapping [range_start, range_end)."""
+def expand_event(ev: dict, range_start: datetime, range_end: datetime,
+                 is_holiday: Callable[[date], bool] | None = None) -> list[dict]:
+    """Occurrences of `ev` overlapping [range_start, range_end). A series with `skip_holidays` leaves out the
+    days `is_holiday` names."""
     start = parse_dt(ev["start"])
     end = parse_dt(ev["end"])
     duration = end - start
@@ -119,7 +125,10 @@ def expand_event(ev: dict, range_start: datetime, range_end: datetime) -> list[d
     lo = range_start.date() - timedelta(days=duration.days + 1)
     hi = range_end.date()
     out = []
+    skip = is_holiday if (is_holiday and rep.get("skip_holidays")) else None
     for d in occurrence_dates(start.date(), rep, lo, hi):
+        if skip and skip(d):
+            continue
         s = datetime.combine(d, start.time())
         if overlaps(s, s + duration):
             out.append(make(s, True))
@@ -128,7 +137,9 @@ def expand_event(ev: dict, range_start: datetime, range_end: datetime) -> list[d
 
 # ---------------------------------------------------------------- chores
 
-def chore_due(schedule: dict, day: date) -> bool:
+def chore_due(schedule: dict, day: date, is_holiday: Callable[[date], bool] | None = None) -> bool:
+    if schedule.get("skip_holidays") and is_holiday and is_holiday(day):
+        return False
     t = schedule.get("type")
     if t == "daily":
         return True
@@ -143,13 +154,17 @@ def normalize_schedule(sch: dict) -> dict:
     if not isinstance(sch, dict):
         raise ValueError("schedule must be an object")
     t = sch.get("type")
+    skip = sch.get("skip_holidays", False)
+    if not isinstance(skip, bool):
+        raise ValueError("schedule.skip_holidays must be true or false")
+    extra = {"skip_holidays": True} if skip and t in ("daily", "weekly") else {}
     if t == "daily":
-        return {"type": "daily"}
+        return {"type": "daily", **extra}
     if t == "weekly":
         days = sch.get("days") or []
         if not isinstance(days, list) or not days or any(d not in WEEKDAYS for d in days):
             raise ValueError("schedule.days must be a non-empty list of MO..SU")
-        return {"type": "weekly", "days": sorted(set(days), key=WEEKDAYS.index)}
+        return {"type": "weekly", "days": sorted(set(days), key=WEEKDAYS.index), **extra}
     if t == "once":
         d = sch.get("date")
         if not isinstance(d, str):
@@ -159,7 +174,8 @@ def normalize_schedule(sch: dict) -> dict:
     raise ValueError("schedule.type must be daily, weekly or once")
 
 
-def streak(schedule: dict, day: date, completed: set[str], lookback: int = 60) -> int:
+def streak(schedule: dict, day: date, completed: set[str], lookback: int = 60,
+           is_holiday: Callable[[date], bool] | None = None) -> int:
     """Consecutive completed due dates walking back from `day`.
 
     `day` counts only if completed; if it isn't, start from the previous due date.
@@ -168,7 +184,7 @@ def streak(schedule: dict, day: date, completed: set[str], lookback: int = 60) -
     count = 0
     for i in range(lookback + 1):
         d = day - timedelta(days=i)
-        if not chore_due(schedule, d):
+        if not chore_due(schedule, d, is_holiday):
             continue
         if d.isoformat() in completed:
             count += 1

@@ -31,6 +31,10 @@
       "reauth_confirm": {
         "title": "Pair Home Assistant with Moonlight again",
         "description": "Moonlight at `{host}` no longer accepts Home Assistant (pairing was turned on, or Home Assistant was revoked under Settings > Screens). Select **Submit** to get a new pairing code."
+      },
+      "hassio_confirm": {
+        "title": "Moonlight add-on",
+        "description": "Connect Home Assistant to the {addon} add-on? No pairing code is needed: the add-on made a connection for Home Assistant, listed in Moonlight under Settings > Screens > Connections."
       }
     },
     "error": {
@@ -40,13 +44,16 @@
       "not_paired": "That code hasn't been entered in Moonlight yet. Enter it under Settings > Screens > Pair a new screen, then select Submit again.",
       "pair_expired": "The code expired; here is a new one.",
       "pair_busy": "Too many screens are waiting to pair with Moonlight. Try again in a few minutes.",
-      "pair_failed": "Moonlight couldn't start pairing. Make sure the add-on is up to date."
+      "pair_failed": "Moonlight couldn't start pairing. Make sure the add-on is up to date.",
+      "discovery_rejected": "Moonlight didn't accept the add-on's connection (it may have been removed in Moonlight). Restart the Moonlight add-on to get a new one, or add the integration by hand."
     },
     "abort": {
       "already_configured": "This Moonlight is already set up.",
       "reconfigure_successful": "Moonlight was reconfigured.",
-      "reauth_successful": "Home Assistant is paired with Moonlight again."
-    }
+      "reauth_successful": "Home Assistant is paired with Moonlight again.",
+      "not_moonlight": "The Moonlight add-on sent incomplete connection details."
+    },
+    "flow_title": "{name}"
   },
   "entity": {
     "binary_sensor": {
@@ -94,6 +101,40 @@
     }
   },
   "services": {
+    "add_chore": {
+      "name": "Add chore",
+      "description": "Adds a one-off chore for a day in Moonlight (for example from an automation when the dishwasher finishes). If the same chore is already waiting for that person on that day, nothing is added.",
+      "fields": {
+        "person": {
+          "name": "Person",
+          "description": "Who does it: a name or person id, or several."
+        },
+        "title": {
+          "name": "Chore",
+          "description": "What to do."
+        },
+        "emoji": {
+          "name": "Emoji",
+          "description": "Optional icon for the chore."
+        },
+        "points": {
+          "name": "Stars",
+          "description": "Stars earned for doing it."
+        },
+        "time_of_day": {
+          "name": "Time of day",
+          "description": "Which part of the day it shows under."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Which day (default today)."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    },
     "complete_chore": {
       "name": "Complete chore",
       "description": "Ticks off a chore in Moonlight and awards its stars.",

@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS immich (
     album_ids    TEXT NOT NULL DEFAULT '[]',
     favorites    INTEGER NOT NULL DEFAULT 0,
     memories     INTEGER NOT NULL DEFAULT 0,
+    skip_cert_check INTEGER NOT NULL DEFAULT 0,  -- HTTPS without checking the certificate (self-signed, by IP)
     updated_at   TEXT NOT NULL
 );
 """
@@ -167,6 +168,7 @@ EVENT_SOURCE_COLUMNS = {
 CALENDAR_EXTRA_COLUMNS = {
     "busy_auto": "INTEGER NOT NULL DEFAULT 0",  # every summary looks like a free/busy placeholder
     "busy_blocks": "INTEGER",                   # household's choice; NULL = follow busy_auto
+    "display_name": "TEXT",                     # household's name for it; NULL = the source's name
 }
 
 DEFAULT_SETTINGS = {
@@ -176,7 +178,14 @@ DEFAULT_SETTINGS = {
     "chore_approval": False,
     # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
-    "idle_minutes": {"hallway": 5, "kitchen": 3, "phone": 0},
+    "idle_minutes": {"large": 5, "compact": 3, "phone": 0},
+    # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
+    # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
+    "screens": {
+        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]},
+        "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
+        "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
+    },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
 }
 
@@ -243,6 +252,26 @@ def init_db() -> None:
             if col not in have:
                 c.execute(f"ALTER TABLE calendars ADD COLUMN {col} {decl}")
         c.execute("CREATE INDEX IF NOT EXISTS events_calendar ON events(calendar_id)")
+        have = {r[1] for r in c.execute("PRAGMA table_info(displays)")}
+        if "setup" not in have:
+            c.execute("ALTER TABLE displays ADD COLUMN setup TEXT")  # JSON, see routes/displays.py
+        have = {r[1] for r in c.execute("PRAGMA table_info(immich)")}
+        if "skip_cert_check" not in have:
+            c.execute("ALTER TABLE immich ADD COLUMN skip_cert_check INTEGER NOT NULL DEFAULT 0")
+        _rename_layouts(c)
+
+
+# Screen styles were named after rooms until 0.3.8.
+OLD_LAYOUTS = {"hallway": "large", "kitchen": "compact"}
+
+
+def _rename_layouts(c: sqlite3.Connection) -> None:
+    for old, new in OLD_LAYOUTS.items():
+        c.execute("UPDATE displays SET layout = ? WHERE layout = ?", (new, old))
+    for key in ("screens", "idle_minutes", "media_players"):
+        val = get_setting(c, key)
+        if isinstance(val, dict) and any(k in val for k in OLD_LAYOUTS):
+            set_setting(c, key, {OLD_LAYOUTS.get(k, k): v for k, v in val.items()})
 
 
 def is_empty() -> bool:

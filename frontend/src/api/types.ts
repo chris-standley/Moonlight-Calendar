@@ -11,14 +11,31 @@ export interface Settings {
   chore_approval: boolean;
   /** Photo screensaver: seconds per photo, idle minutes per screen (0 = never). Photos come from Immich. */
   screensaver_seconds?: number;
-  idle_minutes?: Partial<Record<"hallway" | "kitchen" | "phone", number>>;
+  idle_minutes?: Partial<Record<Layout, number>>;
   timezone?: string;
   /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
-  media_players?: Partial<Record<"hallway" | "kitchen" | "phone", string>>;
+  media_players?: Partial<Record<Layout, string>>;
+  /** Home Assistant weather entity the screens show; "" = built-in demo forecast. */
+  weather_entity?: string;
+  /** Per kind of screen: the sections its menu shows (Settings always) and the one it opens on. */
+  screens?: Partial<Record<Layout, ScreenSetup>>;
+  /** Public holidays that repeats can skip: ISO country code and optional region ("" = whole country). */
+  holidays?: HolidayRegion;
 }
+export interface HolidayRegion { country: string; subdiv: string }
+export interface Holiday { date: string; name: string }
+export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
+export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists";
+export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "lists"];
+export interface ScreenSetup { start: Section; sections: Section[] }
+export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
+  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "lists"] },
+  compact: { start: "today", sections: [...SECTIONS] },
+  phone: { start: "today", sections: [...SECTIONS] },
+};
 
 export type Freq = "daily" | "weekly" | "monthly";
-export interface Repeat { freq: Freq; interval: number; byday?: string[]; until?: string | null }
+export interface Repeat { freq: Freq; interval: number; byday?: string[]; until?: string | null; skip_holidays?: boolean }
 
 export interface EventIn {
   title: string;
@@ -47,7 +64,10 @@ export type BusyStatus = "busy" | "tentative" | "away" | "elsewhere" | "free";
 export interface Occurrence extends CalEvent { occurrence_id: string; recurring: boolean }
 
 export type TimeOfDay = "morning" | "afternoon" | "evening" | "anytime";
-export type ChoreSchedule = { type: "daily" } | { type: "weekly"; days: string[] } | { type: "once"; date: string };
+export type ChoreSchedule =
+  | { type: "daily"; skip_holidays?: boolean }
+  | { type: "weekly"; days: string[]; skip_holidays?: boolean }
+  | { type: "once"; date: string };
 export interface Chore {
   id: string; title: string; emoji: string; person_id: string; points: number;
   time_of_day: TimeOfDay; schedule: ChoreSchedule; sort: number;
@@ -63,30 +83,49 @@ export interface Item { id: string; list_id: string; title: string; done: boolea
 
 export type Slot = "breakfast" | "lunch" | "dinner" | "snack";
 export interface Meal { id: string; date: string; slot: Slot; title: string; notes: string; recipe_id: string | null }
-export interface Recipe { id: string; title: string; emoji: string; minutes: number; ingredients: string[]; url: string | null }
+export interface Recipe { id: string; title: string; emoji: string; minutes: number | null; ingredients: string[]; url: string | null }
+export type RecipeIn = Omit<Recipe, "id">;
 
+export interface WeatherEntity {
+  entity_id: string; name: string; available: boolean;
+  condition: string | null; temperature: number | null; unit: "C" | "F"; attribution: string | null;
+}
 export interface Weather {
-  /** "homeassistant" when read from the add-on's weather_entity, else the built-in demo forecast. */
+  /** "homeassistant" when read from the chosen weather entity (Settings > Weather), else the built-in demo forecast. */
   source?: "homeassistant" | "demo";
   entity?: string | null;
+  /** The entity's friendly name, when from Home Assistant. */
+  name?: string;
   unit?: "C" | "F";
   current: { temp: number; condition: string };
   daily: { date: string; high: number; low: number; condition: string }[];
 }
 
-export type Layout = "hallway" | "kitchen" | "phone";
+/** Screen style: a big wall screen, a small touch screen, a phone. */
+export type Layout = "large" | "compact" | "phone";
 /** "service" = a non-screen client such as the Home Assistant integration. */
-export interface Display { id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean }
+export interface Display {
+  id: string; name: string; layout: Layout | "service"; created_at: string; last_seen: string | null; revoked: boolean; current: boolean;
+  /** Screens only: what it shows (its own choices, else its style's) and whether it has choices of its own. */
+  setup?: DisplaySetup; own_setup?: boolean;
+}
+/** A paired screen's setup: menu sections, the one it opens on, its speaker ("" = none), screensaver delay (0 = never). */
+export interface DisplaySetup { start: Section; sections: Section[]; speaker: string; idle_minutes: number }
+export interface DisplayPatch { pin: string; name?: string; layout?: Layout; setup?: Partial<DisplaySetup> | null }
+export const DEFAULT_IDLE: Record<Layout, number> = { large: 5, compact: 3, phone: 0 };
+export const STYLE_LABEL: Record<Layout, string> = { large: "Large", compact: "Compact", phone: "Phone" };
 
 // Photo screensaver source: the family's Immich server. Moonlight keeps the API key (write-only) and proxies previews.
 export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
 export interface ImmichConfig {
   configured: boolean; server_url: string; key_set: boolean; album_ids: string[]; favorites: boolean; memories: boolean;
+  /** HTTPS without checking the certificate (self-signed, or one made for a domain name while Moonlight uses the IP). */
+  skip_cert_check: boolean;
   status: ImmichStatus; last_error: string | null; last_refresh: string | null; photo_count: number; version: string | null;
 }
 export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean }
 /** PUT /api/immich: `api_key` may be left out once one is saved. */
-export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; pin: string }
+export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
 export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
 /** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
 export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; url: string }
@@ -121,10 +160,11 @@ export type MediaAction = "play_pause" | "play" | "pause" | "next" | "previous" 
 export interface MediaPlayerOption { entity_id: string; name: string; state: string; music_assistant: boolean }
 export interface MediaFavourite { uri: string; name: string; media_type: string }
 
-// Calendar sync (iCloud / CalDAV / published calendar links). Passwords and link URLs are write-only.
-export type AccountKind = "icloud" | "caldav" | "ics";
+// Calendar sync (iCloud / CalDAV / published calendar links / Home Assistant calendars). Passwords and link URLs are write-only.
+export type AccountKind = "icloud" | "caldav" | "ics" | "ha";
 export type AccountStatus = "ok" | "auth_failed" | "error";
-/** For kind "ics" `server_url` is a masked form of the link (host/…/calendar.ics) and `username` is "". */
+/** For kind "ics" `server_url` is a masked form of the link (host/…/calendar.ics) and `username` is "".
+ *  For kind "ha" both are the Home Assistant entity id (calendar.bins). */
 export interface Account {
   id: string; kind: AccountKind; label: string; username: string; server_url: string;
   status: AccountStatus; last_error: string | null; last_sync: string | null; calendar_count: number;
@@ -132,11 +172,16 @@ export interface Account {
 export interface AccountIn { kind: AccountKind; username: string; password: string; server_url?: string; label?: string; pin: string }
 export interface SyncCalendar {
   id: string; account_id: string; name: string; color: string; person_ids: string[]; visible: boolean; read_only: boolean;
+  /** The server's own name; `name` is the household's name for it when one was set. */
+  source_name?: string;
   /** Shown as "Chris – busy" blocks: the household's choice, else automatic (every summary is Busy/Free/...). */
   busy_blocks?: boolean; busy_blocks_auto?: boolean; busy_blocks_set?: boolean;
 }
 /** A published ICS link (webcal:// or https://); read-only, polled every 15 minutes. */
 export interface FeedIn { url: string; label?: string; person_ids: string[]; color?: string; pin: string }
+/** A Home Assistant calendar entity (bin days, Workday, energy sessions); read-only, polled every 15 minutes. */
+export interface HaCalendar { entity_id: string; name: string; added: boolean }
+export interface HaCalendarIn { entity_id: string; label?: string; person_ids: string[]; color?: string; pin: string }
 export interface FeedPreview { event_count: number; name: string; busy_only: boolean; masked_url: string }
 
 /** Default calendar for a new event (mirrors the server): the first person's own visible, writable calendar before shared ones. */
@@ -155,7 +200,8 @@ export interface Api {
   mode: "live" | "demo";
   subscribe(fn: (topic: Topic) => void): () => void;
   settings(): Promise<Settings>;
-  updateSettings(patch: Partial<Settings> & { pin: string }): Promise<Settings>;
+  /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
+  updateSettings(patch: Partial<Omit<Settings, "screens">> & { screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
   verifyPin(pin: string): Promise<boolean>;
   people(): Promise<Person[]>;
   createPerson(p: PersonIn): Promise<Person>;
@@ -169,6 +215,7 @@ export interface Api {
   allChores(): Promise<Chore[]>;
   chores(date: string): Promise<ChoreDay[]>;
   createChore(c: Omit<Chore, "id" | "sort">): Promise<Chore>;
+  updateChore(id: string, patch: Partial<Omit<Chore, "id">>): Promise<Chore>;
   deleteChore(id: string): Promise<void>;
   completeChore(id: string, date: string): Promise<number>;
   uncompleteChore(id: string, date: string): Promise<number>;
@@ -177,9 +224,14 @@ export interface Api {
   adjustPoints(personId: string, change: number, reason: string, pin: string): Promise<number>;
   rewards(): Promise<Reward[]>;
   createReward(r: Omit<Reward, "id">): Promise<Reward>;
+  updateReward(id: string, patch: Partial<Omit<Reward, "id">>): Promise<Reward>;
+  deleteReward(id: string): Promise<void>;
   redeem(rewardId: string, personId: string, pin: string): Promise<number>;
   lists(): Promise<TaskList[]>;
   createList(l: Pick<TaskList, "name" | "emoji" | "color" | "kind">): Promise<TaskList>;
+  updateList(id: string, patch: Partial<Pick<TaskList, "name" | "emoji" | "color" | "kind" | "sort">>): Promise<TaskList>;
+  /** Deletes the list and all its items. */
+  deleteList(id: string): Promise<void>;
   items(listId: string): Promise<Item[]>;
   addItem(listId: string, title: string, personId?: string | null, due?: string | null): Promise<Item>;
   updateItem(id: string, patch: Partial<Pick<Item, "title" | "done" | "person_id" | "due">>): Promise<Item>;
@@ -191,17 +243,34 @@ export interface Api {
   deleteMeal(id: string): Promise<void>;
   recipes(): Promise<Recipe[]>;
   recipeToList(recipeId: string, listId: string): Promise<number>;
+  createRecipe(r: RecipeIn): Promise<Recipe>;
+  /** Rows of the demo family seeded on first start that are still present (see API.md "Settings"). */
+  sampleData(): Promise<{ remaining: number }>;
+  removeSampleData(pin: string): Promise<number>;
+  updateRecipe(id: string, patch: Partial<RecipeIn>): Promise<Recipe>;
+  /** Meals planned from it keep their title and lose the link. */
+  deleteRecipe(id: string): Promise<void>;
   weather(): Promise<Weather>;
+  /** Home Assistant's weather entities with current conditions (Settings > Weather). */
+  weatherEntities(): Promise<WeatherEntity[]>;
+  /** Public holidays start..end inclusive (YYYY-MM-DD), in the household's region or the one given (a preview). */
+  holidays(start: string, end: string, region?: HolidayRegion): Promise<Holiday[]>;
+  /** Countries and their regions with known public holidays (Settings > Display). */
+  holidayCountries(): Promise<HolidayCountry[]>;
   // Wall screens (see API.md "Screens")
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;
   revokeDisplay(id: string, pin: string): Promise<void>;
+  /** Rename a screen, change its style or its setup (`setup: null` = follow its style again). */
+  updateDisplay(id: string, patch: DisplayPatch): Promise<Display>;
+  /** The paired screen this is (null in the Home Assistant app, a browser with auth off, or the demo). */
+  thisScreen(): Promise<Display | null>;
   // Photo screensaver (Immich; see API.md "Photo screensaver")
   immich(): Promise<ImmichConfig>;
   saveImmich(c: ImmichIn): Promise<ImmichConfig>;
   disconnectImmich(pin: string): Promise<void>;
   /** Without server_url/api_key the saved ones are tested. */
-  testImmich(t: { server_url?: string; api_key?: string; pin: string }): Promise<ImmichTest>;
+  testImmich(t: { server_url?: string; api_key?: string; skip_cert_check?: boolean; pin: string }): Promise<ImmichTest>;
   immichAlbums(): Promise<ImmichAlbum[]>;
   screensaverPhotos(): Promise<ScreensaverPhotos>;
   accounts(): Promise<Account[]>;
@@ -212,11 +281,14 @@ export interface Api {
   /** Test a calendar link: how many events it has (nothing is saved). */
   previewFeed(url: string): Promise<FeedPreview>;
   addFeed(f: FeedIn): Promise<Account>;
+  /** Home Assistant's calendar entities (409 when Moonlight isn't connected to Home Assistant). */
+  haCalendars(): Promise<HaCalendar[]>;
+  addHaCalendar(f: HaCalendarIn): Promise<Account>;
   /** Paste a new link (verified first) and/or rename. */
   updateFeed(id: string, patch: { url?: string; label?: string; pin: string }): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;
   /** busy_blocks: null = automatic. */
-  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null }): Promise<SyncCalendar>;
+  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null; name?: string | null }): Promise<SyncCalendar>;
   // Music (see API.md "Music"): the speaker set for a screen layout, through Home Assistant / Music Assistant.
   nowPlaying(layout: Layout): Promise<NowPlaying>;
   mediaCommand(layout: Layout, action: MediaAction, value?: number | boolean | string): Promise<NowPlaying>;

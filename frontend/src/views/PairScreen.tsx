@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Layout } from "../api/types";
+import { Layout, STYLE_LABEL } from "../api/types";
 import { haLoginUrl, health, pairPoll, pairStart, setToken } from "../api/pairing";
 import { Logo } from "../components/icons";
 
-const LABEL: Record<Layout, string> = { hallway: "Hallway screen", kitchen: "Kitchen screen", phone: "Phone" };
 
 /** Shown on an unpaired LAN screen: a 6-digit code an adult approves from Settings > Screens. */
 export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
@@ -56,7 +55,7 @@ export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
   return (
     <div className={`pair-screen layout-${layout}`}>
       <div className="pair-card">
-        <div className="pair-logo"><Logo size={layout === "hallway" ? 64 : 44} /><span>Moonlight</span></div>
+        <div className="pair-logo"><Logo size={layout === "large" ? 64 : 44} /><span>Moonlight</span></div>
         {status === "paired" ? (
           <>
             <h1>Paired as {pairedAs}</h1>
@@ -74,7 +73,7 @@ export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
             </div>
             <div className="pair-meta">
               {status === "offline" ? "Can't reach Moonlight, retrying…"
-                : pair ? <>{LABEL[layout]} · new code in {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}</>
+                : pair ? <>{STYLE_LABEL[layout]} screen · new code in {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}</>
                 : "Getting a code…"}
             </div>
             {haLogin && (

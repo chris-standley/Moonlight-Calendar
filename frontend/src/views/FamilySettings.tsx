@@ -232,7 +232,7 @@ export function FamilyPrompt({ kids, children }: { kids?: boolean; children?: Re
       </div>
       <b>{kids ? "No children yet" : "Who's in your family?"}</b>
       <p>{children ?? (kids ? "Add a child in Settings › Family to give them stars and rewards." : "Add everyone in Settings › Family to get colour-coded calendars, chore charts and rewards.")}</p>
-      <button className={"btn" + (layout === "kitchen" ? " small" : "")} onClick={() => go("settings")}>Set up family</button>
+      <button className={"btn" + (layout === "compact" ? " small" : "")} onClick={() => go("settings")}>Set up family</button>
     </div>
   );
 }

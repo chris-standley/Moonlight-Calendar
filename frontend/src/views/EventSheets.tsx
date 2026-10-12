@@ -4,7 +4,8 @@ import { addDays, dayCode, fmtFull, fmtTime } from "../dates";
 import { useApp, useData } from "../state";
 import { IconCloud } from "./CalendarsSettings";
 import { evTitle } from "./CalendarView";
-import { Avatar, PersonPicker, Segmented, Sheet } from "../components/ui";
+import { Avatar, DayPicker, HolidaySwitch, PersonPicker, Segmented, Sheet } from "../components/ui";
+import { useHolidayRegionName } from "../components/holidays";
 import { IconPin, IconRepeat, IconTrash } from "../components/icons";
 
 /** Summaries free/busy publishing uses instead of titles (same list as the backend's freebusy.py). */
@@ -43,8 +44,8 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
           <span>{occ.all_day ? "All day" : `${fmtTime(occ.start)} – ${fmtTime(occ.end)}`}</span>
         </div>
         {occ.location && <div className="detail-row"><IconPin size={20} /> {occ.location}</div>}
-        {occ.custom_repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats (custom pattern set in {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "the published calendar" : "the calendar app"})</div>}
-        {occ.repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats {REPEAT_LABEL[occ.repeat.freq].toLowerCase()}{occ.repeat.byday?.length ? ` on ${occ.repeat.byday.map((d) => d[0] + d[1].toLowerCase()).join(", ")}` : ""}</div>}
+        {occ.custom_repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats (custom pattern set in {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "the published calendar" : occ.source === "ha" ? "Home Assistant" : "the calendar app"})</div>}
+        {occ.repeat && <div className="detail-row"><IconRepeat size={20} /> Repeats {REPEAT_LABEL[occ.repeat.freq].toLowerCase()}{occ.repeat.byday?.length ? ` on ${occ.repeat.byday.map((d) => d[0] + d[1].toLowerCase()).join(", ")}` : ""}{occ.repeat.skip_holidays ? ", not on public holidays" : ""}</div>}
         <div className="detail-people">
           {who.map((p) => <span key={p!.id} className="chip" style={{ background: p!.color + "22" }}><Avatar person={p!} size={1.6} /> {p!.name}</span>)}
         </div>
@@ -53,7 +54,7 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
           : <div className="detail-row">{occ.title}</div>)}
         {occ.notes && <p className="detail-notes">{occ.notes}</p>}
         {occ.source && (
-          <div className="detail-source"><IconCloud size={18} /> {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "Calendar link" : "CalDAV"}{cal ? ` · ${cal.name}` : ""}{readOnly ? " · read-only" : ""}</div>
+          <div className="detail-source"><IconCloud size={18} /> {occ.source === "icloud" ? "iCloud" : occ.source === "ics" ? "Calendar link" : occ.source === "ha" ? "Home Assistant" : "CalDAV"}{cal ? ` · ${cal.name}` : ""}{readOnly ? " · read-only" : ""}</div>
         )}
       </div>
     </Sheet>
@@ -61,7 +62,7 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
 }
 
 export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: string; onClose: () => void }) {
-  const { api, people, toast } = useApp();
+  const { api, people, settings, toast } = useApp();
   const [cals] = useData((a) => a.calendars(), ["accounts"], []);
   const custom = !!(initial as Partial<CalEvent>).custom_repeat;
   // undefined = follow the default (first visible, writable calendar mapped to the first person).
@@ -73,6 +74,9 @@ export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: str
   const [start, setStart] = useState(initial.all_day ? "09:00" : initial.start.slice(11, 16));
   const [end, setEnd] = useState(initial.all_day ? "10:00" : initial.end.slice(11, 16));
   const [repeat, setRepeat] = useState<Freq | "none">(initial.repeat?.freq ?? "none");
+  const [days, setDays] = useState<string[]>(initial.repeat?.byday?.length ? initial.repeat.byday : [dayCode(initial.start.slice(0, 10))]);
+  const [skipHolidays, setSkipHolidays] = useState(!!initial.repeat?.skip_holidays);
+  const region = useHolidayRegionName();
   const [location, setLocation] = useState(initial.location ?? "");
   const [busy, setBusy] = useState(false);
   // Before any people exist (or if everyone on it was removed) an event can be saved for nobody.
@@ -81,19 +85,31 @@ export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: str
   const autoCal = pickCalendar(writable, who);
   const calendarId = calChoice === undefined ? autoCal : calChoice;
 
+  // A weekly repeat on just the old date's weekday follows the date to its new weekday.
+  function pickDate(d: string) {
+    if (d && days.length === 1 && days[0] === dayCode(date)) setDays([dayCode(d)]);
+    setDate(d);
+  }
+
   async function save() {
     if (!valid) return;
     setBusy(true);
+    // A weekly series starts on its first chosen day on or after the date picked.
+    let first = date;
+    if (repeat === "weekly") while (!days.includes(dayCode(first))) first = addDays(first, 1);
     const body: EventIn = {
       title: title.trim(), person_ids: who, all_day: allDay, location,
-      start: allDay ? `${date}T00:00` : `${date}T${start}`,
-      end: allDay ? `${addDays(date, 1)}T00:00` : `${date}T${end}`,
-      repeat: repeat === "none" ? null : { freq: repeat, interval: 1, byday: repeat === "weekly" ? [dayCode(date)] : undefined, until: null },
+      start: allDay ? `${first}T00:00` : `${first}T${start}`,
+      end: allDay ? `${addDays(first, 1)}T00:00` : `${first}T${end}`,
+      repeat: repeat === "none" ? null : {
+        freq: repeat, interval: 1, byday: repeat === "weekly" ? days : undefined, until: null,
+        ...(skipHolidays ? { skip_holidays: true } : {}),
+      },
     };
     if (writable.length || (cals ?? []).length) body.calendar_id = calendarId;
     const patch: Partial<EventIn> = { ...body };
     if (custom) delete patch.repeat; // keep iCloud's own rule (exceptions, moved dates...)
-    if (custom && date === initial.start.slice(0, 10) && allDay === initial.all_day && (allDay || (start === initial.start.slice(11, 16) && end === initial.end.slice(11, 16)))) {
+    if (custom && first === initial.start.slice(0, 10) && allDay === initial.all_day && (allDay || (start === initial.start.slice(11, 16) && end === initial.end.slice(11, 16)))) {
       delete patch.start; delete patch.end; // don't move the series to this occurrence
     }
     try {
@@ -118,7 +134,7 @@ export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: str
         <PersonPicker people={people} value={who} onChange={setWho} />
         {people.length === 0 && <p className="muted form-note">Add your family in Settings › Family to colour-code events by person.</p>}
         <div className="form-row">
-          <div><label className="field-label">Date</label><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div><label className="field-label">Date</label><input className="input" type="date" value={date} onChange={(e) => pickDate(e.target.value)} /></div>
           <div>
             <label className="field-label">All day</label>
             <button className={"toggle" + (allDay ? " on" : "")} onClick={() => setAllDay(!allDay)} aria-pressed={allDay}><span /></button>
@@ -134,6 +150,8 @@ export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: str
         {custom
           ? <p className="muted form-note">Custom pattern from iCloud. Change how it repeats on a phone or Mac.</p>
           : <Segmented value={repeat} onChange={setRepeat} options={(["none", "daily", "weekly", "monthly"] as const).map((v) => ({ value: v, label: REPEAT_LABEL[v] }))} />}
+        {!custom && repeat === "weekly" && <DayPicker value={days} onChange={setDays} weekStart={settings?.week_start} />}
+        {!custom && repeat !== "none" && <HolidaySwitch value={skipHolidays} onChange={setSkipHolidays} region={region} />}
         {writable.length > 0 && (<>
           <label className="field-label">Calendar</label>
           <div className="chip-row cal-chooser">

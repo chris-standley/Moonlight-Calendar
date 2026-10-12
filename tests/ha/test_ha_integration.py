@@ -71,6 +71,56 @@ def approve(port: int, code: str) -> dict:
     return http(port, "POST", "/api/displays/approve", {"code": code, "pin": PIN}, INGRESS)
 
 
+def service_token(port: int) -> str:
+    """A Home Assistant token as the add-on makes one for discovery (here: paired as a service)."""
+    start = http(port, "POST", "/api/pair/start", {"layout": "service", "name": "Home Assistant"})
+    approve(port, start["code"])
+    return http(port, "GET", f"/api/pair/{start['pair_id']}")["token"]
+
+
+async def test_discovered_from_the_add_on(hass: HomeAssistant, moonlight_server_pairing) -> None:
+    from homeassistant.helpers.service_info.hassio import HassioServiceInfo
+
+    port = moonlight_server_pairing
+    token = service_token(port)
+    info = HassioServiceInfo(config={"host": "127.0.0.1", "port": port, "token": token, "addon": "Moonlight"},
+                             name="Moonlight", slug="abc12345_moonlight", uuid="u1")
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_HASSIO},
+                                                       data=info)
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "hassio_confirm"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY and result["data"]["token"] == token
+    await hass.async_block_till_done()
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    assert entry.state is ConfigEntryState.LOADED and entry.unique_id == "addon_abc12345_moonlight"
+
+    # A new announcement (new token after the connection was removed in Moonlight) updates the entry.
+    token2 = service_token(port)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_HASSIO},
+        data=HassioServiceInfo(config={**info.config, "token": token2}, name="Moonlight", slug=info.slug, uuid="u2"))
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
+    assert entry.data["token"] == token2
+    await hass.async_block_till_done()
+    await unload(hass, entry)
+
+
+async def test_discovery_adopts_a_manual_entry(hass: HomeAssistant, moonlight_server) -> None:
+    from homeassistant.helpers.service_info.hassio import HassioServiceInfo
+
+    port = moonlight_server
+    entry = await setup(hass, port)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_HASSIO},
+        data=HassioServiceInfo(config={"host": "127.0.0.1", "port": port, "token": "mlt_x"}, name="Moonlight",
+                               slug="abc_moonlight", uuid="u1"))
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "already_configured"
+    assert entry.unique_id == "addon_abc_moonlight" and entry.data["token"] == "mlt_x"
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    await hass.async_block_till_done()
+    await unload(hass, entry)
+
+
 async def test_config_flow_pairing(hass: HomeAssistant, moonlight_server_pairing) -> None:
     port = moonlight_server_pairing
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
@@ -195,6 +245,21 @@ async def test_services(hass: HomeAssistant, moonlight_server) -> None:
     gid = next(l["id"] for l in lists if l["name"] == "Groceries")
     items = await hass.async_add_executor_job(http, moonlight_server, "GET", f"/api/lists/{gid}/items")
     assert any(i["title"] == "Bananas" for i in items)
+
+    # add_chore: a one-off chore for today; firing twice adds it once.
+    call = {"person": ["Mia", "leo"], "title": "Empty the dishwasher", "emoji": "🍽️", "points": 2,
+            "time_of_day": "evening"}
+    resp = await hass.services.async_call(DOMAIN, "add_chore", call, blocking=True, return_response=True)
+    assert resp["date"] == today and sorted(a["person"] for a in resp["added"]) == ["Leo", "Mia"]
+    resp = await hass.services.async_call(DOMAIN, "add_chore", {**call, "title": "empty the DISHWASHER"},
+                                          blocking=True, return_response=True)
+    assert resp["added"] == [] and len(resp["already_there"]) == 2
+    chores = await hass.async_add_executor_job(http, moonlight_server, "GET", f"/api/chores?date={today}")
+    new = [c for c in chores if c["title"] == "Empty the dishwasher"]
+    assert len(new) == 2 and all(c["schedule"] == {"type": "once", "date": today} and c["points"] == 2
+                                 and c["time_of_day"] == "evening" for c in new)
+    with pytest.raises(ServiceValidationError, match="No person"):
+        await hass.services.async_call(DOMAIN, "add_chore", {"person": "Nobody", "title": "x"}, blocking=True)
     await unload(hass, entry)
 
 
