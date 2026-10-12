@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Layout, STYLE_LABEL } from "../api/types";
-import { pairPoll, pairStart, setToken } from "../api/pairing";
+import { haLoginUrl, health, pairPoll, pairStart, setToken } from "../api/pairing";
 import { Logo } from "../components/icons";
 
 
@@ -11,6 +11,9 @@ export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
   const [pairedAs, setPairedAs] = useState("");
   const [now, setNow] = useState(Date.now());
   const [round, setRound] = useState(0);
+  const [haLogin, setHaLogin] = useState(false);
+
+  useEffect(() => { health(base).then((h) => setHaLogin(!!h.ha_login)).catch(() => {}); }, [base]);
 
   // Ask for a code (again when it expires or the server was unreachable).
   useEffect(() => {
@@ -62,7 +65,7 @@ export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
           <>
             <h1>Pair this screen</h1>
             <p className="pair-help">
-              On a phone or a screen that already shows Moonlight, open <b>Settings → Screens → Pair a new screen</b> and
+              On a phone or a screen that already shows Moonlight, open <b>Settings → Screens → Pair</b> and
               enter this code.
             </p>
             <div className="pair-code" aria-label={`Pairing code ${pair?.code ?? ""}`}>
@@ -73,6 +76,9 @@ export function PairScreen({ base, layout }: { base: string; layout: Layout }) {
                 : pair ? <>{STYLE_LABEL[layout]} screen · new code in {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}</>
                 : "Getting a code…"}
             </div>
+            {haLogin && (
+              <a className="btn pair-ha" href={haLoginUrl(base, layout)}>Sign in with Home Assistant</a>
+            )}
           </>
         )}
       </div>

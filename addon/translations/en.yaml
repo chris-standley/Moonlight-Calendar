@@ -7,3 +7,25 @@ configuration:
     description: >-
       Wall screens on port 8091 must be paired in Moonlight (Settings > Screens) before they can use Moonlight.
       Moonlight in the Home Assistant sidebar is always signed in.
+  ssl:
+    name: HTTPS
+    description: >-
+      Serve Moonlight over HTTPS on port 8443 with the certificate in /ssl (e.g. from the Let's Encrypt app), so it
+      can be reached from the internet. Set a host port for 8443 under Network and forward it on your router.
+      Pairing is always required there.
+  certfile:
+    name: Certificate file
+    description: The certificate in /ssl, e.g. fullchain.pem.
+  keyfile:
+    name: Private key file
+    description: The certificate's private key in /ssl, e.g. privkey.pem.
+  external_url:
+    name: Public address
+    description: >-
+      Moonlight's address from the internet, e.g. https://moonlight.example.com (or with the port, if it isn't 443).
+      The iPhone app switches to it away from home.
+  homeassistant_url:
+    name: Home Assistant address
+    description: >-
+      Home Assistant's address for "Sign in with Home Assistant", e.g. https://ha.example.com. Leave empty to use the
+      external URL set in Home Assistant (Settings > System > Network).

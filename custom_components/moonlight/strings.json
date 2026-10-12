@@ -26,7 +26,7 @@
       },
       "pair": {
         "title": "Pair Home Assistant with Moonlight",
-        "description": "This Moonlight only answers paired screens and apps. Enter this code in Moonlight: **Settings > Screens > Pair a new screen**, with your parent PIN.\n\n## {code}\n\nThen select **Submit**. The code is valid for 10 minutes; Home Assistant will appear in Moonlight's screen list as \"Home Assistant\", where you can revoke it."
+        "description": "This Moonlight only answers paired screens and apps. Enter this code in Moonlight: **Settings > Screens > Pair**, with your parent PIN.\n\n## {code}\n\nThen select **Submit**. The code is valid for 10 minutes; Home Assistant will appear in Moonlight's screen list as \"Home Assistant\", where you can revoke it."
       },
       "reauth_confirm": {
         "title": "Pair Home Assistant with Moonlight again",
@@ -41,7 +41,7 @@
       "cannot_connect": "Couldn't connect. Check the host and port, and that the add-on is running.",
       "not_moonlight": "Something answered, but it doesn't look like Moonlight.",
       "unknown": "Unexpected error",
-      "not_paired": "That code hasn't been entered in Moonlight yet. Enter it under Settings > Screens > Pair a new screen, then select Submit again.",
+      "not_paired": "That code hasn't been entered in Moonlight yet. Enter it under Settings > Screens > Pair, then select Submit again.",
       "pair_expired": "The code expired; here is a new one.",
       "pair_busy": "Too many screens are waiting to pair with Moonlight. Try again in a few minutes.",
       "pair_failed": "Moonlight couldn't start pairing. Make sure the add-on is up to date.",

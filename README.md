@@ -13,6 +13,7 @@ screensaver from Immich; speaker controls and album art through Music Assistant.
 | `addon/` | Home Assistant add-on (config.yaml, multi-stage Dockerfile built from the repo root, DOCS.md). It is listed in [home-assistant-apps](https://github.com/chris-standley/home-assistant-apps) |
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
 | `tests/` | Tests for the integration (`python3 -m pytest tests`; `tests/ha/` needs pytest-homeassistant-custom-component) |
+| `apple/` | Native iPhone, iPad and Apple TV apps (SwiftUI, iOS/tvOS 18). Open `apple/Moonlight.xcodeproj` in Xcode 16+. See its [README](apple/README.md) |
 | `screenshots/` | Every view at large (2560x1440), compact (1920x1200 at 2x zoom) and phone sizes |
 
 ## Install on Home Assistant
@@ -50,6 +51,7 @@ addresses still work.
 - Large: a big wall screen, e.g. 27in 2560x1440 at browser zoom 1 (root font 20px). Opens on the week calendar.
 - Compact: a small touch screen, e.g. Touch Display 2, 1920x1200, TouchKio at 2x zoom = 960x600 CSS px. Opens on Today.
 - Phone: a phone browser, or the HA sidebar and companion app via ingress.
+- iPhone, iPad and Apple TV: the native apps in [`apple/`](apple/README.md) find Moonlight on the network and pair with a code like the other screens.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.
 
 ## Preview build
@@ -61,7 +63,7 @@ against an in-browser copy of the API (`src/api/demo.ts`) seeded from `seed/demo
 
 On the add-on's LAN port every screen must be paired (HA users via ingress are already signed in). Open
 `http://<ha-host>:8091/display` on the kiosk: it shows a 6-digit code. In Moonlight (HA sidebar or phone)
-go to Settings > Screens > Pair a new screen, enter the code and the PIN; the kiosk loads the app and remembers its
+go to Settings > Screens > Pair, enter the code and the PIN; the kiosk loads the app and remembers its
 token (localStorage + an HttpOnly cookie). Revoke a screen there too. For TouchKio you can instead copy a token into
 the URL once: `.../display?token=...` (it is stored, then stripped). Add-on option `require_pairing: false`
 turns this off. In Settings > Screens each paired screen has a name, a style (large, compact, phone) and its own
@@ -72,6 +74,12 @@ The Home Assistant integration (`custom_components/moonlight`, via HACS) doesn't
 add-on announces itself, so Home Assistant shows Moonlight under Settings > Devices & services > Discovered, and
 Configure connects it. It is listed in Moonlight under Settings > Screens > Connections, where it can be
 disconnected. Set up by hand (Moonlight not running as an add-on), it pairs with a code like a screen.
+
+## Access from the internet
+
+Turn on the add-on's `ssl` option to serve Moonlight over HTTPS on its own port (8443) with the certificate from the
+Let's Encrypt app, set `external_url`, and forward that port on the router. Pairing is always required there, devices
+can also "Sign in with Home Assistant", and port 8091 then only answers the home network. Steps: [addon/DOCS.md](addon/DOCS.md#access-from-the-internet).
 
 ## Photo screensaver (Immich)
 

@@ -531,6 +531,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .pair-code span { width: 4.2rem; height: 5.4rem; display: grid; place-items: center; border-radius: 1rem; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.14); font-size: 3.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pair-code span.gap { margin-left: 1rem; }
 .pair-meta { font-size: 1rem; font-weight: 700; color: #8f96b8; min-height: 1.4em; }
+.pair-ha { margin-top: 0.4rem; text-decoration: none; }
 .pair-screen.layout-phone .pair-code span { width: 2.9rem; height: 3.9rem; font-size: 2.3rem; }
 .pair-screen.layout-phone .pair-code span.gap { margin-left: 0.4rem; }
 .pair-screen.layout-phone h1 { font-size: 1.9rem; }

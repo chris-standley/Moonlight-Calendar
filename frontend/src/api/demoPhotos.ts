@@ -73,9 +73,10 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   let displays: Stored[] = [
     { id: "ds_hall", name: "Hallway", layout: "large", created_at: ago(60 * 24 * 20), last_seen: ago(1), revoked: false, current: false },
     { id: "ds_kitchen", name: "Kitchen", layout: "compact", created_at: ago(60 * 24 * 19), last_seen: ago(3), revoked: false, current: false },
+    { id: "ds_phone", name: "Alex's iPhone", layout: "app", created_at: ago(60 * 24 * 2), last_seen: ago(12), revoked: false, current: false },
     { id: "ds_ha", name: "Home Assistant", layout: "service", created_at: ago(60 * 24 * 19), last_seen: ago(1), revoked: false, current: false },
   ];
-  const out1 = ({ own, ...d }: Stored): Display => d.layout === "service" ? { ...d }
+  const out1 = ({ own, ...d }: Stored): Display => d.layout === "service" || d.layout === "app" ? { ...d }
     : { ...d, setup: { ...styleSetup(d.layout), ...own }, own_setup: !!own && Object.keys(own).length > 0 };
   let n = 0;
   const uid = (p: string) => `${p}_${Date.now().toString(36)}${(n++).toString(36)}`;

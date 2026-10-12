@@ -46,7 +46,9 @@ def forbidden(detail: str = "Wrong PIN") -> HTTPException:
 
 
 def require_pin(c, pin: Any) -> None:
-    if not db.verify_pin(c, pin):
+    from . import security  # local import: security imports db lazily too
+
+    if not security.check_pin(c, pin):
         raise forbidden()
 
 

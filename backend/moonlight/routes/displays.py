@@ -5,8 +5,9 @@ paired screen has a name, a style (large, compact or phone) and its own setup: m
 on, its speaker and its screensaver delay. A screen whose setup was never changed follows its style's settings
 (Settings `screens`, `media_players`, `idle_minutes`), which are also what the Home Assistant app shows.
 
-Non-screen clients (the Home Assistant integration) pair the same way with `layout: "service"`; they are listed
-with the screens so they can be revoked, but approving can't turn a screen into a service or vice versa.
+Two kinds of device that aren't screens pair the same way: `layout: "service"` (the Home Assistant integration) and
+`layout: "app"` (the iPhone and iPad app, which belongs to a person rather than a wall). They have no style or setup,
+are listed apart from the screens so they can be revoked, and approving can't turn a screen into one or back.
 """
 from __future__ import annotations
 
@@ -18,13 +19,16 @@ import time
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .. import auth, db, media
+from .. import auth, db, media, security
 from ..common import LAYOUTS, as_int, bad, body_dict, choice, hub, layout_name, not_found, opt_str, require_pin
 
 router = APIRouter(prefix="/api")
 
 SECTIONS = ("today", "calendar", "chores", "rewards", "meals", "lists")  # Settings is always shown
 SERVICE = "service"  # a non-screen client, e.g. the Home Assistant integration
+APP = "app"  # the iPhone and iPad app
+NOT_SCREENS = (SERVICE, APP)
+DEFAULT_NAMES = {SERVICE: "Service", APP: "Phone", "phone": "Phone"}
 PAIR_TTL = 600  # seconds a pairing code stays valid
 MAX_PENDING = 50
 _pairings: dict[str, dict] = {}  # pair_id -> {code, layout, name, expires, token, display}
@@ -62,6 +66,18 @@ def display_out(d: dict, current_id: str | None = None, c=None) -> dict:
     return out
 
 
+def create_display(name: str, layout: str) -> tuple[str, dict]:
+    """Store a new paired screen; returns its token (shown once) and row."""
+    token = auth.new_token()
+    d = {"id": db.new_id("ds"), "name": name, "layout": layout, "token_hash": auth.hash_token(token),
+         "created_at": db.now_iso(), "last_seen": None, "revoked": 0, "setup": None}
+    with db.connect() as c:
+        c.execute(
+            "INSERT INTO displays(id, name, layout, token_hash, created_at, last_seen, revoked) "
+            "VALUES(:id, :name, :layout, :token_hash, :created_at, :last_seen, :revoked)", d)
+    return token, d
+
+
 @router.get("/auth/status")
 def auth_status(request: Request):
     a = auth.current(request)
@@ -76,8 +92,9 @@ def auth_status(request: Request):
 @router.post("/pair/start")
 def pair_start(body: dict | None = Body(None)):
     body = body_dict(body)
+    security.limit_pair_start()
     layout = body.get("layout") or "compact"
-    layout = SERVICE if layout == SERVICE else layout_name(layout)
+    layout = layout if layout in NOT_SCREENS else layout_name(layout)
     name = opt_str(body, "name").strip()[:60]  # suggested name, used if the approver leaves it blank
     now = time.time()
     with _lock:
@@ -94,7 +111,7 @@ def pair_start(body: dict | None = Body(None)):
 
 
 @router.get("/pair/{pair_id}")
-def pair_poll(pair_id: str):
+def pair_poll(pair_id: str, request: Request):
     now = time.time()
     with _lock:
         _purge(now)
@@ -106,7 +123,7 @@ def pair_poll(pair_id: str):
         del _pairings[pair_id]  # the token is handed out exactly once
     token = entry["token"]
     resp = JSONResponse({"status": "approved", "token": token, "display": entry["display"]})
-    resp.headers.append("set-cookie", auth.cookie_header(token))
+    resp.headers.append("set-cookie", auth.cookie_header(token, auth.is_secure(request)))
     return resp
 
 
@@ -133,19 +150,13 @@ async def approve(body: dict = Body(...)):
         if found is None:
             raise not_found("No screen is waiting with that code (codes expire after 10 minutes)")
         pid, entry = found
-        if entry["layout"] == SERVICE:
-            layout = SERVICE  # a service has no screen layout; ignore what the approver picked
+        if entry["layout"] in NOT_SCREENS:
+            layout = entry["layout"]  # not a screen: no style, whatever the approver picked
         else:
             layout = layout_name(body.get("layout") or entry["layout"])
         name = (opt_str(body, "name").strip()[:60] or entry.get("name")
-                or ("Service" if layout == SERVICE else "Phone" if layout == "phone" else f"{layout.capitalize()} screen"))
-        token = auth.new_token()
-        d = {"id": db.new_id("ds"), "name": name, "layout": layout, "token_hash": auth.hash_token(token),
-             "created_at": db.now_iso(), "last_seen": None, "revoked": 0, "setup": None}
-        with db.connect() as c:
-            c.execute(
-                "INSERT INTO displays(id, name, layout, token_hash, created_at, last_seen, revoked) "
-                "VALUES(:id, :name, :layout, :token_hash, :created_at, :last_seen, :revoked)", d)
+                or DEFAULT_NAMES.get(layout) or f"{layout.capitalize()} screen")
+        token, d = create_display(name, layout)
         entry["token"] = token
         entry["display"] = display_out(d, d["id"])
         entry["expires"] = now + 120  # the waiting screen polls every few seconds
@@ -168,8 +179,8 @@ async def update(display_id: str, request: Request, body: dict = Body(...)):
             if not name:
                 raise bad("name is required")
             d["name"] = name
-        if d["layout"] == SERVICE and ("layout" in body or "setup" in body):
-            raise bad("A connection has no screen style or setup")
+        if d["layout"] in NOT_SCREENS and ("layout" in body or "setup" in body):
+            raise bad("Only screens have a style and setup")
         if "layout" in body:
             d["layout"] = layout_name(body["layout"])
         if "setup" in body:

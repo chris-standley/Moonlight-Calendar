@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, ha_client, media, public_holidays, seed
+from .. import caldav_sync, db, ha_client, media, public_holidays, security, seed
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -153,7 +153,7 @@ async def remove_sample_data(body: dict = Body(...)):
 def verify_pin(body: dict = Body(...)):
     body = body_dict(body)
     with db.connect() as c:
-        return {"ok": db.verify_pin(c, body.get("pin"))}
+        return {"ok": security.check_pin(c, body.get("pin"))}
 
 
 # ---------------------------------------------------------------- people

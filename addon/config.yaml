@@ -1,5 +1,5 @@
 name: Moonlight
-version: "0.3.15"
+version: "0.4.0"
 slug: moonlight
 description: Family wall calendar, chores, lists and meal planner for kiosk displays
 url: https://github.com/chris-standley/Moonlight-Calendar
@@ -17,16 +17,27 @@ panel_icon: mdi:calendar-heart
 panel_title: Moonlight
 ports:
   8091/tcp: 8091
+  8443/tcp: null
 ports_description:
   8091/tcp: Direct access for wall-mounted kiosk displays (e.g. http://homeassistant.local:8091/display)
+  8443/tcp: HTTPS for access from the internet (needs the ssl option; forward this port on your router)
 map:
   - data:rw
+  - ssl
 homeassistant_api: true
 discovery:
   - moonlight
 options:
   demo: true
   require_pairing: true
+  ssl: false
+  certfile: fullchain.pem
+  keyfile: privkey.pem
 schema:
   demo: bool
   require_pairing: bool
+  ssl: bool
+  certfile: str
+  keyfile: str
+  external_url: url?
+  homeassistant_url: url?

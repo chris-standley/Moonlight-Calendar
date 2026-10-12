@@ -269,7 +269,9 @@ While that socket is down (HA restarting) it polls the entities' states every 5 
   EventSummary = `{id, occurrence_id, title, person_ids, start, end, all_day, location}`.
 
 ## Health
-- `GET /api/health` -> `{ok: true, version}`
+- `GET /api/health` -> `{ok: true, version, instance, external_url: str|null, ha_login: bool}`. `instance` is a random
+  id for this install, so the apps list a Moonlight they find under several names once. `external_url` is Moonlight's
+  public address (add-on option), `ha_login` says whether Sign in with Home Assistant is available.
 
 ## Screens (pairing and access)
 Who may call `/api/*`:
@@ -278,7 +280,13 @@ Who may call `/api/*`:
 - **A paired screen**: its display token as the `moonlight_display` cookie (HttpOnly, long-lived), `Authorization: Bearer <token>`,
   or `?token=` (used by the WebSocket, and once on a kiosk's first page load: the server then sets the cookie).
 - **Everyone** when `MOONLIGHT_AUTH=off`. Default: on inside the add-on (`SUPERVISOR_TOKEN` set; add-on option
-  `require_pairing`, default true), off elsewhere (local dev, tests).
+  `require_pairing`, default true), off elsewhere (local dev, tests). Never on the HTTPS port.
+
+HTTPS (`MOONLIGHT_SSL_CERT` + `MOONLIGHT_SSL_KEY`): a second listener on `MOONLIGHT_HTTPS_PORT` (8443). There auth is
+always on, ingress headers are ignored, the cookie is `Secure`, responses carry HSTS, `X-Frame-Options: DENY`,
+`nosniff`, and `/docs`, `/redoc`, `/openapi.json` are 404. While HTTPS is on, the plain port answers private
+addresses only (403 otherwise). Wrong PINs: 10 per 15 minutes per client address, then 429 with `Retry-After`
+(also for a right PIN, until the window passes). `POST /api/pair/start` and `/api/auth/ha/start`: 10 per 10 minutes.
 
 Otherwise `/api/*` returns 401 `{"detail": "This screen is not paired", "pairing": true}` and `/api/ws` is closed;
 open without auth: `/api/health`, `/api/auth/status`, `/api/pair/*`. HTML and assets are always served so the pairing
@@ -287,13 +295,15 @@ screen loads. A 401 makes the frontend show the pairing screen (so revoking kick
 Every screen opens the same address, `/display`, and is told apart by the token it got when it was paired (a browser
 can't read a MAC address). Each paired screen has a name, a style and its own setup.
 
-Display = `{id, name, layout: "large"|"compact"|"phone"|"service", created_at, last_seen|null, revoked, current: bool,
+Display = `{id, name, layout: "large"|"compact"|"phone"|"service"|"app", created_at, last_seen|null, revoked, current: bool,
 setup?: {start, sections, speaker, idle_minutes}, own_setup?: bool}`
 (`current` = the screen making the request; `last_seen` updated at most once a minute). Screens only: `setup` is what it
 shows, its own choices over its style's (Settings `screens`, `media_players`, `idle_minutes`); `own_setup` says whether
 it has choices of its own. The frontend takes the style from `GET /api/auth/status` and switches when it changes.
 - `GET /api/auth/status` -> `{required: bool, authorised: bool, via: "ingress"|"display"|"open"|null, display: Display|null}`
-- `POST /api/pair/start` `{layout, name?}` (`layout` = the style the screen guesses from its size) -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
+- `POST /api/pair/start` `{layout, name?}` (`layout` = the style the screen guesses from its size, or `service` /
+  `app` for the two kinds that aren't screens: the Home Assistant integration and the iPhone/iPad app, which have no
+  style or setup and are listed apart) -> `{pair_id, code: "6 digits", layout, expires_in: 600}`; the unpaired screen shows the code.
   `layout: "service"` is for a non-screen client (the Home Assistant integration sends `{layout: "service", name: "Home Assistant"}`);
   `name` is a suggestion used if the approver leaves the name blank.
 - `GET /api/pair/{pair_id}` -> `{status: "pending", expires_in}` | `{status: "expired"}` |
@@ -313,6 +323,17 @@ while HA starts). `host` is the add-on's hostname (`/addons/self/info`), `token`
 Assistant", kept in the settings table (never returned) and reused while it isn't revoked; after a revoke the next start
 makes a new one. HA then offers the Moonlight integration under Devices & services. `MOONLIGHT_HA_DISCOVERY=0` turns it off.
 Tokens are 256-bit random strings, stored as SHA-256 hashes.
+
+Sign in with Home Assistant (open, no auth; needs Home Assistant's address: `MOONLIGHT_HA_LOGIN_URL`, else HA's
+external URL via the Supervisor):
+- `GET /api/auth/ha/start?layout=phone|compact|large&name=&app=0|1` -> 302 to `<ha>/auth/authorize` with
+  `client_id=<origin>/`, `redirect_uri=<origin>/api/auth/ha/callback` (origin = `MOONLIGHT_EXTERNAL_URL` when the
+  request came in on its host, else the request's own). 404 without an HA address.
+- `GET /api/auth/ha/callback?state&code` -> swaps the code at `<ha>/auth/token` (inside the add-on
+  `http://homeassistant:8123` first), reads `auth/current_user` over HA's WebSocket, revokes the HA token, and creates a
+  Display named "<user>'s <name or layout>". Browser: 302 to `/display` with the cookie. `app=1`: 302 to
+  `moonlight://signed-in?token=<token>&server=<origin>`. A bad or used state, a refused code or a cancelled login: an
+  HTML page with status 400.
 
 ## Photo screensaver (Immich)
 The screensaver shows photos from the family's [Immich](https://immich.app) server. Moonlight keeps the server address

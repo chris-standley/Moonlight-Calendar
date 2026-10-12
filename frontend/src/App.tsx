@@ -62,7 +62,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   }, [api]);
   useEffect(() => {
     const l = screen?.layout;
-    if (l && l !== "service" && l !== layout) onLayout?.(l);
+    if (l && l !== "service" && l !== "app" && l !== layout) onLayout?.(l);
   }, [screen?.layout, layout, onLayout]);
 
   // Idle -> photo screensaver (minutes per screen, else per style from settings; 0 = never).
