@@ -55,7 +55,7 @@ struct CalendarView: View {
             Spacer()
             ForEach(model.people) { p in
                 Button {
-                    if hidden.contains(p.id) { hidden.remove(p.id) } else { hidden.insert(p.id) }
+                    hidden.tapPerson(p.id, everyone: model.people.map(\.id))
                 } label: {
                     Avatar(person: p, size: 62, dim: hidden.contains(p.id))
                         .padding(4)

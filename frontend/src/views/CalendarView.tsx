@@ -143,6 +143,15 @@ function Who({ o, people, size = 1.25 }: { o: Occurrence; people: Person[]; size
   );
 }
 
+/** The people filter (`hidden` lists who is hidden): from everyone shown, a tap shows only that person; after that,
+ * taps add or remove people, and removing the last one shows everyone again. */
+function tapPerson(hidden: string[], id: string, everyone: string[]): string[] {
+  if (hidden.length === 0) return everyone.filter((x) => x !== id);
+  if (hidden.includes(id)) return hidden.filter((x) => x !== id);
+  const next = [...hidden, id];
+  return everyone.every((x) => next.includes(x)) ? [] : next;
+}
+
 export function CalendarView({ defaultView }: { defaultView: CalView }) {
   const { people, settings, layout, go } = useApp();
   const ws = settings?.week_start ?? "monday";
@@ -197,7 +206,7 @@ export function CalendarView({ defaultView }: { defaultView: CalView }) {
           <div className="filters">
             {people.map((p) => (
               <Avatar key={p.id} person={p} size={layout === "large" ? 2.3 : 2} dim={hidden.includes(p.id)} ring={!hidden.includes(p.id)}
-                onClick={() => setHidden((h) => (h.includes(p.id) ? h.filter((x) => x !== p.id) : [...h, p.id]))} />
+                onClick={() => setHidden((h) => tapPerson(h, p.id, people.map((x) => x.id)))} />
             ))}
           </div>
           <Segmented value={view} onChange={setView} options={[

@@ -96,7 +96,7 @@ struct DateStepper: View {
     }
 }
 
-/// Toggle chips for showing or hiding each person.
+/// People chips: tap one to show only them, then tap others to add or remove them.
 struct PeopleFilter: View {
     @Environment(AppModel.self) private var model
     @Binding var hidden: Set<String>
@@ -106,7 +106,7 @@ struct PeopleFilter: View {
         HStack(spacing: 8) {
             ForEach(model.people) { p in
                 Button {
-                    if hidden.contains(p.id) { hidden.remove(p.id) } else { hidden.insert(p.id) }
+                    hidden.tapPerson(p.id, everyone: model.people.map(\.id))
                 } label: {
                     Avatar(person: p, size: size, dim: hidden.contains(p.id))
                         .padding(2)
