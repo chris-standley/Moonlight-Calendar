@@ -301,7 +301,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .kp-main span { font-size: 0.85rem; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- settings ---------- */
-.settings-body { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 1rem; padding: 0 1.6rem 1.6rem; align-content: start; }
+.settings-body { flex: 1; overflow-y: auto; overflow-x: hidden; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: 1rem; padding: 0 1.6rem 1.6rem; align-content: start; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); font-weight: 700; }
 .set-row > span { color: var(--muted); }
 .set-row > .set-pin { display: flex; align-items: center; gap: 0.7rem; color: inherit; min-width: 0; }
@@ -603,7 +603,8 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .acct-name span.s-auth_failed { color: var(--danger); }
 .acct-name span.s-error { color: #b7731c; }
 .acct-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.cal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: 0.2rem 1.4rem; margin-top: 0.6rem; }
+.settings-body > * { min-width: 0; }
+.cal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(21rem, 100%), 1fr)); gap: 0.2rem 1.4rem; margin-top: 0.6rem; }
 .cal-row { display: flex; align-items: center; gap: 0.7rem; min-height: 3.2rem; padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
 .cal-row.off .cal-name, .cal-row.off .cal-who, .cal-row.off .cal-swatch { opacity: 0.45; }
 .cal-swatch { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 0.45rem; }
@@ -633,7 +634,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-compact .sync-banner { margin: 0.1rem 1rem 0.4rem; }
 .layout-phone .sync-banner { margin: 0.1rem 0.8rem 0.4rem; }
 .layout-phone .sb-text span { display: none; }
-.layout-phone .cal-list { grid-template-columns: 1fr; }
+.layout-phone .cal-list { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------- music: Now playing (speaker via Home Assistant / Music Assistant) ---------- */
 .today-right { display: flex; flex-direction: column; gap: 0.9rem; min-height: 0; }
