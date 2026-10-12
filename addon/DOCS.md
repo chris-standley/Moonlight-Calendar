@@ -75,6 +75,11 @@ energy saving sessions), read-only and refreshed every 15 minutes. Pick everyone
 things like bin day. To turn calendar events or appliances into chores (bins out the night before, empty the
 dishwasher when it finishes), use the Moonlight integration's `moonlight.add_chore` action in an automation.
 
+Repeating events and chores can repeat on chosen days (tap the days under Weekly or Chosen days) and can skip
+public holidays. Pick the country and region in Settings > Display > Public holidays (England's bank holidays
+until you choose, when Home Assistant's timezone is Europe/London). Skipped dates are written to iCloud too, so
+the event is also missing on those days on phones.
+
 ## Photo screensaver
 
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter

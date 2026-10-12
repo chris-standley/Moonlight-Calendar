@@ -3,7 +3,7 @@
 import seed from "../../../seed/demo.json";
 import {
   Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
-  DEFAULT_IDLE, DEFAULT_SCREENS, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
+  DEFAULT_IDLE, DEFAULT_SCREENS, HolidayCountry, HolidayRegion, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
@@ -148,8 +148,54 @@ function maskUrl(url: string): string {
   } catch { return "link"; }
 }
 
+// England and Wales bank holidays, the only public holidays the demo knows (the add-on covers ~200 countries).
+const BANK_HOLIDAYS: Record<string, string> = {
+  "2025-01-01": "New Year's Day",
+  "2025-04-18": "Good Friday",
+  "2025-04-21": "Easter Monday",
+  "2025-05-05": "May Day",
+  "2025-05-26": "Spring Bank Holiday",
+  "2025-08-25": "Late Summer Bank Holiday",
+  "2025-12-25": "Christmas Day",
+  "2025-12-26": "Boxing Day",
+  "2026-01-01": "New Year's Day",
+  "2026-04-03": "Good Friday",
+  "2026-04-06": "Easter Monday",
+  "2026-05-04": "May Day",
+  "2026-05-25": "Spring Bank Holiday",
+  "2026-08-31": "Late Summer Bank Holiday",
+  "2026-12-25": "Christmas Day",
+  "2026-12-26": "Boxing Day",
+  "2026-12-28": "Boxing Day (observed)",
+  "2027-01-01": "New Year's Day",
+  "2027-03-26": "Good Friday",
+  "2027-03-29": "Easter Monday",
+  "2027-05-03": "May Day",
+  "2027-05-31": "Spring Bank Holiday",
+  "2027-08-30": "Late Summer Bank Holiday",
+  "2027-12-25": "Christmas Day",
+  "2027-12-26": "Boxing Day",
+  "2027-12-27": "Christmas Day (observed)",
+  "2027-12-28": "Boxing Day (observed)",
+  "2028-01-01": "New Year's Day",
+  "2028-01-03": "New Year's Day (observed)",
+  "2028-04-14": "Good Friday",
+  "2028-04-17": "Easter Monday",
+  "2028-05-01": "May Day",
+  "2028-05-29": "Spring Bank Holiday",
+  "2028-08-28": "Late Summer Bank Holiday",
+  "2028-12-25": "Christmas Day",
+  "2028-12-26": "Boxing Day",
+};
+export const DEMO_HOLIDAY_COUNTRIES: HolidayCountry[] = [
+  { code: "GB", name: "United Kingdom", subdivs: [{ code: "ENG", name: "England" }, { code: "WLS", name: "Wales" }] },
+];
+let holidayRegion: HolidayRegion = { country: "GB", subdiv: "ENG" };
+const holidayOn = (date: string): string | undefined => (holidayRegion.country ? BANK_HOLIDAYS[date] : undefined);
+
 function isDue(c: Chore, date: string): boolean {
   const s = c.schedule;
+  if (s.type !== "once" && s.skip_holidays && holidayOn(date)) return false;
   if (s.type === "daily") return true;
   if (s.type === "weekly") return s.days.includes(dayCode(date));
   return s.date === date;
@@ -180,7 +226,7 @@ export function expand(e: CalEvent, start: string, end: string): Occurrence[] {
       const a = parse(d), b = parse(first);
       ok = a.getDate() === b.getDate() && ((a.getFullYear() - b.getFullYear()) * 12 + a.getMonth() - b.getMonth()) % interval === 0;
     }
-    if (!ok) continue;
+    if (!ok || (r.skip_holidays && holidayOn(d))) continue;
     const os = parse(`${d}T${time}`);
     const oe = new Date(os.getTime() + durMin * 60000);
     const ostr = isoDT(os), oestr = isoDT(oe);
@@ -212,6 +258,7 @@ export function demoApi(): Api {
     const parsed = raw ? (JSON.parse(raw) as State) : null;
     st = parsed && parsed.seededOn === today() ? parsed : buildSeed();
   } catch { st = buildSeed(); }
+  holidayRegion = st.settings.holidays ?? { country: "GB", subdiv: "ENG" };
 
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* private mode */ } };
   const emit = (...topics: Topic[]) => { save(); topics.forEach((t) => listeners.forEach((l) => l(t))); };
@@ -298,7 +345,7 @@ export function demoApi(): Api {
   const mediaPlayers = () => ({ large: "", compact: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
-    return { weather_entity: "", ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
+    return { weather_entity: "", holidays: holidayRegion, ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
   };
 
   return {
@@ -312,6 +359,14 @@ export function demoApi(): Api {
       if (rest.weather_entity != null && rest.weather_entity !== "" && !/^weather\.[a-z0-9_]+$/.test(rest.weather_entity))
         throw new ApiError(400, "weather_entity must be a weather entity id like weather.home, or empty for demo weather");
       if (rest.weather_entity === null) rest.weather_entity = "";
+      if (rest.holidays) {
+        const { country = "", subdiv = "" } = rest.holidays;
+        const known = DEMO_HOLIDAY_COUNTRIES.find((x) => x.code === country);
+        if (country && !known) throw new ApiError(400, `No public holidays known for country ${country}`);
+        if (subdiv && !known?.subdivs.some((x) => x.code === subdiv)) throw new ApiError(400, `${subdiv} isn't a region of ${country}`);
+        rest.holidays = { country, subdiv };
+        holidayRegion = rest.holidays;
+      }
       Object.assign(st.settings, rest);
       if (media_players) {
         if (Object.entries(media_players).some(([k, v]) => !["large", "compact", "phone"].includes(k) || (v !== "" && !/^media_player\.[a-z0-9_]+$/.test(v ?? ""))))
@@ -334,7 +389,7 @@ export function demoApi(): Api {
         st.settings.screens = cur;
       }
       if (new_pin) st.settings.pin = new_pin;
-      emit("settings", "media");
+      emit("settings", "media", ...(patch.holidays ? (["events", "chores"] as const) : []));
       return settingsOut();
     },
     verifyPin: async (pin) => pin === st.settings.pin,
@@ -532,6 +587,13 @@ export function demoApi(): Api {
       const names: Record<string, string> = { "weather.forecast_home": "Forecast Home", "weather.met_office_london": "Met Office London" };
       return e ? { ...w, source: "homeassistant" as const, entity: e, name: names[e] ?? e } : w;
     },
+    async holidays(start, end, r) {
+      if (end < start) throw new ApiError(400, "end must not be before start");
+      if (r?.country && !DEMO_HOLIDAY_COUNTRIES.some((x) => x.code === r.country)) throw new ApiError(400, `No public holidays known for country ${r.country}`);
+      if (!(r ?? holidayRegion).country) return [];
+      return Object.entries(BANK_HOLIDAYS).filter(([d]) => d >= start && d <= end).map(([date, name]) => ({ date, name }));
+    },
+    holidayCountries: async () => DEMO_HOLIDAY_COUNTRIES,
     // A pretend Home Assistant with a few weather integrations (the forecast itself stays the demo one).
     weatherEntities: async () => {
       const now = demoWeather().current;
@@ -709,6 +771,7 @@ export function demoApi(): Api {
     },
     async resetDemo() {
       st = buildSeed();
+      holidayRegion = { country: "GB", subdiv: "ENG" };
       emit("people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "accounts");
     },
   };

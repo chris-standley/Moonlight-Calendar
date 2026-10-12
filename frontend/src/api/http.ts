@@ -18,7 +18,9 @@ export function httpApi(base = ""): Api {
     if (res.status === 401) notifyUnpaired(); // revoked or never paired: back to the pairing screen
     if (!res.ok) {
       let msg = res.statusText;
-      try { msg = (await res.json()).detail ?? msg; } catch { /* not json */ }
+      try { msg = (await res.json()).detail ?? msg; } catch { /* not json, e.g. a proxy's error page */ }
+      // Never an empty toast: proxies (Home Assistant ingress) often send no status text.
+      if (!String(msg ?? "").trim()) msg = res.status >= 500 ? `Moonlight didn't answer properly (error ${res.status}). Try again in a moment.` : `Request failed (error ${res.status})`;
       throw new ApiError(res.status, String(msg));
     }
     return res.json() as Promise<T>;
@@ -103,6 +105,8 @@ export function httpApi(base = ""): Api {
     recipeToList: async (rid, list_id) => (await req<{ added: number }>("POST", `/api/recipes/${rid}/to-list`, { list_id })).added,
     weather: () => get("/api/weather"),
     weatherEntities: () => get("/api/weather/entities"),
+    holidays: (start, end, r) => get(`/api/holidays?start=${start}&end=${end}${r ? `&country=${encodeURIComponent(r.country)}&subdiv=${encodeURIComponent(r.subdiv)}` : ""}`),
+    holidayCountries: () => get("/api/holidays/countries"),
     displays: () => get("/api/displays"),
     approveDisplay: (code, name, layout, pin) => req("POST", "/api/displays/approve", { code, name, layout, pin }),
     revokeDisplay: async (id, pin) => { await req("DELETE", `/api/displays/${id}`, { pin }); },

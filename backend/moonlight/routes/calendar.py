@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, ha_client, media, seed
+from .. import caldav_sync, db, ha_client, media, public_holidays, seed
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -28,6 +28,7 @@ def settings_out(c) -> dict:
     out = {k: db.get_setting(c, k, v) for k, v in db.default_settings().items()}
     out["pin_set"] = bool(db.get_setting(c, "pin_hash"))
     out["media_players"] = media.players_setting(c)
+    out["holidays"] = public_holidays.region(c)
     saved_wx = db.get_setting(c, "weather_entity", None)
     out["weather_entity"] = ha_client.env_entity() if saved_wx is None else saved_wx
     return out
@@ -37,6 +38,30 @@ def settings_out(c) -> dict:
 def get_settings():
     with db.connect() as c:
         return settings_out(c)
+
+
+@router.get("/holidays")
+def get_holidays(start: str, end: str, country: str | None = None, subdiv: str = ""):
+    """Public holidays start..end inclusive, in the household's region or the `country`/`subdiv` given (to preview one
+    in Settings before saving it)."""
+    try:
+        lo, hi = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise bad("start and end must be dates like 2026-12-01")
+    if hi < lo or (hi - lo).days > 800:
+        raise bad("end must be after start, at most two years later")
+    if country is not None:
+        r = public_holidays.validate({"country": country, "subdiv": subdiv})
+    else:
+        with db.connect() as c:
+            r = public_holidays.region(c)
+    return public_holidays.between(r, lo, hi)
+
+
+@router.get("/holidays/countries")
+def holiday_countries():
+    """Countries (and their regions) with known public holidays, for Settings."""
+    return public_holidays.countries()
 
 
 @router.patch("/settings")
@@ -71,6 +96,9 @@ async def patch_settings(body: dict = Body(...)):
             if not isinstance(wx, str) or (wx.strip() and not ha_client.ENTITY_RE.match(wx.strip())):
                 raise bad("weather_entity must be a weather entity id like weather.home, or empty for demo weather")
             db.set_setting(c, "weather_entity", wx.strip())
+        holidays_changed = "holidays" in body and public_holidays.validate(body["holidays"]) != public_holidays.region(c)
+        if "holidays" in body:
+            db.set_setting(c, public_holidays.KEY, public_holidays.validate(body["holidays"]))
         tz_changed = False
         if "timezone" in body:
             try:
@@ -85,6 +113,8 @@ async def patch_settings(body: dict = Body(...)):
     if tz_changed:
         await asyncio.to_thread(caldav_sync.reparse_all)
         await hub.broadcast("events")
+    if holidays_changed:
+        await hub.broadcast("events", "chores")
     if media_changed:
         media.settings_changed()
         await hub.broadcast("media")
@@ -357,12 +387,13 @@ def list_events(start: str, end: str):
             (re_s, rs_s, rs_s),
         )
         known = known_people(c)
+        is_holiday = public_holidays.checker(c)
     out = []
     for r in candidates:
         if r.get("custom_repeat") and r.get("raw_ics"):
             out.extend(caldav_sync.expand_custom(event_out(r, known), r["raw_ics"], f"{r['id']}:{r['etag']}", rs, re_))
         else:
-            out.extend(expand_event(event_out(r, known), rs, re_))
+            out.extend(expand_event(event_out(r, known), rs, re_, is_holiday))
     out = [o for o in out if o.get("busy") != "free"]  # free time on a busy-blocks calendar isn't shown
     out.sort(key=lambda o: (o["start"], not o["all_day"], o["end"], o["title"]))
     return out

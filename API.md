@@ -5,7 +5,8 @@ Ids are strings. Every mutation broadcasts `{"type":"changed","topic":<topic>}` 
 (topics: `people`, `events`, `chores`, `points`, `rewards`, `lists`, `meals`, `recipes`, `settings`, `photos`, `displays`, `accounts`, `media`).
 `media` is also sent whenever the configured speaker changes in Home Assistant (see Music).
 Errors: `{"detail": "..."}` with 400 (bad input / not enough points), 401 (screen not paired, see Screens),
-403 (wrong PIN), 404, 502 (a connected service such as iCloud or Immich can't be reached).
+403 (wrong PIN), 404, 502 (a connected service such as iCloud or Immich can't be reached), and 500 for anything
+unexpected (still `{"detail"}`: "Something went wrong (…). The add-on log has the details.").
 
 The frontend has two interchangeable clients: HTTP (talks to this API) and Demo (in-browser
 implementation of the same contract, used for the published preview). Keep them in step.
@@ -13,7 +14,7 @@ implementation of the same contract, used for the published preview). Keep them 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone},
-  media_players: {large, compact, phone}, screens: {large, compact, phone}}`
+  media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
@@ -27,8 +28,12 @@ implementation of the same contract, used for the published preview). Keep them 
   `{start: "calendar", sections: all but today}`, compact and phone `{start: "today", sections: all}`).
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
+  `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
+  code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
+  (otherwise none). Dates come from the `holidays` package (see Public holidays).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, media_players, screens, weather_entity`, plus `pin` (required) -> settings.
+  screensaver_seconds, idle_minutes, media_players, screens, weather_entity, holidays`, plus `pin` (required) -> settings.
+  An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
   (`{large: "media_player.kitchen"}`, merged; `""` or null clears one). `idle_minutes` may be partial (`{compact: 10}`,
@@ -59,7 +64,9 @@ implementation of the same contract, used for the published preview). Keep them 
   Occurrence = Event fields + `{occurrence_id: "<id>@<YYYY-MM-DD>", recurring: bool}` with `start`/`end`
   shifted to that occurrence.
   Event = `{id, title, person_ids: [id], start, end, all_day, location, notes, repeat}`
-  `repeat` = null | `{freq: "daily"|"weekly"|"monthly", interval: int>=1, byday: ["MO",..] (weekly only, optional), until: date|null}`
+  `repeat` = null | `{freq: "daily"|"weekly"|"monthly", interval: int>=1, byday: ["MO",..] (weekly only, optional), until: date|null,
+  skip_holidays?: bool}`. `skip_holidays` leaves out occurrences on public holidays (Settings `holidays`); synced to
+  iCloud/CalDAV as EXDATEs for the next 3 years plus an `X-MOONLIGHT-SKIP-HOLIDAYS` marker, so other apps skip them too.
   All-day events: `start` = `YYYY-MM-DDT00:00`, `end` = next day `T00:00` (exclusive), may span days.
   An occurrence is included if it overlaps [start, end).
 - `POST /api/events` Event without id -> Event
@@ -156,7 +163,8 @@ Errors set `status: "error"` and keep the cached events.
 
 ## Chores
 Chore = `{id, title, emoji, person_id, points, time_of_day: "morning"|"afternoon"|"evening"|"anytime", schedule, sort}`
-`schedule` = `{type: "daily"}` | `{type: "weekly", days: ["MO",..]}` | `{type: "once", date}`
+`schedule` = `{type: "daily"}` | `{type: "weekly", days: ["MO",..]}` | `{type: "once", date}`; daily and weekly may add
+`skip_holidays: true` (not due on public holidays, which also don't break a streak).
 - `GET /api/chores/all` -> `[Chore]`
 - `GET /api/chores?date=YYYY-MM-DD` -> `[ChoreDay]`: chores due that date,
   ChoreDay = Chore + `{date, completed: bool, completed_at: str|null, streak: int}`.
@@ -207,6 +215,11 @@ Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
 - `GET /api/weather/entities` -> `[{entity_id, name, available, condition|null, temperature|null, unit: "C"|"F",
   attribution|null}]`, HA's `weather.*` entities (available first, then by name) for Settings > Weather.
   409 when Moonlight has no Home Assistant connection, 502 when HA can't be reached.
+
+## Public holidays
+- `GET /api/holidays?start=YYYY-MM-DD&end=YYYY-MM-DD[&country=GB&subdiv=SCT]` (end inclusive, at most ~2 years) ->
+  `[{date, name}]` sorted by date, for Settings `holidays` or the `country`/`subdiv` given (a preview before saving).
+- `GET /api/holidays/countries` -> `[{code, name, subdivs: [{code, name}]}]` sorted by name, for the Settings picker.
 
 ## Music (now playing on a Home Assistant speaker)
 The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a

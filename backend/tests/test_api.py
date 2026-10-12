@@ -595,3 +595,45 @@ def test_screen_sections_setting(client):
                 {"kitchen": {"start": "rewards"}}, {"kitchen": {"start": "nope"}}, []):
         assert client.patch("/api/settings", json={"pin": PIN, "screens": bad}).status_code == 400, bad
     assert client.patch("/api/settings", json={"pin": "0000", "screens": {}}).status_code == 403
+
+
+def test_public_holidays_and_skipping_them(client):
+    s = client.get("/api/settings").json()
+    assert s["holidays"] == {"country": "GB", "subdiv": "ENG"}  # Europe/London default
+    hols = client.get("/api/holidays?start=2026-12-01&end=2027-01-05").json()
+    assert [h["date"] for h in hols] == ["2026-12-25", "2026-12-26", "2026-12-28", "2027-01-01"]
+    assert hols[0]["name"] == "Christmas Day"
+    countries = {x["code"]: x for x in client.get("/api/holidays/countries").json()}
+    assert countries["GB"]["name"] == "United Kingdom"
+    assert {"code": "SCT", "name": "Scotland"} in countries["GB"]["subdivs"]
+    assert "GBR" not in countries and "UK" not in countries
+    preview = client.get("/api/holidays?start=2027-01-01&end=2027-01-05&country=GB&subdiv=SCT").json()
+    assert [h["date"] for h in preview] == ["2027-01-01", "2027-01-02", "2027-01-04"]  # Scotland keeps 2 January
+    assert client.get("/api/holidays?start=2027-01-01&end=2027-01-05&country=XX").status_code == 400
+
+    # Chores on chosen days, skipping public holidays.
+    kid = person(client)
+    ch = chore(client, kid["id"], schedule={"type": "weekly", "days": ["MO", "FR"], "skip_holidays": True})
+    assert ch["schedule"] == {"type": "weekly", "days": ["MO", "FR"], "skip_holidays": True}
+    due = lambda d: any(x["id"] == ch["id"] for x in client.get(f"/api/chores?date={d}").json())  # noqa: E731
+    assert due("2026-12-21") and not due("2026-12-22") and not due("2026-12-28") and due("2027-01-04")
+    plain = chore(client, kid["id"], title="Feed fish", schedule={"type": "daily"})
+    assert any(x["id"] == plain["id"] for x in client.get("/api/chores?date=2026-12-25").json())
+
+    # Repeating events too.
+    ev = event(client, title="Swim club", start="2026-12-21T17:00", end="2026-12-21T18:00",
+               repeat={"freq": "daily", "skip_holidays": True})
+    days = [o["start"][:10] for o in occ(client, "2026-12-24", "2026-12-29") if o["id"] == ev["id"]]
+    assert days == ["2026-12-24", "2026-12-27"]
+
+    # Another region; none at all.
+    client.patch("/api/settings", json={"pin": PIN, "holidays": {"country": "GB", "subdiv": "SCT"}})
+    assert "2027-01-04" in [h["date"] for h in client.get("/api/holidays?start=2027-01-01&end=2027-01-05").json()]
+    assert not due("2027-01-04")
+    client.patch("/api/settings", json={"pin": PIN, "holidays": {"country": ""}})
+    assert client.get("/api/holidays?start=2026-12-01&end=2026-12-31").json() == []
+    assert due("2026-12-28")
+    for bad in ({"country": "XX"}, {"country": "GB", "subdiv": "XYZ"}, {"subdiv": "ENG"}, "GB"):
+        assert client.patch("/api/settings", json={"pin": PIN, "holidays": bad}).status_code == 400, bad
+    assert client.post("/api/chores", json={"title": "x", "person_id": kid["id"], "points": 1, "time_of_day": "morning",
+                                            "schedule": {"type": "daily", "skip_holidays": "yes"}}).status_code == 400

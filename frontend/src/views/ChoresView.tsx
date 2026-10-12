@@ -1,8 +1,9 @@
 import { CSSProperties, useState } from "react";
 import { ApiError, Chore, ChoreDay, ChoreSchedule, Person, TimeOfDay } from "../api/types";
-import { addDays, DAY_CODES, fmtDayMonth, relativeDay, today } from "../dates";
+import { addDays, fmtDayMonth, relativeDay, today } from "../dates";
 import { useApp, useData } from "../state";
-import { Avatar, PersonPicker, Ring, Segmented, Sheet, tint } from "../components/ui";
+import { Avatar, DayPicker, HolidaySwitch, PersonPicker, Ring, Segmented, Sheet, WEEKDAYS, tint } from "../components/ui";
+import { useHolidayRegionName } from "../components/holidays";
 import { IconCheck, IconFlame, IconLeft, IconPlus, IconRight, IconStar, IconTrash } from "../components/icons";
 import { FamilyPrompt } from "./FamilySettings";
 
@@ -121,21 +122,11 @@ function ChoreColumn({ person, chores, balance, date, onEdit }: {
 }
 
 const EMOJIS = ["🛏️", "🪥", "🎒", "📚", "🎹", "🍽️", "🧸", "👕", "🐶", "🧩", "🧺", "🪴", "🗑️", "🧽", "🚿", "🥪", "💊", "🏃", "🎻", "✏️", "🧹", "🛁", "🥦", "💤"];
-const SCHEDULES = { daily: "Every day", weekdays: "Weekdays", weekends: "Weekends", once: "Just today" } as const;
-
-/** Which preset a saved schedule matches; "custom" for weekly days that aren't weekdays or weekends. */
-function presetOf(s: ChoreSchedule): keyof typeof SCHEDULES | "custom" {
-  if (s.type === "daily") return "daily";
-  if (s.type === "once") return "once";
-  const days = [...s.days].sort().join();
-  if (days === [...DAY_CODES.slice(1, 6)].sort().join()) return "weekdays";
-  if (days === ["SA", "SU"].sort().join()) return "weekends";
-  return "custom";
-}
-const DAY_NAMES: Record<string, string> = { MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat", SU: "Sun" };
+const SCHEDULES = { daily: "Every day", days: "Chosen days", once: "Just today" } as const;
+type Sched = keyof typeof SCHEDULES;
 
 function ChoreForm({ chore, onClose }: { chore?: Chore; onClose: () => void }) {
-  const { api, people, toast } = useApp();
+  const { api, people, settings, toast } = useApp();
   const [title, setTitle] = useState(chore?.title ?? "");
   const [emoji, setEmoji] = useState(chore?.emoji ?? EMOJIS[0]);
   const [who, setWho] = useState<string[]>(() => {
@@ -144,17 +135,16 @@ function ChoreForm({ chore, onClose }: { chore?: Chore; onClose: () => void }) {
     return first ? [first.id] : [];
   });
   const [tod, setTod] = useState<TimeOfDay>(chore?.time_of_day ?? "morning");
-  const [sched, setSched] = useState<keyof typeof SCHEDULES | "custom">(chore ? presetOf(chore.schedule) : "daily");
+  const [sched, setSched] = useState<Sched>(chore ? (chore.schedule.type === "weekly" ? "days" : chore.schedule.type) : "daily");
+  const [days, setDays] = useState<string[]>(chore?.schedule.type === "weekly" ? chore.schedule.days : WEEKDAYS);
+  const [skipHolidays, setSkipHolidays] = useState(chore?.schedule.type !== "once" && !!chore?.schedule.skip_holidays);
+  const region = useHolidayRegionName();
   const [pts, setPts] = useState(chore?.points ?? 2);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const schedOptions: { value: keyof typeof SCHEDULES | "custom"; label: string }[] =
-    Object.entries(SCHEDULES).map(([v, l]) => ({ value: v as keyof typeof SCHEDULES, label: l }));
-  if (chore && chore.schedule.type === "weekly" && presetOf(chore.schedule) === "custom")
-    schedOptions.push({ value: "custom", label: DAY_CODES.filter((d) => (chore.schedule as { days: string[] }).days.includes(d)).map((d) => DAY_NAMES[d]).join(", ") });
   function schedule(): ChoreSchedule {
-    if (sched === "custom" && chore) return chore.schedule;
     if (sched === "once") return chore?.schedule.type === "once" ? chore.schedule : { type: "once", date: today() };
-    return sched === "daily" ? { type: "daily" } : { type: "weekly", days: sched === "weekdays" ? DAY_CODES.slice(1, 6) : ["SA", "SU"] };
+    const skip = skipHolidays ? { skip_holidays: true } : {};
+    return sched === "daily" ? { type: "daily", ...skip } : { type: "weekly", days, ...skip };
   }
   async function save() {
     try {
@@ -191,7 +181,9 @@ function ChoreForm({ chore, onClose }: { chore?: Chore; onClose: () => void }) {
         <label className="field-label">When</label>
         <Segmented value={tod} onChange={setTod} options={TOD.map((t) => ({ value: t.key, label: t.label }))} />
         <label className="field-label">Repeats</label>
-        <Segmented value={sched} onChange={setSched} options={schedOptions} />
+        <Segmented value={sched} onChange={setSched} options={Object.entries(SCHEDULES).map(([v, l]) => ({ value: v as Sched, label: l }))} />
+        {sched === "days" && <DayPicker value={days} onChange={setDays} weekStart={settings?.week_start} />}
+        {sched !== "once" && <HolidaySwitch value={skipHolidays} onChange={setSkipHolidays} region={region} />}
         <label className="field-label">Stars</label>
         <div className="stepper">
           <button className="icon-btn" onClick={() => setPts(Math.max(0, pts - 1))}>−</button>
