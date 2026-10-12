@@ -64,9 +64,8 @@ struct TodayView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, 30).padding(.vertical, 24)  // room for a focused card's lift inside the clip
             }
-            .scrollClipDisabled()
         }
         .panel(padding: 24)
     }
@@ -117,7 +116,6 @@ struct TodayView: View {
                 }
                 .padding(8)
             }
-            .scrollClipDisabled()
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

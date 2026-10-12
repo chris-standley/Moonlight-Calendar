@@ -90,9 +90,8 @@ struct ChoresView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 6).padding(.vertical, 10)
+                .padding(.horizontal, 14).padding(.vertical, 16)  // room for a focused row's lift inside the clip
             }
-            .scrollClipDisabled()
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
