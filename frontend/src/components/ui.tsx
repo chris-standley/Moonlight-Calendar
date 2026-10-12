@@ -128,3 +128,48 @@ export function Ring({ value, size = 3, stroke = 0.32, color, children }: {
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
+
+const DAY_ORDER = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+const DAY_LETTER: Record<string, string> = { MO: "M", TU: "T", WE: "W", TH: "T", FR: "F", SA: "S", SU: "S" };
+const DAY_FULL: Record<string, string> = { MO: "Monday", TU: "Tuesday", WE: "Wednesday", TH: "Thursday", FR: "Friday", SA: "Saturday", SU: "Sunday" };
+export const WEEKDAYS = ["MO", "TU", "WE", "TH", "FR"];
+export const WEEKENDS = ["SA", "SU"];
+
+/** Seven round day buttons (RFC 5545 codes, MO..SU), plus Weekdays / Weekends shortcuts. Never leaves none chosen. */
+export function DayPicker({ value, onChange, weekStart = "monday" }: {
+  value: string[]; onChange: (days: string[]) => void; weekStart?: "monday" | "sunday";
+}) {
+  const order = weekStart === "sunday" ? ["SU", ...DAY_ORDER.slice(0, 6)] : DAY_ORDER;
+  const same = (a: string[]) => a.length === value.length && a.every((d) => value.includes(d));
+  const flip = (d: string) => {
+    const next = value.includes(d) ? value.filter((x) => x !== d) : [...value, d];
+    if (next.length) onChange(DAY_ORDER.filter((x) => next.includes(x)));
+  };
+  return (
+    <div className="day-picker">
+      <div className="days" role="group" aria-label="Days">
+        {order.map((d) => (
+          <button type="button" key={d} className={value.includes(d) ? "on" : ""} aria-pressed={value.includes(d)} aria-label={DAY_FULL[d]} onClick={() => flip(d)}>
+            {DAY_LETTER[d]}
+          </button>
+        ))}
+      </div>
+      <div className="day-presets">
+        <button type="button" className={same(WEEKDAYS) ? "on" : ""} onClick={() => onChange(WEEKDAYS)}>Weekdays</button>
+        <button type="button" className={same(WEEKENDS) ? "on" : ""} onClick={() => onChange(WEEKENDS)}>Weekends</button>
+      </div>
+    </div>
+  );
+}
+
+/** "Skip public holidays" switch; `region` names where they come from (Settings › Display). */
+export function HolidaySwitch({ value, onChange, region }: { value: boolean; onChange: (v: boolean) => void; region: string }) {
+  return (
+    <>
+      <div className="set-row"><span>Skip public holidays</span>
+        <button type="button" className={"toggle" + (value ? " on" : "")} onClick={() => onChange(!value)} aria-pressed={value} aria-label="Skip public holidays"><span /></button>
+      </div>
+      {value && <p className="muted connect-note">{region ? `Skips ${region} public holidays. Change the region in Settings › Display.` : "No region chosen yet: pick one in Settings › Display."}</p>}
+    </>
+  );
+}

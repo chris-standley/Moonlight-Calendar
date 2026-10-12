@@ -47,6 +47,10 @@ ICLOUD_URL = "https://caldav.icloud.com/"
 NS = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav", "cs": "http://calendarserver.org/ns/",
       "ic": "http://apple.com/ns/ical/"}
 PEOPLE_PROP = "X-MOONLIGHT-PEOPLE"
+# "Skip public holidays" on a series: written as this marker plus an EXDATE per holiday it would fall on (for
+# HOLIDAY_YEARS ahead), so phones skip them too; read back as a simple repeat while every EXDATE is a holiday.
+SKIP_HOLIDAYS_PROP = "X-MOONLIGHT-SKIP-HOLIDAYS"
+HOLIDAY_YEARS = 3
 FAMILY_NAMES = {"family", "home", "household", "everyone", "shared"}
 MULTIGET_BATCH = 50
 
@@ -302,7 +306,10 @@ def _map_rrule(master, has_overrides: bool, dtstart, start_local: datetime, tz: 
     rr = master.get("RRULE")
     if rr is None:
         return None, bool(has_overrides or "RDATE" in master)
-    if isinstance(rr, list) or has_overrides or "EXDATE" in master or "RDATE" in master:
+    skip_holidays = _text(master, SKIP_HOLIDAYS_PROP) == "1"
+    if "EXDATE" in master and not (skip_holidays and _exdates_are_holidays(master, tz)):
+        return None, True
+    if isinstance(rr, list) or has_overrides or "RDATE" in master:
         return None, True
     if set(rr.keys()) - {"FREQ", "INTERVAL", "BYDAY", "UNTIL", "WKST", "BYMONTHDAY"}:
         return None, True
@@ -319,6 +326,8 @@ def _map_rrule(master, has_overrides: bool, dtstart, start_local: datetime, tz: 
     bymd = rr.get("BYMONTHDAY", [])
     start_d = start_local.date()
     out: dict = {"freq": freq, "interval": interval, "until": None}
+    if skip_holidays:
+        out["skip_holidays"] = True
     if freq == "daily" and (byday or bymd):
         return None, True
     if freq == "weekly":
@@ -348,6 +357,38 @@ def _map_rrule(master, has_overrides: bool, dtstart, start_local: datetime, tz: 
         return normalize_repeat(out), False
     except ValueError:
         return None, True
+
+
+def _exdate_values(master) -> list:
+    raw = master.get("EXDATE")
+    out = []
+    for item in raw if isinstance(raw, list) else [raw]:
+        out.extend(x.dt for x in getattr(item, "dts", []))
+    return out
+
+
+def _exdates_are_holidays(master, tz: ZoneInfo) -> bool:
+    from . import public_holidays
+
+    with db.connect() as c:
+        is_holiday = public_holidays.checker(c)
+    days = [to_local(v, tz).date() if isinstance(v, datetime) else v for v in _exdate_values(master)]
+    return all(is_holiday(d) for d in days)
+
+
+def _holiday_exdates(ev: dict, tz: ZoneInfo) -> list:
+    """EXDATE values for the holidays a "skip public holidays" series would fall on, HOLIDAY_YEARS ahead."""
+    from . import public_holidays
+    from .recurrence import occurrence_dates
+
+    start = datetime.fromisoformat(ev["start"])
+    hi = date.today() + timedelta(days=365 * HOLIDAY_YEARS)
+    with db.connect() as c:
+        is_holiday = public_holidays.checker(c)
+    days = [d for d in occurrence_dates(start.date(), ev["repeat"], start.date(), hi) if is_holiday(d)]
+    if ev["all_day"]:
+        return days
+    return [datetime.combine(d, start.time()).replace(tzinfo=tz) for d in days]
 
 
 def parse_resource(ics: str, tz: ZoneInfo) -> dict | None:
@@ -421,7 +462,7 @@ def build_ics(raw: str | None, ev: dict, tz: ZoneInfo, explicit_people: list[str
     if set_repeat or ev.get("repeat"):
         # A simple rule is fully described by `repeat`, so it is always rewritten (keeps UNTIL in step
         # with a moved start time). Custom rules are only replaced when the client sends a new repeat.
-        for k in ("RRULE", "RDATE", "EXDATE"):
+        for k in ("RRULE", "RDATE", "EXDATE", SKIP_HOLIDAYS_PROP):
             master.pop(k, None)
         cal.subcomponents = [s for s in cal.subcomponents if s.name != "VEVENT" or s is master]
         rep = ev.get("repeat")
@@ -434,6 +475,11 @@ def build_ics(raw: str | None, ev: dict, tz: ZoneInfo, explicit_people: list[str
                 rr["UNTIL"] = ud if ev["all_day"] else \
                     datetime.combine(ud, time(23, 59, 59)).replace(tzinfo=tz).astimezone(timezone.utc)
             master.add("RRULE", rr)
+            if rep.get("skip_holidays"):
+                master.add(SKIP_HOLIDAYS_PROP, "1")
+                days = _holiday_exdates(ev, tz)
+                if days:
+                    master.add("EXDATE", days)
     now = datetime.now(timezone.utc).replace(microsecond=0)
     setp("DTSTAMP", now)
     setp("LAST-MODIFIED", now)
@@ -716,6 +762,28 @@ def _guard(acct: dict, fn, *args):
         raise AuthFailed(auth_message(acct["kind"]))
 
 
+SAME_FIELDS = ("title", "start", "end", "all_day", "location", "notes", "repeat", "custom_repeat", "person_ids")
+
+
+def _same_event(a: str, b: str, tz: ZoneInfo) -> bool:
+    """Whether two versions of a resource describe the same event (the server may reformat what it stores)."""
+    try:
+        pa, pb = parse_resource(a, tz), parse_resource(b, tz)
+    except Exception:
+        return False
+    return bool(pa and pb) and all(pa[k] == pb[k] for k in SAME_FIELDS)
+
+
+def _landed(remote: Remote, acct: dict, href: str, ics: str, tz: ZoneInfo) -> tuple[str | None, str] | None:
+    """After a lost reply or a conflict: the server's copy if it already holds this change (an earlier try of the
+    same save got through), else None."""
+    try:
+        fresh = _guard(acct, remote.get, href)
+    except SyncError:
+        return None
+    return fresh if fresh is not None and _same_event(fresh[1], ics, tz) else None
+
+
 def _refetch_and_conflict(remote: Remote, acct: dict, row: dict, tz: ZoneInfo) -> None:
     fresh = _guard(acct, remote.get, row["href"])
     with db.connect() as c:
@@ -734,7 +802,13 @@ def _create(cal: dict, acct: dict, ev: dict, tz: ZoneInfo, event_id: str) -> Non
     uid = f"{uuid.uuid4()}"
     href = urljoin(cal["url"].rstrip("/") + "/", f"{uid}.ics")
     ics = build_ics(None, ev, tz, _explicit_people(cal, ev["person_ids"]), True, uid)
-    etag = _guard(acct, remote.put, href, ics, None, True)
+    try:
+        etag = _guard(acct, remote.put, href, ics, None, True)
+    except Unreachable:
+        landed = _landed(remote, acct, href, ics, tz)  # the reply was lost, but the event may be there
+        if landed is None:
+            raise
+        etag, ics = landed
     with db.connect() as c:
         apply_resource(c, cal["id"], href, etag, ics, tz, event_id=event_id)
 
@@ -774,8 +848,15 @@ def save_event(existing: dict | None, ev: dict, target: str | None, set_repeat: 
             ics = build_ics(row["raw_ics"], ev, tz, _explicit_people(cal, ev["person_ids"]), set_repeat)
             try:
                 etag = _guard(acct, remote.put, row["href"], ics, row["etag"])
-            except Conflict:
-                _refetch_and_conflict(remote, acct, row, tz)
+            except (Conflict, Unreachable) as e:
+                # The change may have reached the server even though its reply didn't reach us, or a retry of a
+                # save whose reply was lost finds its own earlier write: neither is a real conflict.
+                landed = _landed(remote, acct, row["href"], ics, tz)
+                if landed is None:
+                    if isinstance(e, Unreachable):
+                        raise
+                    _refetch_and_conflict(remote, acct, row, tz)
+                etag, ics = landed
             with db.connect() as c:
                 apply_resource(c, cal["id"], row["href"], etag, ics, tz)
         return event_id

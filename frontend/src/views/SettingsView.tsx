@@ -7,12 +7,16 @@ import { ScreensaverPanel, ScreensPanel } from "./DisplaysSettings";
 import { CalendarsPanel } from "./CalendarsSettings";
 import { FamilyPanel } from "./FamilySettings";
 import { WeatherPicker } from "./WeatherSettings";
+import { HolidayPicker } from "./HolidaySettings";
+import { useHolidayRegionName } from "../components/holidays";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
   const { api, people, settings, askPin, toast, layout, screen } = useApp();
   const noFamily = people.length === 0;
   const [wx, setWx] = useState<Weather | null>(null);
   const [pickWx, setPickWx] = useState(false);
+  const [pickHols, setPickHols] = useState(false);
+  const holidayRegion = useHolidayRegionName();
   useEffect(() => { api.weather().then(setWx).catch(() => setWx(null)); }, [api, settings?.weather_entity]);
   const wxName = !settings ? "…" : !settings.weather_entity ? "Demo forecast"
     : wx?.entity === settings.weather_entity && wx.name ? wx.name : settings.weather_entity;
@@ -53,12 +57,17 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
             <span className="set-pin"><b className="set-wx">{wx && <WeatherIcon condition={wx.current.condition} size={26} />}{wxName}</b>
               <button className="btn ghost small" onClick={() => setPickWx(true)}>Change</button></span>
           </div>
+          <div className="set-row"><span>Public holidays</span>
+            <span className="set-pin"><b>{holidayRegion || "None"}</b>
+              <button className="btn ghost small" onClick={() => setPickHols(true)}>Change</button></span>
+          </div>
           <div className="set-row"><span>Parent PIN</span>
             <span className="set-pin"><b>{settings?.pin_set ? "Set" : "Not set"}</b>
               <button className="btn ghost small" onClick={changePin}>{settings?.pin_set ? "Change" : "Set PIN"}</button></span>
           </div>
         </section>
         {pickWx && <WeatherPicker onClose={() => setPickWx(false)} />}
+        {pickHols && <HolidayPicker onClose={() => setPickHols(false)} />}
         <SampleDataPanel />
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />

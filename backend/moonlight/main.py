@@ -80,6 +80,13 @@ def create_app(
             msgs.append(f"{loc}: {e.get('msg')}" if loc else str(e.get("msg")))
         return JSONResponse({"detail": "; ".join(msgs) or "Invalid request"}, status_code=400)
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request, exc: Exception):
+        # A JSON detail, so screens show a message instead of an empty toast (the traceback goes to the log).
+        log.error("Unexpected error", exc_info=exc)
+        return JSONResponse({"detail": f"Something went wrong ({exc.__class__.__name__}). The add-on log has the "
+                                       "details."}, status_code=500)
+
     for module in (calendar, chores, lists, meals, displays, immich, accounts):
         app.include_router(module.router)
     app.include_router(summary_routes.router)

@@ -771,3 +771,14 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .connect-help li { margin: 0.1rem 0; }
 .cal-head-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
 .cal-name b { min-width: 3.5rem; }
+
+/* Repeat on chosen days */
+.day-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 0.6rem; }
+.day-picker .days { display: flex; gap: 0.35rem; }
+.day-picker .days button { width: 2.6rem; height: 2.6rem; border-radius: 50%; font-weight: 800; background: var(--surface-2); color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); }
+.day-picker .days button.on { background: var(--accent); color: #fff; box-shadow: none; }
+.day-picker .day-presets { display: flex; gap: 0.4rem; }
+.day-picker .day-presets button { padding: 0.35rem 0.8rem; border-radius: 999px; font-weight: 700; font-size: 0.85rem; color: var(--muted); box-shadow: inset 0 0 0 1.5px var(--line); }
+.day-picker .day-presets button.on { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.layout-phone .day-picker .days button { width: 2.4rem; height: 2.4rem; }
+.form > .set-row { margin-top: 0.6rem; }

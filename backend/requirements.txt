@@ -6,3 +6,4 @@ caldav>=3.0,<4
 icalendar>=6.1,<8
 recurring-ical-events>=3.3,<4
 tzdata
+holidays>=0.60,<1  # public holidays ("skip public holidays" on repeats)

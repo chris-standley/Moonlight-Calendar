@@ -19,7 +19,12 @@ export interface Settings {
   weather_entity?: string;
   /** Per kind of screen: the sections its menu shows (Settings always) and the one it opens on. */
   screens?: Partial<Record<Layout, ScreenSetup>>;
+  /** Public holidays that repeats can skip: ISO country code and optional region ("" = whole country). */
+  holidays?: HolidayRegion;
 }
+export interface HolidayRegion { country: string; subdiv: string }
+export interface Holiday { date: string; name: string }
+export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
 export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists";
 export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "lists"];
 export interface ScreenSetup { start: Section; sections: Section[] }
@@ -30,7 +35,7 @@ export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
 };
 
 export type Freq = "daily" | "weekly" | "monthly";
-export interface Repeat { freq: Freq; interval: number; byday?: string[]; until?: string | null }
+export interface Repeat { freq: Freq; interval: number; byday?: string[]; until?: string | null; skip_holidays?: boolean }
 
 export interface EventIn {
   title: string;
@@ -59,7 +64,10 @@ export type BusyStatus = "busy" | "tentative" | "away" | "elsewhere" | "free";
 export interface Occurrence extends CalEvent { occurrence_id: string; recurring: boolean }
 
 export type TimeOfDay = "morning" | "afternoon" | "evening" | "anytime";
-export type ChoreSchedule = { type: "daily" } | { type: "weekly"; days: string[] } | { type: "once"; date: string };
+export type ChoreSchedule =
+  | { type: "daily"; skip_holidays?: boolean }
+  | { type: "weekly"; days: string[]; skip_holidays?: boolean }
+  | { type: "once"; date: string };
 export interface Chore {
   id: string; title: string; emoji: string; person_id: string; points: number;
   time_of_day: TimeOfDay; schedule: ChoreSchedule; sort: number;
@@ -243,6 +251,10 @@ export interface Api {
   weather(): Promise<Weather>;
   /** Home Assistant's weather entities with current conditions (Settings > Weather). */
   weatherEntities(): Promise<WeatherEntity[]>;
+  /** Public holidays start..end inclusive (YYYY-MM-DD), in the household's region or the one given (a preview). */
+  holidays(start: string, end: string, region?: HolidayRegion): Promise<Holiday[]>;
+  /** Countries and their regions with known public holidays (Settings > Display). */
+  holidayCountries(): Promise<HolidayCountry[]>;
   // Wall screens (see API.md "Screens")
   displays(): Promise<Display[]>;
   approveDisplay(code: string, name: string, layout: Layout | null, pin: string): Promise<Display>;

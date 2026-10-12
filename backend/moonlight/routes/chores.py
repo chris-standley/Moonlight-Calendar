@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Body
 
-from .. import db
+from .. import db, public_holidays
 from ..common import (
     as_date, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -53,13 +53,14 @@ def chores_for_day(date: str | None = None):  # noqa: A002 - query param name is
     lo = (day - timedelta(days=STREAK_LOOKBACK)).isoformat()
     with db.connect() as c:
         chores = [chore_out(r) for r in db.rows(c, "SELECT * FROM chores ORDER BY sort, title")]
+        is_holiday = public_holidays.checker(c)
         comps: dict[str, dict[str, str]] = {}
         for r in db.rows(c, "SELECT chore_id, date, completed_at FROM completions WHERE date BETWEEN ? AND ?",
                          (lo, day_s)):
             comps.setdefault(r["chore_id"], {})[r["date"]] = r["completed_at"]
     out = []
     for ch in chores:
-        if not chore_due(ch["schedule"], day):
+        if not chore_due(ch["schedule"], day, is_holiday):
             continue
         done = comps.get(ch["id"], {})
         out.append({
@@ -67,7 +68,7 @@ def chores_for_day(date: str | None = None):  # noqa: A002 - query param name is
             "date": day_s,
             "completed": day_s in done,
             "completed_at": done.get(day_s),
-            "streak": streak(ch["schedule"], day, set(done), STREAK_LOOKBACK),
+            "streak": streak(ch["schedule"], day, set(done), STREAK_LOOKBACK, is_holiday),
         })
     return out
 
