@@ -154,27 +154,19 @@ struct CalendarView: View {
                 ForEach(days, id: \.self) { day in
                     let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }, day: day)
                     HStack(alignment: .top, spacing: 30) {
-                        // The date is a button (it opens that week), so every day can take focus and the list
-                        // scrolls on down past empty days and busy-only days.
-                        Button { anchor = day; mode = .week } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(d.dow(day)).font(Theme.font(22, .heavy)).foregroundStyle(day == d.today ? Theme.accent : Theme.muted)
-                                Text(d.dayNum(day)).font(Theme.font(48, .heavy)).foregroundStyle(Theme.text)
-                                if let w = model.weather?.day(day) {
-                                    HStack(spacing: 4) {
-                                        WeatherGlyph(condition: w.condition, size: 22)
-                                        Text("\(w.high)°").font(Theme.font(20, .heavy)).foregroundStyle(Theme.text)
-                                    }
-                                    .lineLimit(1)
-                                    .fixedSize()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(d.dow(day)).font(Theme.font(22, .heavy)).foregroundStyle(day == d.today ? Theme.accent : Theme.muted)
+                            Text(d.dayNum(day)).font(Theme.font(48, .heavy)).foregroundStyle(Theme.text)
+                            if let w = model.weather?.day(day) {
+                                HStack(spacing: 4) {
+                                    WeatherGlyph(condition: w.condition, size: 22)
+                                    Text("\(w.high)°").font(Theme.font(20, .heavy)).foregroundStyle(Theme.text)
                                 }
+                                .lineLimit(1)
+                                .fixedSize()
                             }
-                            .padding(10)
-                            .frame(width: 140, alignment: .leading)
-                            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         }
-                        .buttonStyle(.moonCard(radius: 16))
-                        .accessibilityLabel("\(d.relative(day)), show the week")
+                        .frame(width: 140, alignment: .leading)
                         if list.isEmpty {
                             Text("Nothing planned").font(Theme.font(24, .bold)).foregroundStyle(Theme.muted).padding(.top, 20)
                         } else {
@@ -193,8 +185,8 @@ struct CalendarView: View {
                     .padding(22)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-                    // Each day is a focus section: up and down go to the next day's nearest card, even when
-                    // nothing sits straight above or below, instead of skipping days.
+                    // Each day is a focus section: up and down go to the next day with something on it, landing on
+                    // its nearest card even when nothing sits straight above or below. Empty days are passed over.
                     .focusSection()
                 }
             }
