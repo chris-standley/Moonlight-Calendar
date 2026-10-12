@@ -329,7 +329,7 @@ The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 - `GET /api/immich` -> ImmichConfig
 - `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?}` -> ImmichConfig. `api_key` may be left out
   once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
-  `server_url` is the Immich address (`http://homeassistant.local:2283`; a trailing `/api` is dropped).
+  `server_url` is the Immich address (`http://192.168.1.10:2283`; a trailing `/api` is dropped).
 - `DELETE /api/immich` `{pin}` -> `{ok: true}` (forgets address, key and choice; nothing changes in Immich)
 - `POST /api/immich/test` `{pin, server_url?, api_key?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
   `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.

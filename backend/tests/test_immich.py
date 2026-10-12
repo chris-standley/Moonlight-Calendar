@@ -243,14 +243,14 @@ def test_immich_down(client, fake):
     fake.down = True
     # The cached list is kept until the next refresh; previews fail cleanly.
     r = client.get(photos[0]["url"])
-    assert r.status_code == 502 and "Couldn't reach Immich" in r.json()["detail"]
+    assert r.status_code == 502 and "Nothing answered at http://immich.test:2283" in r.json()["detail"]
     no_key(r)
     assert client.get("/api/immich").json()["status"] == "error"  # reported straight away
     immich.cache.fetched_at -= immich.REFRESH_SECONDS + 1  # time for a refresh
     body = client.get("/api/screensaver/photos").json()
     assert body["status"] == "error" and len(body["photos"]) == 3  # last good list
     cfg = client.get("/api/immich").json()
-    assert cfg["status"] == "error" and "Couldn't reach Immich" in cfg["last_error"]
+    assert cfg["status"] == "error" and "Nothing answered" in cfg["last_error"]
     r = client.post("/api/immich/test", json={"pin": PIN})
     assert r.status_code == 502
     no_key(r)
@@ -306,3 +306,33 @@ def test_paired_screen_gets_previews_unpaired_does_not(tmp_path, fake):
     assert TestClient(app, client=("192.168.1.51", 3)).get(url).status_code == 401
     # A screen can't change the source without the PIN.
     assert screen.put("/api/immich", json={"server_url": "http://evil.test", "api_key": "x"}).status_code == 403
+
+
+def test_connection_problems_say_what_to_try(client, monkeypatch):
+    import socket
+
+    def answer(req: httpx.Request) -> httpx.Response:
+        host = req.url.host
+        if host == "homeassistant.local":
+            raise httpx.ConnectError("[Errno -2] Name or service not known", request=req) from socket.gaierror(-2, "x")
+        if host == "slow.test":
+            raise httpx.ConnectTimeout("", request=req)
+        if host == "proxy.test":
+            return httpx.Response(502, text="<html>Bad Gateway</html>")
+        if host == "redirect.test":
+            return httpx.Response(301, headers={"location": "https://immich.example.com/api/albums"})
+        return httpx.Response(404, text="Not found")
+
+    def detail(url: str) -> str:
+        r = client.post("/api/immich/test", json={"pin": PIN, "server_url": url, "api_key": KEY})
+        assert r.status_code == 502, r.text
+        no_key(r)
+        return r.json()["detail"]
+
+    monkeypatch.setattr(immich, "transport", httpx.MockTransport(answer))
+    client.put("/api/settings", json={"pin": PIN, "new_pin": PIN})
+    assert "use the IP address" in detail("http://homeassistant.local:2283")
+    assert "didn't answer in time" in detail("http://slow.test:2283")
+    assert "answered 502" in detail("http://proxy.test") and "Immich is running" in detail("http://proxy.test")
+    assert "redirects to https://immich.example.com/api/albums" in detail("http://redirect.test")
+    assert "no Immich API (404)" in detail("http://other.test/photos")
