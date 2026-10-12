@@ -22,22 +22,44 @@ struct TodayScreen: View {
         let d = model.dates
         let today = d.today
         Page(title: greeting) { room in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    summaryLine
-                    let cols = room.columns(max: 3)
-                    let panels: [AnyView] = [AnyView(agenda(today: today)), AnyView(choresCard), AnyView(mealsCard(today: today)), AnyView(groceryCard)]
+            let cols = room.columns(max: 3)
+            if cols == 1 {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        summaryLine
+                        agenda(today: today)
+                        choresCard
+                        mealsCard(today: today)
+                        groceryCard
+                    }
+                    .padding(16)
+                }
+                .refreshable { await load(today) }
+            } else {
+                // Side by side, each column scrolls on its own; the shopping list sits under the meals.
+                let groups: [[AnyView]] = cols == 2
+                    ? [[AnyView(agenda(today: today))],
+                       [AnyView(choresCard), AnyView(mealsCard(today: today)), AnyView(groceryCard)]]
+                    : [[AnyView(agenda(today: today))],
+                       [AnyView(choresCard)],
+                       [AnyView(mealsCard(today: today)), AnyView(groceryCard)]]
+                VStack(alignment: .leading, spacing: 0) {
+                    summaryLine.padding([.horizontal, .top], 16)
                     HStack(alignment: .top, spacing: 16) {
-                        ForEach(0..<cols, id: \.self) { c in
-                            VStack(spacing: 16) {
-                                ForEach(Array(panels.enumerated()).filter { $0.offset % cols == c }, id: \.offset) { item in item.element }
+                        ForEach(groups.indices, id: \.self) { c in
+                            ScrollView {
+                                VStack(spacing: 16) {
+                                    ForEach(groups[c].indices, id: \.self) { groups[c][$0] }
+                                }
+                                .padding(.vertical, 16)
                             }
+                            .scrollIndicators(.hidden)
+                            .refreshable { await load(today) }
                         }
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(16)
             }
-            .refreshable { await load(today) }
         } tools: {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

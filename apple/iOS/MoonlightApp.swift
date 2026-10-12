@@ -44,8 +44,8 @@ struct RootView: View {
     }
 }
 
-/// A tab bar on iPhone (and a folded or narrow window); a sidebar on iPad and other wide windows,
-/// which people can collapse back into a tab bar. The system switches as the width changes.
+/// A tab bar everywhere by default (floating at the top on iPad, as iPadOS places it). On iPad the tab bar's
+/// sidebar button switches to a sidebar and back; the system remembers the choice.
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @SceneStorage("tab") private var tab = "today"
@@ -61,6 +61,7 @@ struct MainTabs: View {
             Tab("Settings", systemImage: "gearshape", value: "settings") { SettingsScreen() }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .defaultAdaptableTabBarPlacement(.tabBar)
         .task { await model.refreshWeatherPeriodically() }
         // Keep reminders and Siri's list of people and lists in step with the family's data.
         .task(id: model.rev("events", "chores", "people", "settings", "reminders")) {
