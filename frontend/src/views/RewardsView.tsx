@@ -158,9 +158,9 @@ function RewardForm({ reward, onClose }: { reward?: Reward; onClose: () => void 
         <div className="emoji-grid">{emojis.map((e) => <button key={e} className={e === emoji ? "on" : ""} onClick={() => setEmoji(e)}>{e}</button>)}</div>
         <label className="field-label">Cost</label>
         <div className="stepper">
-          <button className="icon-btn" onClick={() => setCost(Math.max(1, cost - 5))}>−</button>
+          <button className="icon-btn" onClick={() => setCost(Math.max(1, cost - 1))}>−</button>
           <span><IconStar size={20} filled /> {cost}</span>
-          <button className="icon-btn" onClick={() => setCost(cost + 5)}>+</button>
+          <button className="icon-btn" onClick={() => setCost(cost + 1)}>+</button>
         </div>
         <label className="field-label">For</label>
         <div className="chip-row">
