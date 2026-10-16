@@ -135,3 +135,14 @@ extension ButtonStyle where Self == PillButtonStyle {
     static var pill: PillButtonStyle { PillButtonStyle() }
     static var pillProminent: PillButtonStyle { PillButtonStyle(prominent: true) }
 }
+
+extension Settings {
+    /// The household's appearance choice; nil follows the device's own light/dark setting.
+    var colorScheme: ColorScheme? {
+        switch theme {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+    }
+}

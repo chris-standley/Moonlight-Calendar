@@ -35,7 +35,10 @@ def day_forecast(d: date) -> dict:
     elif cond in ("pouring", "lightning-rainy", "fog"):
         high -= 1
     low = high - 4 - round(_rand(f"{d}:low") * 5)      # 4..9 below the high
-    return {"date": d.isoformat(), "high": high, "low": low, "condition": cond}
+    wet = {"rainy": (40, 40), "pouring": (70, 30), "lightning-rainy": (60, 30), "cloudy": (10, 25), "fog": (0, 20),
+           "partlycloudy": (0, 20), "windy": (0, 25)}.get(cond, (0, 0))
+    rain = round((wet[0] + _rand(f"{d}:rain") * wet[1]) / 5) * 5    # % chance of rain, in steps of 5
+    return {"date": d.isoformat(), "high": high, "low": low, "condition": cond, "rain": rain}
 
 
 def forecast(today: date | None = None, now: datetime | None = None, days: int = 10) -> dict:

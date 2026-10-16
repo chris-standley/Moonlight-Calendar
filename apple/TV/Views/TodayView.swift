@@ -49,19 +49,19 @@ struct TodayView: View {
             Text("Coming up").font(Theme.font(34, .heavy)).foregroundStyle(Theme.text)
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if events.isEmpty {
-                        EmptyNote(text: "Nothing planned today or tomorrow")
-                    }
                     ForEach([today, d.addDays(today, 1)], id: \.self) { day in
                         let dayEvents = AgendaItem.make(events.filter { d.overlaps($0, day: day) }
                             .filter { day != today || $0.all_day || $0.isBusyBlock || $0.end > d.now }, day: day)
-                        if !dayEvents.isEmpty {
+                        HStack {
                             Text(d.relative(day).uppercased())
                                 .font(Theme.font(22, .heavy)).kerning(1.5)
                                 .foregroundStyle(day == today ? Theme.accent : Theme.muted)
-                                .padding(.top, 8)
-                            ForEach(dayEvents) { item in AgendaCard(item: item) { open = $0 } }
+                            Spacer()
+                            if let w = model.weather?.day(day) { DayWeather(day: w, size: 24) }
                         }
+                        .padding(.top, 8)
+                        if dayEvents.isEmpty { EmptyNote(text: "Nothing planned") }
+                        ForEach(dayEvents) { item in AgendaCard(item: item) { open = $0 } }
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 40)  // room for a focused card's shadow at the ends

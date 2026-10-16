@@ -122,17 +122,19 @@ struct TodayScreen: View {
     private func agenda(today: String) -> some View {
         let d = model.dates
         return Card(title: "Coming up") {
-            if events.isEmpty { EmptyHint(text: "Nothing planned today or tomorrow") }
             ForEach([today, d.addDays(today, 1)], id: \.self) { day in
                 // Today leaves out what's over, but keeps the whole day's busy line.
                 let list = AgendaItem.make(events.filter { d.overlaps($0, day: day) }
                     .filter { day != today || $0.all_day || $0.isBusyBlock || $0.end > d.now }, day: day)
-                if !list.isEmpty {
+                HStack {
                     Text(d.relative(day).uppercased())
                         .font(Theme.text(.caption, .heavy)).kerning(1)
                         .foregroundStyle(day == today ? Theme.accent : Theme.muted)
-                    ForEach(list) { item in AgendaRow(item: item) { open = $0 } }
+                    Spacer()
+                    if let w = model.weather?.day(day) { DayWeather(day: w, size: 15) }
                 }
+                if list.isEmpty { EmptyHint(text: "Nothing planned") }
+                ForEach(list) { item in AgendaRow(item: item) { open = $0 } }
             }
         }
     }

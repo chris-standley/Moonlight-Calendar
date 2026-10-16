@@ -60,12 +60,43 @@ struct Slideshow: View {
             }
             TimelineView(.everyMinute) { ctx in
                 VStack(alignment: .leading, spacing: 4) {
+                    // Weather on top, then the clock and date, as on the screens' photo screensaver.
+                    if let w = model.weather {
+                        HStack(spacing: 12) {
+                            WeatherGlyph(condition: w.current.condition, size: 44)
+                            Text("\(w.current.temp)°").font(Theme.font(44, .heavy))
+                            if let d = w.day(model.dates.today) {
+                                Text("\(d.high)° / \(d.low)°").font(Theme.font(30, .bold)).opacity(0.9)
+                            }
+                        }
+                        .padding(.bottom, 6)
+                    }
                     Text(model.dates.clock(ctx.date)).font(Theme.font(96, .heavy))
                     Text(model.dates.longDate(ctx.date)).font(Theme.font(34, .bold)).opacity(0.85)
                 }
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.5), radius: 16)
                 .padding(70)
+            }
+            if model.settings?.photo_details != false, !photos.isEmpty {
+                let photo = photos[index % photos.count]
+                let place = (photo.place?.isEmpty == false) ? photo.place : nil
+                if photo.takenText != nil || place != nil {
+                    // When and where it was taken, the place underneath, and a camera so it reads as the photo's details.
+                    HStack(spacing: 14) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            if let when = photo.takenText { Text(when).font(Theme.font(24, .bold)) }
+                            if let place { Text(place).font(Theme.font(22, .semibold)).opacity(0.9) }
+                        }
+                        Image(systemName: "camera").font(.system(size: 28, weight: .semibold))
+                    }
+                    .foregroundStyle(.white.opacity(0.85))
+                    .shadow(color: .black.opacity(0.6), radius: 10)
+                    .padding(.top, 50).padding(.trailing, 70)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .id("caption\(index)")
+                    .transition(.opacity)
+                }
             }
             if paused {
                 Image(systemName: "pause.fill").font(.system(size: 60)).foregroundStyle(.white.opacity(0.8))

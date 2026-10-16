@@ -398,6 +398,12 @@ export function ScreensaverPanel({ onScreensaver }: { onScreensaver: () => void 
         <Segmented value={String(secs)} onChange={(v) => save({ screensaver_seconds: Number(v) }, "Change photo timing")}
           options={[5, 10, 20, 30, 60].map((v) => ({ value: String(v), label: `${v}s` }))} />
       </div>
+      <div className="set-col"><span>When and where each photo was taken</span>
+        <Segmented value={settings?.photo_details === false ? "hide" : "show"}
+          onChange={(v) => save({ photo_details: v === "show" }, "Change photo details")}
+          options={[{ value: "show", label: "Show" }, { value: "hide", label: "Hide" }]} />
+      </div>
+      <p className="muted connect-note">Places use your Home Assistant zones (like Home) when a photo was taken inside one, otherwise the town.</p>
       <p className="muted connect-note">When each screen starts the screensaver is set per screen under Screens.</p>
       <div className="set-row"><span>Try it</span><button className="btn ghost" onClick={onScreensaver}>Show now</button></div>
       {editing && cfg && <ImmichSheet cfg={cfg} onClose={() => setEditing(false)} />}

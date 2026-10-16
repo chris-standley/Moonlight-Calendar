@@ -30,7 +30,8 @@ def ha_forecast(n=12, start=TODAY - timedelta(days=1), high=15.4, low=7.6, cond=
     # Daily entries at local midnight in Europe/London (BST) expressed in UTC, like many integrations.
     return {"changed_states": [], "service_response": {ENTITY: {"forecast": [
         {"datetime": f"{(start + timedelta(days=i - 1)).isoformat()}T23:00:00+00:00",
-         "temperature": high + i, "templow": low, "condition": "snowy-rainy" if i == 2 else cond}
+         "temperature": high + i, "templow": low, "condition": "snowy-rainy" if i == 2 else cond,
+         **({"precipitation_probability": 64.6} if i == 1 else {})}
         for i in range(n)]}}}
 
 
@@ -103,6 +104,8 @@ def test_success_shape():
     # Yesterday dropped, dates converted to local, 10 days max, unknown conditions mapped.
     assert [d["date"] for d in w["daily"]] == [(TODAY + timedelta(days=i)).isoformat() for i in range(10)]
     assert w["daily"][0]["condition"] == "rainy" and w["daily"][1]["condition"] == "snowy"
+    # Chance of rain rounded to a whole percent; missing stays null.
+    assert w["daily"][0]["rain"] == 65 and w["daily"][1]["rain"] is None
     assert len(fake.calls) == 2
 
 
@@ -112,7 +115,7 @@ def test_get_weather_converts_and_rounds():
     c = run(ha_client.get_weather("C"))
     assert c["source"] == "homeassistant" and c["entity"] == ENTITY and c["unit"] == "C"
     assert c["current"]["temp"] == 15
-    assert c["daily"][0] == {"date": TODAY.isoformat(), "high": 16, "low": 8, "condition": "rainy"}
+    assert c["daily"][0] == {"date": TODAY.isoformat(), "high": 16, "low": 8, "condition": "rainy", "rain": 65}
     f = run(ha_client.get_weather("F"))
     assert f["unit"] == "F" and f["current"]["temp"] == 58      # 14.6 C = 58.3 F
     assert f["daily"][0]["high"] == 62 and f["daily"][0]["low"] == 46  # 16.4 C, 7.6 C

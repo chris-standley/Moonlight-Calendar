@@ -387,3 +387,38 @@ def test_self_signed_https_needs_skip_cert_check(client, monkeypatch, tmp_path):
         assert r.status_code == 502, r.text
     finally:
         server.shutdown()
+
+
+def test_place_name_prefers_ha_zone_then_town():
+    zones = [{"name": "Home", "latitude": 51.5, "longitude": -0.1, "radius": 100.0},
+             {"name": "Peppa Pig World", "latitude": 50.9568, "longitude": -1.5378, "radius": 400.0},
+             {"name": "Hampshire", "latitude": 50.95, "longitude": -1.53, "radius": 20000.0}]
+    # Inside two zones: the smaller (more specific) one wins.
+    assert immich.place_name({"latitude": 50.9570, "longitude": -1.5380, "city": "Romsey"}, zones) == "Peppa Pig World"
+    assert immich.place_name({"latitude": 51.5004, "longitude": -0.1, "city": "London"}, zones) == "Home"
+    # Outside every zone: the town Immich worked out, else region, else country.
+    assert immich.place_name({"latitude": 48.85, "longitude": 2.35, "city": "Paris"}, zones) == "Paris"
+    assert immich.place_name({"state": "Brittany", "country": "France"}, zones) == "Brittany"
+    assert immich.place_name({"country": "France"}, []) == "France"
+    assert immich.place_name({}, zones) is None
+
+
+def test_photos_carry_place_from_zones(client, fake, monkeypatch):
+    async def zones():
+        return [{"name": "Home", "latitude": 51.5, "longitude": -0.1, "radius": 100.0}]
+    monkeypatch.setattr(immich.ha_client, "zones", zones)
+    home, away, unknown = fake.photos[fake.holiday][:3]
+    home["exifInfo"] = {"latitude": 51.5001, "longitude": -0.1001, "city": "London"}
+    away["exifInfo"] = {"latitude": 50.72, "longitude": -3.53, "city": "Exeter"}
+    connect(client, fake)
+    places = {p["id"]: p["place"] for p in client.get("/api/screensaver/photos").json()["photos"]}
+    assert places == {home["id"]: "Home", away["id"]: "Exeter", unknown["id"]: None}
+    # Moonlight asks Immich for the EXIF data that holds the location.
+    searches = [json.loads(q.content) for q in fake.requests if q.url.path == "/api/search/metadata"]
+    assert searches and all(s["withExif"] is True for s in searches)
+
+
+def test_photo_details_setting(client):
+    assert client.get("/api/settings").json()["photo_details"] is True
+    assert client.patch("/api/settings", json={"pin": PIN, "photo_details": False}).json()["photo_details"] is False
+    assert client.patch("/api/settings", json={"pin": PIN, "photo_details": "no"}).status_code == 400

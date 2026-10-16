@@ -253,7 +253,9 @@ export function demoWeather(): Weather {
   const daily = Array.from({ length: 10 }, (_, i) => {
     const date = addDays(t, i), h = hash(date);
     const high = 11 + (h % 8), low = high - 4 - ((h >> 4) % 4);
-    return { date, high, low, condition: CONDITIONS[(h >> 8) % CONDITIONS.length] };
+    const condition = CONDITIONS[(h >> 8) % CONDITIONS.length];
+    const wet = ({ rainy: 40, pouring: 70, cloudy: 10 } as Record<string, number>)[condition] ?? 0;
+    return { date, high, low, condition, rain: wet && wet + ((h >> 12) % 6) * 5 };
   });
   const hour = new Date().getHours();
   const cur = daily[0];

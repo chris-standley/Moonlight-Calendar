@@ -71,11 +71,36 @@ struct WeatherGlyph: View {
         case "fog": "cloud.fog.fill"
         case "rainy": "cloud.rain.fill"
         case "pouring": "cloud.heavyrain.fill"
-        case "lightning-rainy": "cloud.bolt.rain.fill"
+        case "lightning-rainy", "lightning": "cloud.bolt.rain.fill"
         case "snowy": "cloud.snow.fill"
         case "windy": "wind"
         default: "cloud.fill"
         }
+    }
+}
+
+/// A day's forecast on one line: icon, high, low, and the chance of rain when there is any.
+struct DayWeather: View {
+    let day: Weather.Day
+    var size: CGFloat = 17
+
+    var body: some View {
+        HStack(spacing: size * 0.35) {
+            WeatherGlyph(condition: day.condition, size: size * 1.2)
+            Text("\(day.high)°").font(Theme.font(size, .heavy)).foregroundStyle(Theme.text)
+            Text("\(day.low)°").font(Theme.font(size, .bold)).foregroundStyle(Theme.muted)
+            if let rain = day.rain, rain > 0 {
+                Label("\(rain)%", systemImage: "drop.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(Theme.font(size * 0.8, .heavy))
+                    .foregroundStyle(Color(hex: "#2F74C8"))
+                    .padding(.horizontal, size * 0.45).padding(.vertical, size * 0.12)
+                    .background(Color(hex: "#2F74C8").opacity(0.12), in: Capsule())
+                    .accessibilityLabel("\(rain)% chance of rain")
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 }
 

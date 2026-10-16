@@ -495,6 +495,7 @@ def test_weather_deterministic(client):
     ok = {"sunny", "partlycloudy", "cloudy", "rainy", "pouring", "snowy", "fog", "windy", "lightning-rainy",
           "clear-night"}
     assert all(d["condition"] in ok and d["low"] < d["high"] for d in w["daily"])
+    assert all(0 <= d["rain"] <= 100 for d in w["daily"])
     assert w["current"]["condition"] in ok
 
 
@@ -639,3 +640,10 @@ def test_public_holidays_and_skipping_them(client):
         assert client.patch("/api/settings", json={"pin": PIN, "holidays": bad}).status_code == 400, bad
     assert client.post("/api/chores", json={"title": "x", "person_id": kid["id"], "points": 1, "time_of_day": "morning",
                                             "schedule": {"type": "daily", "skip_holidays": "yes"}}).status_code == 400
+
+
+def test_theme_setting(client):
+    assert client.get("/api/settings").json()["theme"] == "auto"
+    pin = {"pin": PIN}
+    assert client.patch("/api/settings", json={**pin, "theme": "dark"}).json()["theme"] == "dark"
+    assert client.patch("/api/settings", json={**pin, "theme": "purple"}).status_code == 400

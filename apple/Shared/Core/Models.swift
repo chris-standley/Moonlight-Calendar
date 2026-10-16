@@ -17,9 +17,13 @@ struct Settings: Codable {
     var family_name: String
     var week_start: String
     var temp_unit: String
+    /// "light", "dark", or "auto" (follow the device), chosen in Settings > Display > Appearance.
+    var theme: String?
     var pin_set: Bool
     var timezone: String?
     var screensaver_seconds: Int?
+    /// Show when and where each photo was taken (default true).
+    var photo_details: Bool?
     var media_players: [String: String]?
 }
 
@@ -136,7 +140,11 @@ struct Meal: Codable, Identifiable, Hashable {
 
 struct Weather: Codable {
     struct Current: Codable { let temp: Int; let condition: String }
-    struct Day: Codable, Hashable { let date: String; let high: Int; let low: Int; let condition: String }
+    struct Day: Codable, Hashable {
+        let date: String; let high: Int; let low: Int; let condition: String
+        /// Chance of rain or snow in percent; nil when the weather source doesn't say.
+        let rain: Int?
+    }
     let current: Current
     let daily: [Day]
 
@@ -165,6 +173,30 @@ struct NowPlaying: Codable, Equatable {
 struct Photo: Codable, Identifiable, Hashable {
     let id: String
     let url: String
+    /// Local time where it was taken, written with a Z: its digits are used as they are.
+    var taken_at: String? = nil
+    /// The Home Assistant zone it was taken in ("Home"), or the town.
+    var place: String? = nil
+
+    /// "14 July 2025 · 3:30pm", or nil when Immich doesn't know.
+    var takenText: String? {
+        var parts: [String] = []
+        let digits = taken_at.map { String($0.prefix(16)) } ?? ""
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        if let d = parser.date(from: digits) {
+            let out = DateFormatter()
+            out.locale = Locale(identifier: "en_GB")
+            out.dateFormat = "d MMMM yyyy"
+            parts.append(out.string(from: d))
+            out.dateFormat = Calendar.current.component(.minute, from: d) == 0 ? "ha" : "h:mma"
+            out.amSymbol = "am"
+            out.pmSymbol = "pm"
+            parts.append(out.string(from: d))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }
 
 struct PhotoList: Codable {

@@ -9,6 +9,7 @@ struct MoonlightApp: App {
             RootView()
                 .environment(model)
                 .task { await model.start() }
+                .preferredColorScheme(model.settings?.colorScheme)
         }
     }
 }
