@@ -418,9 +418,14 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ss-info { position: absolute; left: 3rem; bottom: 2.6rem; text-shadow: 0 0.1rem 1rem rgba(0, 0, 0, 0.35); }
 .ss-time { font-size: 6rem; font-weight: 800; line-height: 1; letter-spacing: -0.03em; }
 .ss-date { font-size: 1.8rem; font-weight: 700; margin-top: 0.3rem; }
-.ss-wx { display: flex; align-items: center; gap: 0.4rem; font-size: 1.6rem; font-weight: 800; margin-top: 0.6rem; }
-.ss-next { margin-top: 0.8rem; font-size: 1.3rem; font-weight: 600; padding: 0.5rem 1rem; border-radius: 1rem; background: rgba(0, 0, 0, 0.25); display: inline-block; }
-.ss-family { position: absolute; right: 3rem; bottom: 2.6rem; font-size: 1.2rem; font-weight: 800; opacity: 0.8; }
+/* Weather on top, then the clock and date. The icon gets its own shadow (text-shadow doesn't reach SVG), so a
+   pale cloud still shows on a bright photo. */
+.ss-wx { display: flex; align-items: center; gap: 0.45rem; font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; }
+.ss-wx svg { filter: drop-shadow(0 0.1rem 0.5rem rgba(0, 0, 0, 0.45)); }
+.ss-hilo { display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.5rem; font-size: 1.3rem; font-weight: 700; opacity: 0.9; }
+.ss-right { position: absolute; right: 3rem; bottom: 2.6rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1rem; max-width: 45%; }
+.screensaver .ss-right .ss-np { position: static; }
+.ss-next { font-size: 1.3rem; font-weight: 600; padding: 0.5rem 1rem; border-radius: 1rem; background: rgba(0, 0, 0, 0.3); text-shadow: 0 0.1rem 1rem rgba(0, 0, 0, 0.35); }
 
 /* ---------- kitchen (10in, 960x600 css px) ---------- */
 .layout-compact .rail { width: 4.9rem; padding: 0.6rem 0.3rem; gap: 0.15rem; }
@@ -504,7 +509,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-phone .fab { bottom: 1rem; right: 1rem; width: 3.6rem; height: 3.6rem; }
 .layout-phone .ss-info { left: 1.4rem; bottom: 2rem; }
 .layout-phone .ss-time { font-size: 4rem; }
-.layout-phone .ss-family { display: none; }
+.layout-phone .ss-right { left: 1.2rem; right: 1.2rem; top: 1.4rem; bottom: auto; align-items: stretch; max-width: none; }
 
 /* ---------- preview shell (published demo only) ---------- */
 .preview { height: 100%; display: flex; flex-direction: column; background: #1d1f2b; font-size: 14px; }

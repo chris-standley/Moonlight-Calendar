@@ -2,7 +2,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
-import { WeatherIcon } from "../components/icons";
+import { IconDrop, WeatherIcon } from "../components/icons";
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 
 // Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
@@ -53,6 +53,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
   const { np } = useMedia();
   const music = !!np?.show && np.state === "playing";
+  const day = weather?.daily.find((d) => d.date === t);
   return (
     <div className="screensaver" onClick={onWake}>
       {data && (usePhotos
@@ -60,12 +61,17 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
         : <SceneShow seconds={seconds} />)}
       <div className="ss-shade" />
       <div className="ss-info">
+        {weather && <div className="ss-wx">
+          <WeatherIcon condition={weather.current.condition} size={44} /> {weather.current.temp}°
+          {day && <span className="ss-hilo">{day.high}° / {day.low}°{!!day.rain && <> · <IconDrop size={18} />{day.rain}%</>}</span>}
+        </div>}
         <div className="ss-time">{now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
         <div className="ss-date">{fmtFull(t)}</div>
-        {weather && <div className="ss-wx"><WeatherIcon condition={weather.current.condition} size={36} /> {weather.current.temp}°</div>}
+      </div>
+      <div className="ss-right">
+        {music && <ScreensaverNowPlaying />}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
-      {music ? <ScreensaverNowPlaying /> : <div className="ss-family">{settings?.family_name}</div>}
     </div>
   );
 }

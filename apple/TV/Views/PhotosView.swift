@@ -60,6 +60,17 @@ struct Slideshow: View {
             }
             TimelineView(.everyMinute) { ctx in
                 VStack(alignment: .leading, spacing: 4) {
+                    // Weather on top, then the clock and date, as on the screens' photo screensaver.
+                    if let w = model.weather {
+                        HStack(spacing: 12) {
+                            WeatherGlyph(condition: w.current.condition, size: 44)
+                            Text("\(w.current.temp)°").font(Theme.font(44, .heavy))
+                            if let d = w.day(model.dates.today) {
+                                Text("\(d.high)° / \(d.low)°").font(Theme.font(30, .bold)).opacity(0.9)
+                            }
+                        }
+                        .padding(.bottom, 6)
+                    }
                     Text(model.dates.clock(ctx.date)).font(Theme.font(96, .heavy))
                     Text(model.dates.longDate(ctx.date)).font(Theme.font(34, .bold)).opacity(0.85)
                 }
