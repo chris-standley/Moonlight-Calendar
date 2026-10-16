@@ -7,6 +7,8 @@ export interface Settings {
   family_name: string;
   week_start: "monday" | "sunday";
   temp_unit: "C" | "F";
+  /** Light, dark, or "auto" (match the device's own setting; the default). */
+  theme?: Theme;
   pin_set: boolean;
   chore_approval: boolean;
   /** Photo screensaver: seconds per photo, idle minutes per screen (0 = never). Photos come from Immich. */
@@ -103,6 +105,8 @@ export interface Weather {
   /** `rain`: chance of rain or snow that day in percent, null when the weather entity doesn't say. */
   daily: { date: string; high: number; low: number; condition: string; rain?: number | null }[];
 }
+
+export type Theme = "auto" | "light" | "dark";
 
 /** Screen style: a big wall screen, a small touch screen, a phone. */
 export type Layout = "large" | "compact" | "phone";

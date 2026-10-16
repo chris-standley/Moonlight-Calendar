@@ -11,6 +11,7 @@ struct MoonlightApp: App {
                 .environment(model)
                 .task { await model.start() }
                 .tint(Theme.accent)
+                .preferredColorScheme(model.settings?.colorScheme)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .background, let api = model.api else { return }

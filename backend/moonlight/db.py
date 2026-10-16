@@ -175,6 +175,7 @@ DEFAULT_SETTINGS = {
     "family_name": "Our Family",
     "week_start": "monday",
     "temp_unit": "C",
+    "theme": "auto",  # light, dark, or auto (match each device's own light/dark setting)
     "chore_approval": False,
     # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,

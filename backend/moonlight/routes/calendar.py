@@ -84,6 +84,8 @@ async def patch_settings(body: dict = Body(...)):
             db.set_setting(c, "week_start", choice(body["week_start"], "week_start", ("monday", "sunday")))
         if "temp_unit" in body:
             db.set_setting(c, "temp_unit", choice(body["temp_unit"], "temp_unit", ("C", "F")))
+        if "theme" in body:
+            db.set_setting(c, "theme", choice(body["theme"], "theme", ("auto", "light", "dark")))
         if "chore_approval" in body:
             if not isinstance(body["chore_approval"], bool):
                 raise bad("chore_approval must be a boolean")

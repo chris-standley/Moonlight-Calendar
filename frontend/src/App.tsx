@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Api, DEFAULT_SCREENS, Display, Person, Section, Settings } from "./api/types";
+import { Api, DEFAULT_SCREENS, Display, Person, Section, Settings, Theme } from "./api/types";
 import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
@@ -27,6 +27,23 @@ const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode 
   { key: "lists", label: "Lists", icon: IconLists },
   { key: "settings", label: "Settings", icon: IconSettings },
 ];
+const THEME_KEY = "moonlight-theme";
+/** Light or dark, from Settings > Display > Appearance; "auto" follows the device and changes with it. The last
+ * choice is remembered on the device so the screen doesn't flash light while settings load. */
+function useTheme(theme: Theme | undefined) {
+  useEffect(() => {
+    let want = theme;
+    if (want) { try { localStorage.setItem(THEME_KEY, want); } catch { /* private mode */ } }
+    else { try { want = (localStorage.getItem(THEME_KEY) as Theme | null) ?? "auto"; } catch { want = "auto"; } }
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => { document.documentElement.dataset.theme = want === "auto" ? (media.matches ? "dark" : "light") : want; };
+    apply();
+    if (want !== "auto") return;
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [theme]);
+}
+
 const IDLE_MS = { large: 5 * 60_000, compact: 3 * 60_000, phone: 0 };
 
 interface Burst { id: number; x: number; y: number; color: string }
@@ -64,6 +81,8 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
     const l = screen?.layout;
     if (l && l !== "service" && l !== "app" && l !== layout) onLayout?.(l);
   }, [screen?.layout, layout, onLayout]);
+
+  useTheme(settings?.theme);
 
   // Idle -> photo screensaver (minutes per screen, else per style from settings; 0 = never).
   const idleMin = screen?.setup?.idle_minutes ?? settings?.idle_minutes?.[layout];

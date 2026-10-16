@@ -12,7 +12,7 @@ The frontend has two interchangeable clients: HTTP (talks to this API) and Demo 
 implementation of the same contract, used for the published preview). Keep them in step.
 
 ## Settings
-- `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
+- `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
   media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
@@ -20,6 +20,7 @@ implementation of the same contract, used for the published preview). Keep them 
   screen uses until it has its own setup (see Screens).
   `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per style, 0 = never
   (default `{large: 5, compact: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
+  `theme` (default `auto`) = light or dark for every screen and the Apple apps; `auto` follows each device's own setting.
   `photo_details` (default true) = show when and where each photo was taken, small at the top right.
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
@@ -32,7 +33,7 @@ implementation of the same contract, used for the published preview). Keep them 
   `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
   code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
   (otherwise none). Dates come from the `holidays` package (see Public holidays).
-- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
+- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, theme, chore_approval, timezone,
   screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays`, plus `pin` (required) -> settings.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`

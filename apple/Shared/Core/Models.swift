@@ -17,6 +17,8 @@ struct Settings: Codable {
     var family_name: String
     var week_start: String
     var temp_unit: String
+    /// "light", "dark", or "auto" (follow the device), chosen in Settings > Display > Appearance.
+    var theme: String?
     var pin_set: Bool
     var timezone: String?
     var screensaver_seconds: Int?
