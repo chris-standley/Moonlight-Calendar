@@ -43,6 +43,7 @@ export const IconTrash = ({ size, ...p }: P) => <svg {...base(size, p)}><path d=
 export const IconDrop = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0012 0C18 10.1 12 3.5 12 3.5z" fill="currentColor" /></svg>
 );
+export const IconCamera = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M4 8h3l1.6-2.4h6.8L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" /><circle cx="12" cy="13.2" r="3.4" /></svg>;
 export const IconPin = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0113 0c0 5-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg>;
 export const IconRepeat = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M17 2.5l3 3-3 3" /><path d="M4 11.5v-1a5 5 0 015-5h11M7 21.5l-3-3 3-3" /><path d="M20 12.5v1a5 5 0 01-5 5H4" /></svg>;
 export const IconCart = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M3 4h2.5l2.2 11h10.6l2-8H7" /><circle cx="9.5" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>;

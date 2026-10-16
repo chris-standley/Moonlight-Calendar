@@ -2,7 +2,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
-import { IconDrop, WeatherIcon } from "../components/icons";
+import { IconCamera, IconDrop, WeatherIcon } from "../components/icons";
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 
 // Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
@@ -78,17 +78,19 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   );
 }
 
-/** When and where the photo on screen was taken, small at the top right: "14 July 2025 · 3:30pm · Home". */
+/** When and where the photo on screen was taken, small at the top right: "14 July 2025 · 3:30pm", the place
+ * underneath, and a camera beside them so it reads as the photo's details rather than today's. */
 function PhotoCaption({ photo }: { photo: SlidePhoto }) {
   // Immich's local time is the wall clock where the photo was taken; use its digits as they are.
   const taken = photo.taken_at?.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)?.[0];
-  const parts = [
-    taken && parse(taken).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
-    taken && fmtTime(taken),
-    photo.place,
-  ].filter(Boolean);
-  if (!parts.length) return null;
-  return <div key={photo.id} className="ss-caption">{parts.join(" · ")}</div>;
+  const when = taken && `${parse(taken).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} · ${fmtTime(taken)}`;
+  if (!when && !photo.place) return null;
+  return (
+    <div key={photo.id} className="ss-caption">
+      <span className="ss-cap-text">{when && <span>{when}</span>}{photo.place && <span>{photo.place}</span>}</span>
+      <IconCamera size={22} />
+    </div>
+  );
 }
 
 function SceneShow({ seconds }: { seconds: number }) {

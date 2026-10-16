@@ -78,15 +78,25 @@ struct Slideshow: View {
                 .shadow(color: .black.opacity(0.5), radius: 16)
                 .padding(70)
             }
-            if model.settings?.photo_details != false, !photos.isEmpty, let caption = photos[index % photos.count].caption {
-                Text(caption)
-                    .font(Theme.font(24, .bold))
+            if model.settings?.photo_details != false, !photos.isEmpty {
+                let photo = photos[index % photos.count]
+                let place = (photo.place?.isEmpty == false) ? photo.place : nil
+                if photo.takenText != nil || place != nil {
+                    // When and where it was taken, the place underneath, and a camera so it reads as the photo's details.
+                    HStack(spacing: 14) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            if let when = photo.takenText { Text(when).font(Theme.font(24, .bold)) }
+                            if let place { Text(place).font(Theme.font(22, .semibold)).opacity(0.9) }
+                        }
+                        Image(systemName: "camera").font(.system(size: 28, weight: .semibold))
+                    }
                     .foregroundStyle(.white.opacity(0.85))
                     .shadow(color: .black.opacity(0.6), radius: 10)
                     .padding(.top, 50).padding(.trailing, 70)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .id("caption\(index)")
                     .transition(.opacity)
+                }
             }
             if paused {
                 Image(systemName: "pause.fill").font(.system(size: 60)).foregroundStyle(.white.opacity(0.8))

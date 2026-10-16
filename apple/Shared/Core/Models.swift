@@ -176,8 +176,8 @@ struct Photo: Codable, Identifiable, Hashable {
     /// The Home Assistant zone it was taken in ("Home"), or the town.
     var place: String? = nil
 
-    /// "14 July 2025 · 3:30pm · Home", or nil when Immich knows neither.
-    var caption: String? {
+    /// "14 July 2025 · 3:30pm", or nil when Immich doesn't know.
+    var takenText: String? {
         var parts: [String] = []
         let digits = taken_at.map { String($0.prefix(16)) } ?? ""
         let parser = DateFormatter()
@@ -193,7 +193,6 @@ struct Photo: Codable, Identifiable, Hashable {
             out.pmSymbol = "pm"
             parts.append(out.string(from: d))
         }
-        if let place, !place.isEmpty { parts.append(place) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
