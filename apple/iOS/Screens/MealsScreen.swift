@@ -30,6 +30,7 @@ struct MealsScreen: View {
         let days = d.days(from: start, count: 7)
         Page(title: "Meals") { room in
             ScrollView {
+                MealsModePicker(mode: $mode).padding(.horizontal, 16).padding(.top, 8)
                 if room == .narrow {
                     VStack(spacing: 12) {
                         ForEach(days, id: \.self) { day in dayCard(day) }
@@ -44,7 +45,6 @@ struct MealsScreen: View {
             ToolbarItem(placement: .topBarLeading) {
                 DateStepper(label: "This week", onToday: { anchor = nil }) { anchor = d.addDays(start, 7 * $0) }
             }
-            ToolbarItem(placement: .principal) { MealsModePicker(mode: $mode) }
         }
         .task(id: "\(start)|\(model.rev("meals"))") {
             if let v = await model.call({ try await $0.meals(start, d.addDays(start, 7)) }) { meals = v }

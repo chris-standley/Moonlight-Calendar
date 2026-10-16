@@ -20,6 +20,7 @@ struct RecipesScreen: View {
             Adaptive { room, _ in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        MealsModePicker(mode: $mode)
                         chips
                         if recipes.isEmpty && loaded {
                             EmptyHint(text: "No recipes yet. Tap + to type one in, scan a cookbook page or bring one in from a link.")
@@ -41,7 +42,6 @@ struct RecipesScreen: View {
             .navigationTitle("Recipes")
             .searchable(text: $query, prompt: "Recipes or ingredients")
             .toolbar {
-                ToolbarItem(placement: .principal) { MealsModePicker(mode: $mode) }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("Sort", selection: $sort) {
@@ -173,6 +173,7 @@ struct MealsModePicker: View {
             Text("Recipes").tag("recipes")
         }
         .pickerStyle(.segmented)
-        .frame(width: 200)
+        .frame(maxWidth: 360)
+        .frame(maxWidth: .infinity)
     }
 }
