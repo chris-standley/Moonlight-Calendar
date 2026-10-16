@@ -50,16 +50,35 @@ struct StarBadge: View {
     }
 }
 
-/// Home Assistant weather conditions as multicolour SF Symbols.
+/// Home Assistant weather conditions as SF Symbols, coloured so clouds and the moon show on light and dark
+/// backgrounds alike (the system's multicolour versions draw them white).
 struct WeatherGlyph: View {
     let condition: String
     var size: CGFloat = 30
 
+    private static let cloud = Color(red: 0.55, green: 0.6, blue: 0.68)
+    private static let sun = Color(red: 1.0, green: 0.72, blue: 0.1)
+
     var body: some View {
         Image(systemName: Self.symbol(condition))
-            .symbolRenderingMode(.multicolor)
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(colors.0, colors.1, colors.2)
             .font(.system(size: size))
             .accessibilityLabel(condition)
+    }
+
+    /// Palette layers: the main shape first (cloud or moon), then what's in front of or falling from it.
+    private var colors: (Color, Color, Color) {
+        let rain = Color(red: 0.25, green: 0.55, blue: 0.95)
+        switch condition {
+        case "sunny": return (Self.sun, Self.sun, Self.sun)
+        case "clear-night": return (Color(red: 0.55, green: 0.55, blue: 0.9), Self.sun, Self.sun)
+        case "partlycloudy": return (Self.cloud, Self.sun, Self.sun)
+        case "rainy", "pouring": return (Self.cloud, rain, rain)
+        case "lightning-rainy", "lightning": return (Self.cloud, Self.sun, rain)
+        case "snowy": return (Self.cloud, Color(red: 0.45, green: 0.75, blue: 0.95), rain)
+        default: return (Self.cloud, Self.cloud, Self.cloud)
+        }
     }
 
     static func symbol(_ c: String) -> String {
