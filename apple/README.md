@@ -6,6 +6,7 @@ Native SwiftUI apps in one Xcode project (`Moonlight.xcodeproj`), in the same lo
 |---|---|---|
 | `Moonlight` | iPhone and iPad (iOS/iPadOS 18+) | **Moonlight** |
 | `MoonlightTV` | Apple TV (tvOS 18+) | **Moonlight TV** |
+| `CookingWidget` | Inside the iPhone app: the cooking Live Activity | (built with **Moonlight**) |
 
 Both share one bundle id, so a future App Store listing can be a single universal purchase.
 
@@ -24,6 +25,25 @@ iPhone, a phone that unfolds, iPad Split View and Slide Over, Stage Manager wind
 | Wide (≥ 1000 pt: iPad full screen) | As medium, with three columns on Today and up to four people side by side. |
 
 Text uses the system's text styles in the rounded design, so Dynamic Type works.
+
+### Recipes
+
+Meals › Recipes is the family recipe box: search, favourites, tags, and a page per recipe with its picture, rating,
+times, ingredients scaled to the servings you pick (metric amounts shown beside cups, ounces and pounds), the method
+with step pictures, and Start cooking / Add to list / Plan it. Planning a meal with a recipe offers its ingredients
+for the shopping list, with everyday staples and things already on the list left unticked.
+
+- **Adding recipes**: type one in, scan cookbook pages with the camera (the document scanner finds and flattens each
+  page), choose photos, paste a link or paste text. Photos are read on the phone with Apple's Vision (two-column
+  pages are read a column at a time) and sorted into a recipe by the add-on; with an Anthropic key set in the add-on
+  (Settings › Recipes on a wall screen), "Read with Claude" sends the photos to Claude instead. Either way the recipe
+  opens in the editor to check before it's saved.
+- **Cook mode** shows one step at a time, large, with its timer buttons; swipe or tap Next. The screen stays on.
+- **Timers** go off with the app closed or the phone locked: each books a local notification with **+1 minute** and
+  **Stop** buttons that work from the Lock Screen without opening the app.
+- **Live Activity**: while cook mode is open the current step and the next timer's countdown show on the Lock Screen
+  and in the Dynamic Island (the `CookingWidget` extension). It is started and updated by the app, so it needs no push
+  server or paid developer account.
 
 ### Siri and Shortcuts
 
@@ -105,6 +125,9 @@ CI builds both apps for their simulators on every pull request (`.github/workflo
   avatars, star badges, progress rings, event colours and the logo.
 - `iOS/`: the iPhone/iPad screens (`Screens/`), the width-based layout helpers and editors (`Components/`), Siri
   (`Siri/`: App Intents and App Shortcuts), notifications (`Reminders/`), icon.
+- `iOS/Recipes/`: the recipe box, recipe page, editor, importing and on-device text reading, cook mode, kitchen
+  timers and their notifications.
+- `Cooking/`: the Live Activity's data, in the app and the `CookingWidget` extension; `CookingWidget/` draws it.
 - `TV/`: the Apple TV screens, focus styles, layered icon and Top Shelf images.
 - Folders are synchronized groups, so new Swift files are picked up without editing the project.
 - Icons are drawn by `tools/make_icons.py` (`python3 apple/tools/make_icons.py`, needs Pillow).

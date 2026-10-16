@@ -1,9 +1,15 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct MoonlightApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        UNUserNotificationCenter.current().delegate = NotificationHandler.shared
+        KitchenTimers.registerNotificationActions()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -56,7 +62,7 @@ struct MainTabs: View {
             Tab("Calendar", systemImage: "calendar", value: "calendar") { CalendarScreen() }
             Tab("Chores", systemImage: "checkmark.circle", value: "chores") { ChoresScreen() }
             Tab("Rewards", systemImage: "star", value: "rewards") { RewardsScreen() }
-            Tab("Meals", systemImage: "fork.knife", value: "meals") { MealsScreen() }
+            Tab("Meals", systemImage: "fork.knife", value: "meals") { MealsTab() }
             Tab("Lists", systemImage: "list.bullet", value: "lists") { ListsScreen() }
             Tab("Settings", systemImage: "gearshape", value: "settings") { SettingsScreen() }
         }
