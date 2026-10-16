@@ -1,4 +1,4 @@
-import { Api, ApiError, Display, NowPlaying, ScreensaverPhotos, Topic } from "./types";
+import { Api, ApiError, Display, NowPlaying, Recipe, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -9,11 +9,12 @@ export function httpApi(base = ""): Api {
     const headers: Record<string, string> = {};
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const raw = body instanceof Blob;
+    if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
     const res = await fetch(base + path, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     });
     if (res.status === 401) notifyUnpaired(); // revoked or never paired: back to the pairing screen
     if (!res.ok) {
@@ -27,6 +28,10 @@ export function httpApi(base = ""): Api {
   }
   const get = <T>(p: string) => req<T>("GET", p);
   const q = (o: Record<string, string>) => "?" + new URLSearchParams(o).toString();
+  // Picture urls are absolute API paths; under Home Assistant ingress they need the ingress prefix.
+  const pic = (u: string | null) => (u ? base + u : null);
+  const rec = (r: Recipe): Recipe => ({ ...r, photo_url: pic(r.photo_url), steps: r.steps.map((s) => ({ ...s, photo_url: pic(s.photo_url) })) });
+  const recipe = async (p: Promise<Recipe>) => rec(await p);
   const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;
@@ -96,13 +101,20 @@ export function httpApi(base = ""): Api {
     createMeal: (m) => req("POST", "/api/meals", m),
     updateMeal: (id, m) => req("PATCH", `/api/meals/${id}`, m),
     deleteMeal: async (id) => { await req("DELETE", `/api/meals/${id}`); },
-    recipes: () => get("/api/recipes"),
-    createRecipe: (r) => req("POST", "/api/recipes", r),
+    recipes: async () => (await get<Recipe[]>("/api/recipes")).map(rec),
+    createRecipe: (r) => recipe(req("POST", "/api/recipes", r)),
+    recipeCooked: (id) => recipe(req("POST", `/api/recipes/${id}/cooked`, {})),
+    previewRecipe: (r) => recipe(req("POST", "/api/recipes/preview", r)),
+    importRecipe: (from) => recipe(req("POST", "/api/recipes/import", from)),
+    async uploadImage(data) { const r = await req<UploadedImage>("POST", "/api/images", data); return { ...r, url: base + r.url }; },
+    recipeReader: () => get("/api/recipes-reader"),
+    saveRecipeReader: (r) => req("PUT", "/api/recipes-reader", r),
+    removeRecipeReader: (pin) => req("DELETE", "/api/recipes-reader", { pin }),
     sampleData: () => get("/api/sample-data"),
     removeSampleData: async (pin) => (await req<{ removed: number }>("POST", "/api/sample-data/remove", { pin })).removed,
-    updateRecipe: (id, patch) => req("PATCH", `/api/recipes/${id}`, patch),
+    updateRecipe: (id, patch) => recipe(req("PATCH", `/api/recipes/${id}`, patch)),
     deleteRecipe: async (id) => { await req("DELETE", `/api/recipes/${id}`); },
-    recipeToList: async (rid, list_id) => (await req<{ added: number }>("POST", `/api/recipes/${rid}/to-list`, { list_id })).added,
+    recipeToList: async (rid, list_id, items) => (await req<{ added: number }>("POST", `/api/recipes/${rid}/to-list`, { list_id, items })).added,
     weather: () => get("/api/weather"),
     weatherEntities: () => get("/api/weather/entities"),
     holidays: (start, end, r) => get(`/api/holidays?start=${start}&end=${end}${r ? `&country=${encodeURIComponent(r.country)}&subdiv=${encodeURIComponent(r.subdiv)}` : ""}`),

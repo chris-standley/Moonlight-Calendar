@@ -83,8 +83,38 @@ export interface Item { id: string; list_id: string; title: string; done: boolea
 
 export type Slot = "breakfast" | "lunch" | "dinner" | "snack";
 export interface Meal { id: string; date: string; slot: Slot; title: string; notes: string; recipe_id: string | null }
-export interface Recipe { id: string; title: string; emoji: string; minutes: number | null; ingredients: string[]; url: string | null }
-export type RecipeIn = Omit<Recipe, "id">;
+/** One ingredient line as read by the add-on (API.md "Recipes"). `text` is the saved line; the rest is derived from it. */
+export interface Ingredient {
+  text: string; quantity: number | null; quantity_max: number | null; unit: string; name: string; note: string; heading: boolean;
+  /** Set for cups, ounces, pounds, pints...: the same amount in grams or millilitres (unrounded). */
+  metric: { quantity: number; quantity_max: number | null; unit: "g" | "ml" } | null;
+}
+export interface StepTimer { seconds: number; label: string }
+export interface Step {
+  text: string; minutes: number | null; photo: string | null; photo_url: string | null;
+  /** Times the step mentions, ready to start. */
+  timers: StepTimer[];
+  /** The text with metric figures added in brackets, or null when nothing needed converting. */
+  metric_text: string | null;
+}
+export interface Recipe {
+  /** null for an unsaved draft (preview, import). */
+  id: string; title: string; emoji: string; description: string; photo: string | null; photo_url: string | null;
+  rating: number; favourite: boolean; servings: number | null; prep_minutes: number | null; cook_minutes: number | null;
+  /** Total: as saved, else prep + cook. */
+  minutes: number | null;
+  ingredients: Ingredient[]; steps: Step[]; tags: string[]; notes: string; url: string | null;
+  cooked_count: number; last_cooked: string | null; created_at: string | null; updated_at: string | null;
+}
+export interface StepIn { text: string; minutes?: number | null; photo?: string | null }
+export interface RecipeIn {
+  title: string; emoji?: string; description?: string; photo?: string | null; rating?: number; favourite?: boolean;
+  servings?: number | null; prep_minutes?: number | null; cook_minutes?: number | null; minutes?: number | null;
+  ingredients?: string[]; steps?: StepIn[]; tags?: string[]; notes?: string; url?: string | null;
+}
+export type RecipeImport = { url: string } | { text: string; use_reader?: boolean } | { images: string[] };
+export interface RecipeReader { configured: boolean; model: string; key_hint: string | null }
+export interface UploadedImage { id: string; url: string }
 
 export interface WeatherEntity {
   entity_id: string; name: string; available: boolean;
@@ -242,8 +272,20 @@ export interface Api {
   updateMeal(id: string, m: Partial<Omit<Meal, "id">>): Promise<Meal>;
   deleteMeal(id: string): Promise<void>;
   recipes(): Promise<Recipe[]>;
-  recipeToList(recipeId: string, listId: string): Promise<number>;
+  /** Adds the chosen lines (as shown, already scaled), else every ingredient. */
+  recipeToList(recipeId: string, listId: string, items?: string[]): Promise<number>;
   createRecipe(r: RecipeIn): Promise<Recipe>;
+  /** Made it today: counts up and remembers the day. */
+  recipeCooked(id: string): Promise<Recipe>;
+  /** How a recipe body reads once saved (parsed ingredients, timers, metric), without saving it. */
+  previewRecipe(r: Partial<RecipeIn>): Promise<Recipe>;
+  /** An unsaved draft from a web page, text, or photos (uploaded first). 422/409 carry a message to show. */
+  importRecipe(from: RecipeImport): Promise<Recipe>;
+  /** Upload a picture (already shrunk); use the id as a recipe's or step's photo. */
+  uploadImage(data: Blob): Promise<UploadedImage>;
+  recipeReader(): Promise<RecipeReader>;
+  saveRecipeReader(r: { api_key?: string; model?: string | null; pin: string }): Promise<RecipeReader>;
+  removeRecipeReader(pin: string): Promise<RecipeReader>;
   /** Rows of the demo family seeded on first start that are still present (see API.md "Settings"). */
   sampleData(): Promise<{ remaining: number }>;
   removeSampleData(pin: string): Promise<number>;

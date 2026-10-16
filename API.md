@@ -195,14 +195,51 @@ Item = `{id, list_id, title, done, person_id|null, due: date|null, created_at, s
 - `PATCH /api/items/{id}` `{title?, done?, person_id?, due?}`; `DELETE /api/items/{id}`
 - `POST /api/lists/{id}/clear-done`
 
-## Meals and recipes
+## Meals
 Meal = `{id, date, slot: "breakfast"|"lunch"|"dinner"|"snack", title, notes, recipe_id|null}`
 - `GET /api/meals?start&end` (end exclusive); `POST /api/meals`; `PATCH /api/meals/{id}`; `DELETE /api/meals/{id}`
-Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
-- `GET /api/recipes`; `POST /api/recipes` `{title, emoji?, minutes?, ingredients?, url?}` -> Recipe
-- `PATCH /api/recipes/{id}` (any of those fields) -> Recipe; `DELETE /api/recipes/{id}` -> `{ok: true}`. Meals planned
-  from a deleted recipe keep their title and get `recipe_id: null`.
-- `POST /api/recipes/{id}/to-list` `{list_id}` -> `{added: int}` adds each ingredient as an item
+
+## Recipes
+Recipe = `{id, title, emoji, description, photo: image id|null, photo_url|null, rating: 0..5 (0 = not rated),
+favourite: bool, servings: int|null, prep_minutes|null, cook_minutes|null, minutes|null (total: as saved, else prep +
+cook), ingredients: [Ingredient], steps: [Step], tags: [str], notes, url|null (where it came from), cooked_count,
+last_cooked: date|null, created_at, updated_at}`
+- Ingredient = `{text, quantity: number|null, quantity_max: number|null (a range "3-4"), unit, name, note, heading: bool,
+  metric: {quantity, quantity_max, unit: "g"|"ml"}|null}`, read from the saved line `text`, which is never changed.
+  `unit` is a short name (`g, kg, ml, l, tsp, tbsp, cup, fl oz, oz, lb, pint, quart, gallon, stick, clove, tin, can,
+  pinch, ...`; `""` for "2 eggs"). `metric` is set for non-metric measures only (cups as US 240 ml, pints as British
+  568 ml, oz, lb, fl oz, sticks of butter); teaspoons and tablespoons are left alone. Lines like "For the sauce:" are
+  `heading: true`. Screens scale `quantity`, `quantity_max` and `metric` by servings and rebuild the line; when
+  `quantity` is null they show `text` as is.
+- Step = `{text, minutes: number|null, photo|null, photo_url|null, timers: [{seconds, label}], metric_text: str|null}`.
+  `timers` are the times the text mentions ("simmer for 10-15 minutes" -> 600, the shorter end) plus `minutes` when
+  set; `metric_text` is `text` with metric figures added in brackets ("350°F (175°C)", "9-inch (23 cm)",
+  "1 cup (240 ml)"), null when nothing needed converting.
+- `GET /api/recipes` (by title); `GET /api/recipes/{id}`
+- `POST /api/recipes` `{title, emoji?, description?, photo?, rating?, favourite?, servings? 1..100, prep_minutes?,
+  cook_minutes?, minutes?, ingredients?: [str | {text}], steps?: [str | {text, minutes?, photo?}], tags?, notes?,
+  url?}` -> Recipe; `PATCH /api/recipes/{id}` (any of those); `DELETE /api/recipes/{id}` -> `{ok: true}`. Meals planned
+  from a deleted recipe keep their title and get `recipe_id: null`. Tags are stored lower-case, without repeats.
+- `POST /api/recipes/{id}/to-list` `{list_id, items?: [str]}` -> `{added}`: the chosen lines (the screens send them
+  scaled, as shown), else every ingredient that isn't a heading.
+- `POST /api/recipes/{id}/cooked` `{date?}` -> Recipe: made it (counts up; `last_cooked` keeps the latest date).
+- `POST /api/recipes/preview` (a recipe body) -> Recipe with `id: null`, nothing saved: how the editor's lines read.
+- `POST /api/recipes/import` -> an unsaved draft Recipe (`id: null`) for the editor, from one of:
+  - `{url}`: a recipe web page's schema.org data (title, picture, servings, times, ingredients, steps and their
+    pictures, tags). Pages without it are read by Claude when a key is set, else 422 asking to paste the text.
+  - `{text, use_reader?}`: typed, pasted, or read from a photo on the phone (the iPhone app reads photos on the device
+    with Apple's Vision). Read with built-in rules (title, Ingredients/Method headings, numbered steps, serves, prep
+    and cook times), or by Claude with `use_reader: true` when a key is set.
+  - `{images: [image ids]}` (up to 6 pages of one recipe): read by Claude; 409 when no key is set.
+  422 with a `detail` to show when nothing could be read. Pictures on the web page are saved and set as `photo`.
+- Claude for reading photos (Settings › Recipes): `GET /api/recipes-reader` -> `{configured, model, key_hint}`;
+  `PUT /api/recipes-reader` `{pin, api_key?, model?}` (an Anthropic API key, `sk-ant-...`, never returned; model
+  defaults to `claude-opus-5-5`); `DELETE /api/recipes-reader` `{pin}`.
+
+## Pictures
+- `POST /api/images` with the picture as the raw request body (JPEG, PNG, WebP or GIF, 10 MB at most; screens shrink
+  photos first) -> `{id, url}`. Use the id as a recipe's or step's `photo`. Pictures nothing uses are removed after a day.
+- `GET /api/images/{id}` -> the picture (cached for good: ids are never reused).
 
 ## Weather
 - `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`

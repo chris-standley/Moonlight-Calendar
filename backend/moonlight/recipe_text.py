@@ -173,8 +173,8 @@ def fmt_duration(seconds: int) -> str:
     if h:
         return f"{h} h {m} min" if m else f"{h} h"
     if m:
-        return f"{m} min {s} s" if s else f"{m} min"
-    return f"{s} s"
+        return f"{m} min {s} sec" if s else f"{m} min"
+    return f"{s} sec"
 
 
 def find_durations(text: str) -> list[int]:
