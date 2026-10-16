@@ -32,6 +32,7 @@ struct ListsScreen: View {
                 }
             }
             .navigationTitle("Lists")
+            .moreTabBar()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { addingList = true } label: { Image(systemName: "plus") }.accessibilityLabel("New list")

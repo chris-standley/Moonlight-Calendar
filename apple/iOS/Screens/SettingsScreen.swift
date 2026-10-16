@@ -30,6 +30,7 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle("Settings")
+            .moreTabBar()
             .task {
                 status = await model.call { try await $0.authStatus() }
                 version = await model.call { try await $0.health() }?.version

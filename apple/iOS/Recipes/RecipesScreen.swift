@@ -38,6 +38,7 @@ struct RecipesScreen: View {
             }
             .background(Theme.bg.ignoresSafeArea())
             .navigationTitle("Recipes")
+            .moreTabBar()
             .searchable(text: $query, prompt: "Recipes or ingredients")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
