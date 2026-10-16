@@ -997,102 +997,271 @@
    "id": "rc_bolognese",
    "title": "Spaghetti bolognese",
    "emoji": "🍝",
-   "minutes": 40,
    "ingredients": [
-    "Beef mince",
-    "Spaghetti",
-    "Chopped tomatoes",
-    "Onion",
-    "Garlic",
-    "Carrot"
+    "500g beef mince",
+    "350g spaghetti",
+    "1 (400g) tin chopped tomatoes",
+    "1 onion, finely chopped",
+    "2 cloves garlic, crushed",
+    "1 carrot, grated",
+    "1 tbsp olive oil",
+    "Salt and pepper"
+   ],
+   "description": "The weeknight classic. Make a double batch and freeze half.",
+   "servings": 4,
+   "prep_minutes": 10,
+   "cook_minutes": 30,
+   "rating": 5,
+   "favourite": true,
+   "tags": [
+    "pasta",
+    "freezer"
+   ],
+   "steps": [
+    {
+     "text": "Heat the oil in a large pan and soften the onion and carrot for 5 minutes."
+    },
+    {
+     "text": "Add the mince and garlic and brown for 8 minutes, breaking it up as it cooks."
+    },
+    {
+     "text": "Stir in the tomatoes, season, and simmer for 20 minutes."
+    },
+    {
+     "text": "Meanwhile cook the spaghetti for 10 minutes, then drain and serve with the sauce."
+    }
    ]
   },
   {
    "id": "rc_tacos",
    "title": "Chicken tacos",
    "emoji": "🌮",
-   "minutes": 25,
    "ingredients": [
-    "Chicken thighs",
-    "Tortillas",
-    "Peppers",
-    "Sour cream",
-    "Lime"
+    "6 chicken thighs, sliced",
+    "8 small tortillas",
+    "2 peppers, sliced",
+    "150ml sour cream",
+    "1 lime",
+    "2 tsp smoked paprika"
+   ],
+   "description": "Smoky chicken in warm tortillas. Everyone builds their own.",
+   "servings": 4,
+   "prep_minutes": 10,
+   "cook_minutes": 15,
+   "rating": 4,
+   "tags": [
+    "mexican",
+    "quick"
+   ],
+   "steps": [
+    {
+     "text": "Toss the chicken with the paprika and a pinch of salt."
+    },
+    {
+     "text": "Fry the chicken and peppers over a high heat for 12 minutes until charred."
+    },
+    {
+     "text": "Warm the tortillas for 30 seconds each in a dry pan."
+    },
+    {
+     "text": "Serve with sour cream and lime wedges."
+    }
    ]
   },
   {
    "id": "rc_curry",
    "title": "Chickpea curry",
    "emoji": "🍛",
-   "minutes": 35,
    "ingredients": [
-    "Chickpeas",
-    "Coconut milk",
-    "Spinach",
-    "Curry paste",
-    "Basmati rice"
+    "2 (400g) tins chickpeas, drained",
+    "1 (400ml) tin coconut milk",
+    "100g spinach",
+    "3 tbsp curry paste",
+    "300g basmati rice"
+   ],
+   "description": "Mild, creamy and on the table in half an hour.",
+   "servings": 4,
+   "prep_minutes": 5,
+   "cook_minutes": 30,
+   "rating": 4,
+   "tags": [
+    "vegetarian",
+    "curry"
+   ],
+   "steps": [
+    {
+     "text": "Rinse the rice and cook it for 12 minutes, then leave covered."
+    },
+    {
+     "text": "Fry the curry paste for 1 minute, add the chickpeas and coconut milk and simmer for 15 minutes."
+    },
+    {
+     "text": "Stir in the spinach until it wilts and serve with the rice."
+    }
    ]
   },
   {
    "id": "rc_fish",
    "title": "Fish pie",
    "emoji": "🐟",
-   "minutes": 60,
    "ingredients": [
-    "Fish pie mix",
-    "Potatoes",
-    "Milk",
-    "Peas",
-    "Butter"
+    "400g fish pie mix",
+    "800g potatoes, peeled",
+    "300ml milk",
+    "100g frozen peas",
+    "50g butter"
+   ],
+   "description": "Creamy fish under buttery mash.",
+   "servings": 4,
+   "prep_minutes": 20,
+   "cook_minutes": 40,
+   "rating": 3,
+   "tags": [
+    "fish",
+    "oven"
+   ],
+   "steps": [
+    {
+     "text": "Boil the potatoes for 15 minutes, drain and mash with half the butter."
+    },
+    {
+     "text": "Warm the milk and remaining butter, add the fish and peas and poach for 5 minutes."
+    },
+    {
+     "text": "Tip into a dish, top with the mash and bake at 200°C for 25 minutes until golden."
+    }
    ]
   },
   {
    "id": "rc_pizza",
    "title": "Homemade pizza",
    "emoji": "🍕",
-   "minutes": 30,
    "ingredients": [
-    "Pizza bases",
-    "Passata",
-    "Mozzarella",
-    "Pepperoni"
+    "2 pizza bases",
+    "150g passata",
+    "2 balls mozzarella",
+    "1 pack pepperoni"
+   ],
+   "description": "Friday night pizza with the kids' toppings of choice.",
+   "servings": 4,
+   "prep_minutes": 10,
+   "cook_minutes": 12,
+   "rating": 5,
+   "favourite": true,
+   "tags": [
+    "kids",
+    "friday"
+   ],
+   "steps": [
+    {
+     "text": "Heat the oven to 220°C."
+    },
+    {
+     "text": "Spread the passata over the bases, tear over the mozzarella and add the pepperoni."
+    },
+    {
+     "text": "Bake for 12 minutes until bubbling."
+    }
    ]
   },
   {
    "id": "rc_roast",
    "title": "Sunday roast chicken",
    "emoji": "🍗",
-   "minutes": 100,
    "ingredients": [
-    "Whole chicken",
-    "Potatoes",
-    "Carrots",
-    "Broccoli",
-    "Gravy granules"
+    "1 whole chicken (1.6kg)",
+    "1kg potatoes, halved",
+    "4 carrots",
+    "1 head broccoli",
+    "4 tsp gravy granules",
+    "2 tbsp oil"
+   ],
+   "description": "Sunday lunch with all the trimmings.",
+   "servings": 6,
+   "prep_minutes": 20,
+   "cook_minutes": 80,
+   "rating": 5,
+   "tags": [
+    "sunday",
+    "oven"
+   ],
+   "steps": [
+    {
+     "text": "Heat the oven to 190°C. Roast the chicken for 1 hour 20 minutes."
+    },
+    {
+     "text": "Parboil the potatoes for 8 minutes, shake in the oil and roast for 50 minutes."
+    },
+    {
+     "text": "Rest the chicken under foil for 15 minutes."
+    },
+    {
+     "text": "Steam the carrots and broccoli for 6 minutes and make up the gravy."
+    }
    ]
   },
   {
    "id": "rc_stirfry",
    "title": "Veg stir fry",
    "emoji": "🥡",
-   "minutes": 20,
    "ingredients": [
-    "Egg noodles",
-    "Stir fry veg",
-    "Soy sauce",
-    "Ginger"
+    "300g egg noodles",
+    "1 pack stir fry veg",
+    "3 tbsp soy sauce",
+    "1 thumb ginger, grated"
+   ],
+   "description": "Clear-the-fridge noodles.",
+   "servings": 3,
+   "prep_minutes": 5,
+   "cook_minutes": 10,
+   "rating": 3,
+   "tags": [
+    "quick",
+    "vegetarian"
+   ],
+   "steps": [
+    {
+     "text": "Cook the noodles for 4 minutes and drain."
+    },
+    {
+     "text": "Stir fry the veg and ginger over a high heat for 3 minutes."
+    },
+    {
+     "text": "Add the noodles and soy and toss for 1 minute."
+    }
    ]
   },
   {
    "id": "rc_pancakes",
    "title": "Pancakes",
    "emoji": "🥞",
-   "minutes": 20,
    "ingredients": [
-    "Flour",
-    "Eggs",
-    "Milk",
-    "Maple syrup"
+    "1 1/2 cups plain flour",
+    "2 eggs",
+    "1 1/4 cups milk",
+    "2 tsp baking powder",
+    "Maple syrup, to serve"
+   ],
+   "description": "American-style fluffy pancakes for weekend breakfasts.",
+   "servings": 4,
+   "prep_minutes": 5,
+   "cook_minutes": 15,
+   "rating": 5,
+   "favourite": true,
+   "tags": [
+    "breakfast",
+    "kids"
+   ],
+   "steps": [
+    {
+     "text": "Whisk the flour, baking powder, eggs and milk into a thick batter. Rest for 5 minutes."
+    },
+    {
+     "text": "Cook ladlefuls in a hot buttered pan for 2 minutes a side."
+    },
+    {
+     "text": "Serve stacked with maple syrup."
+    }
    ]
   }
  ],

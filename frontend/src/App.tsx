@@ -16,6 +16,7 @@ import { Screensaver } from "./views/Screensaver";
 import { SettingsView } from "./views/SettingsView";
 import { SyncBanner } from "./views/SyncBanner";
 import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
+import { TimerTray } from "./views/recipes/TimerTray";
 
 type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
@@ -183,6 +184,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
           </div>
         </main>
         {pinReq && <PinPad why={pinReq.why} error={pinReq.error} onDone={onPin} />}
+        <TimerTray />
         <div className="toasts">{toasts.map((t) => <div key={t.id} className="toast">{t.msg}</div>)}</div>
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
         {saver && ready && <Screensaver onWake={() => setSaver(false)} />}

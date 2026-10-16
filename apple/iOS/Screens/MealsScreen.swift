@@ -1,8 +1,18 @@
 import SwiftUI
 
+/// The Meals tab: the week's plan, or the recipe box.
+struct MealsTab: View {
+    @SceneStorage("meals.mode") private var mode = "plan"
+
+    var body: some View {
+        if mode == "recipes" { RecipesScreen(mode: $mode) } else { MealsScreen(mode: $mode) }
+    }
+}
+
 /// The week's meals. Narrow: a day per card. Wider: a grid with a column per day. Tap a slot to plan or change it.
 struct MealsScreen: View {
     @Environment(AppModel.self) private var model
+    @Binding var mode: String
     @State private var anchor: String?
     @State private var meals: [Meal] = []
     @State private var editing: MealSlotEdit?
@@ -34,6 +44,7 @@ struct MealsScreen: View {
             ToolbarItem(placement: .topBarLeading) {
                 DateStepper(label: "This week", onToday: { anchor = nil }) { anchor = d.addDays(start, 7 * $0) }
             }
+            ToolbarItem(placement: .principal) { MealsModePicker(mode: $mode) }
         }
         .task(id: "\(start)|\(model.rev("meals"))") {
             if let v = await model.call({ try await $0.meals(start, d.addDays(start, 7)) }) { meals = v }
@@ -136,7 +147,13 @@ struct MealEditor: View {
     let edit: MealsScreen.MealSlotEdit
     @State private var title = ""
     @State private var notes = ""
+    @State private var recipeId: String?
+    @State private var recipes: [Recipe] = []
+    @State private var askList: Recipe?
+    @State private var showAskList = false
     @State private var error: String?
+
+    private var recipe: Recipe? { recipes.first { $0.id == recipeId } }
 
     var body: some View {
         NavigationStack {
@@ -144,6 +161,24 @@ struct MealEditor: View {
                 Section {
                     TextField("What's for \(edit.slot.label.lowercased())?", text: $title).font(Theme.text(.headline))
                     TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...5)
+                }
+                if !recipes.isEmpty {
+                    Section {
+                        Picker("Recipe", selection: $recipeId) {
+                            Text("None").tag(String?.none)
+                            ForEach(recipes) { r in Text("\(r.emoji) \(r.title)").tag(r.id) }
+                        }
+                        if let recipeId {
+                            NavigationLink("Open recipe") { RecipeDetail(id: recipeId) }
+                        }
+                    }
+                    .onChange(of: recipeId) { old, new in
+                        let oldTitle = recipes.first { $0.id == old }?.title
+                        if let r = recipes.first(where: { $0.id == new }),
+                           title.trimmingCharacters(in: .whitespaces).isEmpty || title == oldTitle {
+                            title = r.title
+                        }
+                    }
                 }
                 if edit.meal != nil {
                     Button("Remove", role: .destructive) {
@@ -165,19 +200,34 @@ struct MealEditor: View {
                         Task {
                             do {
                                 try await model.api?.saveMeal(id: edit.meal?.id, ["date": edit.date, "slot": edit.slot.rawValue,
-                                                                                  "title": title.trimmingCharacters(in: .whitespaces), "notes": notes])
+                                                                                  "title": title.trimmingCharacters(in: .whitespaces), "notes": notes,
+                                                                                  "recipe_id": recipeId.map { $0 as Any } ?? NSNull()])
                                 model.bump("meals")
-                                dismiss()
+                                // A recipe just chosen: offer its ingredients for the shopping list.
+                                if let r = recipe, recipeId != edit.meal?.recipe_id, r.ingredients.contains(where: { !$0.heading }) {
+                                    askList = r
+                                    showAskList = true
+                                } else {
+                                    dismiss()
+                                }
                             } catch { self.error = error.localizedDescription }
                         }
                     }
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .navigationDestination(isPresented: $showAskList) {
+                if let askList {
+                    AddToListView(recipe: askList, title: "Add the ingredients?") { dismiss() }
+                        .navigationBarBackButtonHidden()
+                }
+            }
             .onAppear {
                 title = edit.meal?.title ?? ""
                 notes = edit.meal?.notes ?? ""
+                recipeId = edit.meal?.recipe_id
             }
+            .task { recipes = await model.call { try await $0.recipes() } ?? [] }
         }
         .presentationDetents([.medium, .large])
     }

@@ -6,20 +6,59 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA0000000000000000000210 /* CookingWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000201 /* CookingWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000211 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA000000000000000000000A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000206;
+			remoteInfo = CookingWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA0000000000000000000212 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA0000000000000000000210 /* CookingWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		AA0000000000000000000001 /* MoonlightTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MoonlightTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000101 /* Moonlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Moonlight.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000010 /* TV-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "TV-Info.plist"; sourceTree = "<group>"; };
 		AA0000000000000000000110 /* iOS-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "iOS-Info.plist"; sourceTree = "<group>"; };
+		AA0000000000000000000201 /* CookingWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CookingWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000202 /* CookingWidget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "CookingWidget-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000020 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
 		AA0000000000000000000002 /* TV */ = {isa = PBXFileSystemSynchronizedRootGroup; path = TV; sourceTree = "<group>"; };
 		AA0000000000000000000102 /* iOS */ = {isa = PBXFileSystemSynchronizedRootGroup; path = iOS; sourceTree = "<group>"; };
+		AA0000000000000000000220 /* Cooking */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Cooking; sourceTree = "<group>"; };
+		AA0000000000000000000203 /* CookingWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; path = CookingWidget; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000204 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -43,8 +82,11 @@
 				AA0000000000000000000020 /* Shared */,
 				AA0000000000000000000102 /* iOS */,
 				AA0000000000000000000002 /* TV */,
+				AA0000000000000000000220 /* Cooking */,
+				AA0000000000000000000203 /* CookingWidget */,
 				AA0000000000000000000110 /* iOS-Info.plist */,
 				AA0000000000000000000010 /* TV-Info.plist */,
+				AA0000000000000000000202 /* CookingWidget-Info.plist */,
 				AA0000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +96,7 @@
 			children = (
 				AA0000000000000000000101 /* Moonlight.app */,
 				AA0000000000000000000001 /* MoonlightTV.app */,
+				AA0000000000000000000201 /* CookingWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,6 +104,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AA0000000000000000000206 /* CookingWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000207;
+			buildPhases = (
+				AA0000000000000000000208 /* Sources */,
+				AA0000000000000000000204 /* Frameworks */,
+				AA0000000000000000000209 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000220 /* Cooking */,
+				AA0000000000000000000203 /* CookingWidget */,
+			);
+			name = CookingWidget;
+			packageProductDependencies = (
+			);
+			productName = CookingWidget;
+			productReference = AA0000000000000000000201;
+			productType = "com.apple.product-type.app-extension";
+		};
 		AA0000000000000000000106 /* Moonlight */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA0000000000000000000107;
@@ -68,14 +134,17 @@
 				AA0000000000000000000108 /* Sources */,
 				AA0000000000000000000103 /* Frameworks */,
 				AA0000000000000000000109 /* Resources */,
+				AA0000000000000000000212 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA0000000000000000000213 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000020 /* Shared */,
 				AA0000000000000000000102 /* iOS */,
+				AA0000000000000000000220 /* Cooking */,
 			);
 			name = Moonlight;
 			packageProductDependencies = (
@@ -123,6 +192,9 @@
 					AA0000000000000000000106 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					AA0000000000000000000206 = {
+						CreatedOnToolsVersion = 16.0;
+					};
 				};
 			};
 			buildConfigurationList = AA000000000000000000000B;
@@ -141,11 +213,19 @@
 			targets = (
 				AA0000000000000000000106 /* Moonlight */,
 				AA0000000000000000000006 /* MoonlightTV */,
+				AA0000000000000000000206 /* CookingWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000209 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000009 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -163,6 +243,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000208 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000008 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -179,6 +266,14 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000213 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000206 /* CookingWidget */;
+			targetProxy = AA0000000000000000000211 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		AA000000000000000000000C /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -193,7 +288,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				CURRENT_PROJECT_VERSION = 1;
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.chris-standley.moonlight";
 				SWIFT_VERSION = 5.0;
@@ -225,7 +320,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				CURRENT_PROJECT_VERSION = 1;
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.chris-standley.moonlight";
 				SWIFT_VERSION = 5.0;
@@ -348,9 +443,70 @@
 			};
 			name = Release;
 		};
+		AA000000000000000000020E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "CookingWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Moonlight;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.chris-standley.moonlight.cooking";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA000000000000000000020F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "CookingWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Moonlight;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.chris-standley.moonlight.cooking";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AA0000000000000000000207 /* Build configuration list for PBXNativeTarget "CookingWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA000000000000000000020E /* Debug */,
+				AA000000000000000000020F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AA0000000000000000000007 /* Build configuration list for PBXNativeTarget "MoonlightTV" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

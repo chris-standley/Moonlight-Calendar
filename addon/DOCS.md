@@ -120,6 +120,22 @@ public holidays. Pick the country and region in Settings > Display > Public holi
 until you choose, when Home Assistant's timezone is Europe/London). Skipped dates are written to iCloud too, so
 the event is also missing on those days on phones.
 
+## Recipes
+
+Meals > Recipes holds the family's recipes: picture, rating, servings and times, ingredients and steps (with step
+pictures). Amounts scale with the servings you pick; cups, ounces, pounds and °F stay as written with grams,
+millilitres and °C shown beside them. Times in a step ("simmer for 10 minutes") get a timer button, and cook mode
+shows one step at a time, with the amounts of the ingredients it uses, with the screen kept on. Hands-free
+(the microphone button) listens for "next", "back", "repeat", "start the timer" and "stop the timer" and reads each
+step aloud; on the wall screens it needs a browser with speech recognition (Chrome does; it's hidden where it isn't
+available). Add to list, and planning a meal with a recipe, offer the
+ingredients for a shopping list.
+
+Bring recipes in from a web page (most recipe sites mark out their recipes, so they come straight in), pasted text,
+or photos. The iPhone app reads photos on the phone. To read photos on the wall screens and in the browser, or to
+let Claude read handwriting and pages without a recipe layout, add an Anthropic API key in Settings > Recipes (from
+console.anthropic.com; the photos and text are then sent to Anthropic). Pictures are kept in Moonlight's database.
+
 ## Photo screensaver
 
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter

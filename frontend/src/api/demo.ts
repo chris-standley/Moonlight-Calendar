@@ -8,8 +8,16 @@ import {
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
+import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 
 interface Completion { chore_id: string; date: string; at: string }
+/** A recipe as the add-on stores it: ingredient lines and steps; the rest is worked out when read (recipeOut). */
+interface RecipeRow {
+  id: string; title: string; emoji: string; description?: string; photo?: string | null; rating?: number; favourite?: boolean;
+  servings?: number | null; prep_minutes?: number | null; cook_minutes?: number | null; minutes: number | null;
+  ingredients: string[]; steps?: { text: string; minutes: number | null; photo: string | null }[]; tags?: string[];
+  notes?: string; url: string | null; cooked_count?: number; last_cooked?: string | null; created_at?: string; updated_at?: string;
+}
 interface State {
   seededOn: string;
   settings: Omit<Settings, "pin_set"> & { pin: string };
@@ -22,7 +30,9 @@ interface State {
   lists: Omit<TaskList, "open_count" | "done_count">[];
   items: (Item & { done_at: string | null })[];
   meals: Meal[];
-  recipes: Recipe[];
+  recipes: RecipeRow[];
+  /** Uploaded pictures as data: URLs (shrunk by the screens first). */
+  images?: Record<string, string>;
   // Simulated iCloud (optional so older saved demo states still load).
   accounts?: (Account & { password: string })[];
   calendars?: SyncCalendar[];
@@ -102,7 +112,8 @@ function buildSeed(): State {
     people: S.people.map((p: any) => ({ ...p, initials: initials(p.name) })),
     events: [...events, ...busyBlocks(WORK_CAL, mon)], chores, completions, ledger,
     rewards: S.rewards, lists, items, meals,
-    recipes: S.recipes.map((r: any) => ({ url: null, ...r })),
+    recipes: S.recipes.map((r: any) => ({ url: null, minutes: null, ...r,
+      steps: (r.steps ?? []).map((x: any) => ({ text: x.text, minutes: x.minutes ?? null, photo: null })) })),
     // A published Outlook calendar ("Can view when I'm busy") for Alex: busy blocks only.
     accounts: [{
       id: "acct_work", kind: "ics", label: "Work", username: "", password: "",
@@ -267,20 +278,57 @@ export function demoApi(): Api {
   const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
   const ok = async <T>(x: T): Promise<T> => clone(x);
   // Same rules as the backend's recipe_fields (POST: all fields; PATCH: only those given).
-  const recipeFields = (b: Partial<RecipeIn>, partial = false): Partial<RecipeIn> => {
-    const out: Partial<RecipeIn> = {};
-    if (!partial || "title" in b) {
+  const recipeFields = (b: Partial<RecipeIn>, partial = false, checkImages = true): Partial<RecipeRow> => {
+    const out: Partial<RecipeRow> = {};
+    const has = (k: keyof RecipeIn) => !partial || k in b;
+    const int = (k: "servings" | "prep_minutes" | "cook_minutes" | "minutes" | "rating", lo: number, hi: number) => {
+      const v = b[k];
+      if (v == null || (v as unknown) === "") return null;
+      if (!Number.isInteger(v) || v < lo || v > hi) throw new ApiError(400, `${k} must be between ${lo} and ${hi}`);
+      return v;
+    };
+    const img = (v: string | null | undefined, what: string) => {
+      if (!v) return null;
+      if (checkImages && !st.images?.[v]) throw new ApiError(400, `${what} must be an uploaded picture or null`);
+      return v;
+    };
+    if (has("title")) {
       if (!b.title?.trim()) throw new ApiError(400, "title is required");
-      out.title = b.title.trim();
+      out.title = b.title.trim().slice(0, 120);
     }
-    if (!partial || "emoji" in b) out.emoji = (b.emoji ?? "").trim();
-    if (!partial || "minutes" in b) {
-      if (b.minutes != null && (!Number.isInteger(b.minutes) || b.minutes < 0)) throw new ApiError(400, "minutes must be a whole number");
-      out.minutes = b.minutes ?? null;
-    }
-    if (!partial || "ingredients" in b) out.ingredients = (b.ingredients ?? []).map((i) => i.trim()).filter(Boolean);
-    if (!partial || "url" in b) out.url = b.url?.trim() || null;
+    if (has("emoji")) out.emoji = (b.emoji ?? "").trim().slice(0, 8);
+    if (has("description")) out.description = (b.description ?? "").trim();
+    if (has("notes")) out.notes = (b.notes ?? "").trim();
+    if (has("url")) out.url = b.url?.trim() || null;
+    if (has("photo")) out.photo = img(b.photo, "photo");
+    if (has("rating")) out.rating = int("rating", 0, 5) ?? 0;
+    if (has("favourite")) out.favourite = !!b.favourite;
+    if (has("servings")) out.servings = int("servings", 1, 100);
+    for (const k of ["prep_minutes", "cook_minutes", "minutes"] as const) if (has(k)) out[k] = int(k, 0, 10000);
+    if (has("ingredients")) out.ingredients = (b.ingredients ?? []).map((i) => (typeof i === "string" ? i : (i as { text: string }).text).trim()).filter(Boolean);
+    if (has("steps")) out.steps = (b.steps ?? []).map((x) => (typeof x === "string" ? { text: x } : x))
+      .map((x) => {
+        if (x.minutes != null && !(x.minutes > 0 && x.minutes <= 1440)) throw new ApiError(400, "step minutes must be a number from 0 to 1440, or null");
+        return { text: x.text.trim(), minutes: x.minutes ?? null, photo: img(x.photo, "step photo") };
+      }).filter((x) => x.text || x.photo);
+    if (has("tags")) out.tags = [...new Set((b.tags ?? []).map((t) => t.trim().toLowerCase().slice(0, 30)).filter(Boolean))].slice(0, 20);
     return out;
+  };
+  const imageUrl = (id: string | null | undefined) => (id ? st.images?.[id] ?? null : null);
+  /** The Recipe the add-on would return for a stored row (see routes/recipes.py recipe_out). */
+  const recipeOut = (r: RecipeRow | (Partial<RecipeRow> & { id: null; title: string })): Recipe => {
+    const ingredients = (r.ingredients ?? []).map(parseIngredient);
+    const total = r.minutes ?? (r.prep_minutes == null && r.cook_minutes == null ? null : (r.prep_minutes ?? 0) + (r.cook_minutes ?? 0));
+    return {
+      id: r.id as string, title: r.title, emoji: r.emoji ?? "", description: r.description ?? "", photo: r.photo ?? null,
+      photo_url: imageUrl(r.photo), rating: r.rating ?? 0, favourite: !!r.favourite, servings: r.servings ?? null,
+      prep_minutes: r.prep_minutes ?? null, cook_minutes: r.cook_minutes ?? null, minutes: total,
+      ingredients,
+      steps: (r.steps ?? []).map((x) => ({ text: x.text, minutes: x.minutes, photo: x.photo, photo_url: imageUrl(x.photo),
+        timers: stepTimers(x.text, x.minutes), metric_text: metricNote(x.text), uses: stepUses(x.text, ingredients) })),
+      tags: r.tags ?? [], notes: r.notes ?? "", url: r.url ?? null, cooked_count: r.cooked_count ?? 0,
+      last_cooked: r.last_cooked ?? null, created_at: r.created_at ?? null, updated_at: r.updated_at ?? null,
+    };
   };
   const find = <T extends { id: string }>(arr: T[], id: string): T => {
     const x = arr.find((a) => a.id === id);
@@ -553,21 +601,22 @@ export function demoApi(): Api {
     async createMeal(m) { const ml = { ...m, id: uid("ml") }; st.meals.push(ml); emit("meals"); return clone(ml); },
     async updateMeal(id, patch) { const ml = find(st.meals, id); Object.assign(ml, patch); emit("meals"); return clone(ml); },
     async deleteMeal(id) { st.meals = st.meals.filter((m) => m.id !== id); emit("meals"); },
-    recipes: () => ok(st.recipes),
+    recipes: async () => [...st.recipes].sort((a, b) => a.title.localeCompare(b.title)).map(recipeOut),
     // The preview is all sample data; it has its own Reset instead (Settings > Demo).
     sampleData: async () => ({ remaining: 0 }),
     removeSampleData: async () => 0,
     async createRecipe(r) {
-      const rec = { id: uid("rc"), ...recipeFields(r) } as Recipe;
+      const now = nowDT();
+      const rec = { id: uid("rc"), minutes: null, url: null, ingredients: [], ...recipeFields(r), created_at: now, updated_at: now } as RecipeRow;
       st.recipes.push(rec);
       emit("recipes");
-      return clone(rec);
+      return recipeOut(rec);
     },
     async updateRecipe(id, patch) {
       const rec = find(st.recipes, id);
-      Object.assign(rec, recipeFields(patch, true));
+      Object.assign(rec, recipeFields(patch, true), { updated_at: nowDT() });
       emit("recipes");
-      return clone(rec);
+      return recipeOut(rec);
     },
     async deleteRecipe(id) {
       find(st.recipes, id);
@@ -575,14 +624,44 @@ export function demoApi(): Api {
       for (const m of st.meals) if (m.recipe_id === id) m.recipe_id = null;
       emit("recipes", "meals");
     },
-    async recipeToList(rid, lid) {
-      const r = find(st.recipes, rid);
-      for (const ing of r.ingredients) {
-        st.items.push({ id: uid("it"), list_id: lid, title: ing, done: false, person_id: null, due: null, created_at: nowDT(), sort: -1000, done_at: null });
+    async recipeCooked(id) {
+      const rec = find(st.recipes, id);
+      rec.cooked_count = (rec.cooked_count ?? 0) + 1;
+      rec.last_cooked = today();
+      emit("recipes");
+      return recipeOut(rec);
+    },
+    async recipeToList(rid, lid, items) {
+      const r = recipeOut(find(st.recipes, rid));
+      find(st.lists, lid);
+      const lines = (items ?? r.ingredients.filter((i) => !i.heading).map((i) => i.text)).map((t) => t.trim()).filter(Boolean);
+      for (const title of lines) {
+        st.items.push({ id: uid("it"), list_id: lid, title, done: false, person_id: null, due: null, created_at: nowDT(), sort: -1000, done_at: null });
       }
       emit("lists");
-      return r.ingredients.length;
+      return lines.length;
     },
+    previewRecipe: async (r) => recipeOut({ id: null, ...recipeFields({ title: "-", ...r }, false, false) } as RecipeRow & { id: null }),
+    async importRecipe(from) {
+      if ("text" in from) {
+        if (!from.text.trim()) throw new ApiError(400, "Send a url, some text, or images");
+        const d = parseText(from.text);
+        if (!d.ingredients.length && !d.steps.length) throw new ApiError(422, "No recipe found in that text.");
+        return recipeOut({ id: null, ...recipeFields({ ...d, title: d.title || "Untitled recipe", url: null }, false, false) } as RecipeRow & { id: null });
+      }
+      if ("url" in from) throw new ApiError(422, "This preview can't open web pages. On your Moonlight, paste a recipe link here and it fills everything in.");
+      throw new ApiError(409, "Reading photos needs Claude: add an Anthropic API key in Settings › Recipes. The iPhone app can read photos on the phone without one.");
+    },
+    async uploadImage(data) {
+      const url = await new Promise<string>((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = rej; fr.readAsDataURL(data); });
+      const id = uid("img");
+      st.images = { ...(st.images ?? {}), [id]: url };
+      save();
+      return { id, url };
+    },
+    recipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
+    async saveRecipeReader() { throw new ApiError(400, "The preview can't use an API key. Add it on your Moonlight."); },
+    removeRecipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
     async weather() {
       const w = demoWeather();
       const e = st.settings.weather_entity;

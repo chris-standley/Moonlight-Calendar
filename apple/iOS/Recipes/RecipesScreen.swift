@@ -1,0 +1,178 @@
+import SwiftUI
+
+/// The recipe box: search, quick filters (favourites, quick, tags), sorting, and a card per recipe.
+struct RecipesScreen: View {
+    @Environment(AppModel.self) private var model
+    @Binding var mode: String
+    @State private var recipes: [Recipe] = []
+    @State private var loaded = false
+    @State private var query = ""
+    @State private var filter = "all"
+    @State private var sort = "az"
+    @State private var path: [String] = []
+    @State private var importing: RecipeSource?
+    @State private var draft: Recipe?
+    @State private var pendingDraft: Recipe?
+    @State private var newRecipe = false
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            Adaptive { room, _ in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        chips
+                        if recipes.isEmpty && loaded {
+                            EmptyHint(text: "No recipes yet. Tap + to type one in, scan a cookbook page or bring one in from a link.")
+                        } else if shown.isEmpty && loaded {
+                            EmptyHint(text: "Nothing matches. Try another word or filter.")
+                        }
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: room == .narrow ? 2 : room == .medium ? 3 : 5),
+                                  spacing: 12) {
+                            ForEach(shown) { r in
+                                NavigationLink(value: r.id ?? "") { card(r) }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(16)
+                }
+                .refreshable { model.bump("recipes") }
+            }
+            .background(Theme.bg.ignoresSafeArea())
+            .navigationTitle("Recipes")
+            .searchable(text: $query, prompt: "Recipes or ingredients")
+            .toolbar {
+                ToolbarItem(placement: .principal) { MealsModePicker(mode: $mode) }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Sort", selection: $sort) {
+                            Text("A to Z").tag("az")
+                            Text("Best rated").tag("rated")
+                            Text("Recently made").tag("recent")
+                        }
+                    } label: { Image(systemName: "arrow.up.arrow.down") }
+                    .accessibilityLabel("Sort")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { newRecipe = true } label: { Label("Type it in", systemImage: "square.and.pencil") }
+                        if DocumentScanner.isAvailable {
+                            Button { importing = .scan } label: { Label("Scan a cookbook page", systemImage: "doc.viewfinder") }
+                        }
+                        Button { importing = .photos } label: { Label("From photos", systemImage: "photo.on.rectangle") }
+                        Button { importing = .link } label: { Label("From a link", systemImage: "link") }
+                        Button { importing = .text } label: { Label("Paste text", systemImage: "doc.on.clipboard") }
+                    } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Add a recipe")
+                }
+            }
+            .navigationDestination(for: String.self) { id in RecipeDetail(id: id) }
+        }
+        .task(id: model.rev("recipes")) {
+            if let r = await model.call({ try await $0.recipes() }) { recipes = r }
+            loaded = true
+        }
+        .sheet(item: $importing, onDismiss: {
+            draft = pendingDraft
+            pendingDraft = nil
+        }) { source in
+            RecipeImportView(source: source) { pendingDraft = $0 }
+        }
+        .sheet(item: $draft) { d in
+            RecipeEditor(recipe: d) { saved in if let id = saved.id { path = [id] } }
+        }
+        .sheet(isPresented: $newRecipe) {
+            RecipeEditor { saved in if let id = saved.id { path = [id] } }
+        }
+    }
+
+    private var tags: [String] {
+        var n: [String: Int] = [:]
+        for r in recipes { for t in r.tags { n[t, default: 0] += 1 } }
+        return n.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(8).map(\.key)
+    }
+
+    private var shown: [Recipe] {
+        let words = query.lowercased().split(separator: " ").map(String.init)
+        return recipes
+            .filter { r in
+                let hay = ([r.title, r.description] + r.tags + r.ingredients.map(\.name)).joined(separator: " ").lowercased()
+                return words.allSatisfy { hay.contains($0) }
+            }
+            .filter { r in
+                switch filter {
+                case "all": true
+                case "fav": r.favourite
+                case "quick": (r.minutes ?? .max) <= 30
+                default: r.tags.contains(filter)
+                }
+            }
+            .sorted { a, b in
+                switch sort {
+                case "rated": a.rating != b.rating ? a.rating > b.rating : a.title < b.title
+                case "recent": (a.last_cooked ?? "") != (b.last_cooked ?? "") ? (a.last_cooked ?? "") > (b.last_cooked ?? "") : a.title < b.title
+                default: a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+                }
+            }
+    }
+
+    private var chips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                chip("fav", "♥ Favourites")
+                chip("quick", "30 min or less")
+                ForEach(tags, id: \.self) { chip($0, $0) }
+            }
+        }
+    }
+
+    private func chip(_ key: String, _ label: String) -> some View {
+        Button { filter = filter == key ? "all" : key } label: {
+            Text(label)
+                .font(Theme.text(.subheadline, .bold))
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .foregroundStyle(filter == key ? .white : Theme.text)
+                .background(filter == key ? Theme.accent : Theme.surface, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func card(_ r: Recipe) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            RecipeArt(recipe: r)
+                .frame(height: 120)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .topTrailing) {
+                    if r.favourite {
+                        Image(systemName: "heart.fill").foregroundStyle(Theme.danger)
+                            .padding(6).background(.white, in: Circle()).padding(8)
+                    }
+                }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(r.title).font(Theme.text(.subheadline, .heavy)).foregroundStyle(Theme.text).lineLimit(2)
+                HStack(spacing: 6) {
+                    if r.rating > 0 { Stars(value: r.rating, size: 10) }
+                    Text([r.minutes.map { RecipeText.minutes($0) }, r.servings.map { "serves \($0)" }].compactMap { $0 }.joined(separator: " · "))
+                        .font(Theme.text(.caption)).foregroundStyle(Theme.muted).lineLimit(1)
+                }
+            }
+            .padding(10)
+        }
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+    }
+}
+
+/// Plan / Recipes, at the top of the Meals tab.
+struct MealsModePicker: View {
+    @Binding var mode: String
+
+    var body: some View {
+        Picker("Show", selection: $mode) {
+            Text("Plan").tag("plan")
+            Text("Recipes").tag("recipes")
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 200)
+    }
+}
