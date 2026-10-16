@@ -53,8 +53,7 @@ export function TodayView({ go }: { go: (tab: string) => void }) {
           <h2 className="panel-title">Coming up</h2>
           <button className="btn small" onClick={() => setAdding(true)}><IconPlus size={18} /> Add event</button>
         </div>
-        {events && events.length === 0 ? <div className="sched-none">Nothing planned today or tomorrow</div>
-          : <ScheduleView start={t} days={2} events={events ?? []} meals={[]} weather={weather} people={people} onOpen={setOpen} compact />}
+        <ScheduleView start={t} days={2} events={events ?? []} meals={[]} weather={weather} people={people} onOpen={setOpen} compact />
       </section>
       <div className="today-mid">
         <section className="panel">

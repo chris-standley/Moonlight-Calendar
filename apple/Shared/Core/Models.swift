@@ -136,7 +136,11 @@ struct Meal: Codable, Identifiable, Hashable {
 
 struct Weather: Codable {
     struct Current: Codable { let temp: Int; let condition: String }
-    struct Day: Codable, Hashable { let date: String; let high: Int; let low: Int; let condition: String }
+    struct Day: Codable, Hashable {
+        let date: String; let high: Int; let low: Int; let condition: String
+        /// Chance of rain or snow in percent; nil when the weather source doesn't say.
+        let rain: Int?
+    }
     let current: Current
     let daily: [Day]
 

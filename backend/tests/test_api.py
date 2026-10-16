@@ -493,6 +493,7 @@ def test_weather_deterministic(client):
     ok = {"sunny", "partlycloudy", "cloudy", "rainy", "pouring", "snowy", "fog", "windy", "lightning-rainy",
           "clear-night"}
     assert all(d["condition"] in ok and d["low"] < d["high"] for d in w["daily"])
+    assert all(0 <= d["rain"] <= 100 for d in w["daily"])
     assert w["current"]["condition"] in ok
 
 

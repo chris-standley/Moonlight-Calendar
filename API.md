@@ -205,10 +205,11 @@ Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
 - `POST /api/recipes/{id}/to-list` `{list_id}` -> `{added: int}` adds each ingredient as an item
 
 ## Weather
-- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`
-  up to 10 days from today. Temperatures are whole numbers in the settings' `temp_unit`.
+- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition, rain}]}`
+  up to 10 days from today. Temperatures are whole numbers in the settings' `temp_unit`. `rain` is the day's chance
+  of rain or snow in whole percent (HA's `precipitation_probability`), or null when the entity doesn't give one.
   `condition` uses HA's names: `sunny, partlycloudy, cloudy, rainy, pouring, snowy, fog, windy, lightning-rainy, clear-night`
-  (HA's `snowy-rainy`/`hail` -> `snowy`, `windy-variant` -> `windy`, `exceptional` -> `cloudy`).
+  (HA's `snowy-rainy`/`hail` -> `snowy`, `windy-variant` -> `windy`, `exceptional` -> `cloudy`, `lightning` -> `lightning-rainy`).
   With Settings `weather_entity` set (or env `MOONLIGHT_WEATHER_ENTITY` before one is saved), read from that HA weather entity
   (state + `weather.get_forecasts` daily) via the Supervisor API, cached 10 minutes; if HA can't be reached the
   last good forecast is kept for up to an hour, then it falls back to the deterministic demo forecast (`source: "demo"`).

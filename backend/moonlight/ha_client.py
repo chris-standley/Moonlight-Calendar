@@ -7,7 +7,8 @@ MOONLIGHT_WEATHER_ENTITY is the fallback when none is saved. No entity means dem
 
 `get_weather(temp_unit)` returns the /api/weather shape:
   {source: "homeassistant"|"demo", entity: str|null, unit: "C"|"F",
-   current: {temp, condition}, daily: [{date, high, low, condition}]}
+   current: {temp, condition}, daily: [{date, high, low, condition, rain}]}
+  `rain` is the chance of rain or snow in percent (HA's `precipitation_probability`), or null when not given.
 """
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ CONDITION_MAP = {
     "hail": "snowy",
     "windy-variant": "windy",
     "exceptional": "cloudy",
+    "lightning": "lightning-rainy",
 }
 
 
@@ -102,8 +104,10 @@ def parse_ha(state: dict, forecast_response: dict, entity: str, today: date,
         if d is None or high is None or d < today or d in by_day:
             continue
         low = _num(f.get("templow"))
+        rain = _num(f.get("precipitation_probability"))
         by_day[d] = {"date": d.isoformat(), "high": high, "low": high if low is None else low,
-                     "condition": _condition(f.get("condition"))}
+                     "condition": _condition(f.get("condition")),
+                     "rain": None if rain is None else max(0, min(100, round(rain)))}
     daily = [by_day[d] for d in sorted(by_day)][:DAYS]
     if temp is None:
         temp = daily[0]["high"] if daily else None

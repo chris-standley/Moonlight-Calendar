@@ -98,7 +98,8 @@ export interface Weather {
   name?: string;
   unit?: "C" | "F";
   current: { temp: number; condition: string };
-  daily: { date: string; high: number; low: number; condition: string }[];
+  /** `rain`: chance of rain or snow that day in percent, null when the weather entity doesn't say. */
+  daily: { date: string; high: number; low: number; condition: string; rain?: number | null }[];
 }
 
 /** Screen style: a big wall screen, a small touch screen, a phone. */

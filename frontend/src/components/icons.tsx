@@ -39,6 +39,10 @@ export const IconDown = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="
 export const IconClose = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M6 6l12 12M18 6L6 18" /></svg>;
 export const IconCheck = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 export const IconTrash = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>;
+/** A filled raindrop, for the chance of rain. */
+export const IconDrop = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5s-6 6.6-6 10.9a6 6 0 0012 0C18 10.1 12 3.5 12 3.5z" fill="currentColor" /></svg>
+);
 export const IconPin = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0113 0c0 5-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg>;
 export const IconRepeat = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M17 2.5l3 3-3 3" /><path d="M4 11.5v-1a5 5 0 015-5h11M7 21.5l-3-3 3-3" /><path d="M20 12.5v1a5 5 0 01-5 5H4" /></svg>;
 export const IconCart = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M3 4h2.5l2.2 11h10.6l2-8H7" /><circle cx="9.5" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>;
@@ -81,7 +85,9 @@ export function WeatherIcon({ condition, size = 24 }: { condition: string; size?
     case "clear-night": g = <path d="M15.5 4.5a7.5 7.5 0 100 15 6.2 6.2 0 010-15z" fill="#8F9BF2" transform="translate(-2 0)" />; break;
     case "partlycloudy": g = <g><g transform="translate(-3 -3) scale(.85)">{sun}</g>{cloud(1, 1)}</g>; break;
     case "cloudy": case "fog": g = <g>{cloud(-1, -2, "#AEB9CC")}{cloud(1, 1)}</g>; break;
-    case "rainy": case "pouring": case "lightning-rainy":
+    case "lightning-rainy":
+      g = <g>{cloud(0, -3, "#AEB9CC")}<path d="M13.2 15.5l-2.4 3.6h2.4l-1.6 3.4" stroke="#FFB938" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" fill="none" /><path d="M8.5 18.5l-1 2.5M17.5 18.5l-1 2.5" stroke="#5B9BEA" strokeWidth="1.8" strokeLinecap="round" /></g>; break;
+    case "rainy": case "pouring":
       g = <g>{cloud(0, -3, "#AEB9CC")}<path d="M9 18.5l-1 2.5M13 18.5l-1 2.5M17 18.5l-1 2.5" stroke="#5B9BEA" strokeWidth="1.8" strokeLinecap="round" /></g>; break;
     case "snowy": g = <g>{cloud(0, -3)}<circle cx="9" cy="20" r="1" fill="#9CC3F0" /><circle cx="13" cy="21" r="1" fill="#9CC3F0" /><circle cx="17" cy="20" r="1" fill="#9CC3F0" /></g>; break;
     case "windy": g = <path d="M3 9h11a2.5 2.5 0 10-2.5-2.5M3 13h15a2.5 2.5 0 11-2.5 2.5M3 17h8" stroke="#8FA3BF" strokeWidth="1.8" strokeLinecap="round" fill="none" />; break;
