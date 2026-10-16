@@ -12,14 +12,16 @@ The frontend has two interchangeable clients: HTTP (talks to this API) and Demo 
 implementation of the same contract, used for the published preview). Keep them in step.
 
 ## Settings
-- `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", pin_set: bool, chore_approval: bool, timezone,
-  screensaver_seconds: int, idle_minutes: {large, compact, phone},
+- `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
+  screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
   media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
   `screensaver_seconds` 3..3600 (default 10); `idle_minutes` per style, 0 = never
   (default `{large: 5, compact: 3, phone: 0}`). The screensaver's photos come from Immich (see Photo screensaver).
+  `theme` (default `auto`) = light or dark for every screen and the Apple apps; `auto` follows each device's own setting.
+  `photo_details` (default true) = show when and where each photo was taken, small at the top right.
   `timezone` = household IANA zone (default `Europe/London`); synced events are converted to it.
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
@@ -31,8 +33,8 @@ implementation of the same contract, used for the published preview). Keep them 
   `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
   code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
   (otherwise none). Dates come from the `holidays` package (see Public holidays).
-- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, media_players, screens, weather_entity, holidays`, plus `pin` (required) -> settings.
+- `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, theme, chore_approval, timezone,
+  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays`, plus `pin` (required) -> settings.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
@@ -205,10 +207,11 @@ Recipe = `{id, title, emoji, minutes, ingredients: [str], url|null}`
 - `POST /api/recipes/{id}/to-list` `{list_id}` -> `{added: int}` adds each ingredient as an item
 
 ## Weather
-- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition}]}`
-  up to 10 days from today. Temperatures are whole numbers in the settings' `temp_unit`.
+- `GET /api/weather` -> `{source: "homeassistant"|"demo", entity: str|null, name?: str (the entity's friendly name), unit: "C"|"F", current: {temp, condition}, daily: [{date, high, low, condition, rain}]}`
+  up to 10 days from today. Temperatures are whole numbers in the settings' `temp_unit`. `rain` is the day's chance
+  of rain or snow in whole percent (HA's `precipitation_probability`), or null when the entity doesn't give one.
   `condition` uses HA's names: `sunny, partlycloudy, cloudy, rainy, pouring, snowy, fog, windy, lightning-rainy, clear-night`
-  (HA's `snowy-rainy`/`hail` -> `snowy`, `windy-variant` -> `windy`, `exceptional` -> `cloudy`).
+  (HA's `snowy-rainy`/`hail` -> `snowy`, `windy-variant` -> `windy`, `exceptional` -> `cloudy`, `lightning` -> `lightning-rainy`).
   With Settings `weather_entity` set (or env `MOONLIGHT_WEATHER_ENTITY` before one is saved), read from that HA weather entity
   (state + `weather.get_forecasts` daily) via the Supervisor API, cached 10 minutes; if HA can't be reached the
   last good forecast is kept for up to an hour, then it falls back to the deterministic demo forecast (`source: "demo"`).
@@ -357,11 +360,15 @@ The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 - `POST /api/immich/test` `{pin, server_url?, api_key?, skip_cert_check?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
   `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.
 - `GET /api/immich/albums` -> `[ImmichAlbum]` live from Immich with the saved key (404 not connected, 400/502 as above)
-- `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, url}]}`.
+- `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, place|null, url}]}`.
   Images only (videos, trashed, hidden and locked assets skipped), from the chosen albums plus favourites / today's
   memories if enabled, de-duplicated, at most 5000. The list is cached and refreshed every 5 minutes
   (`MOONLIGHT_IMMICH_REFRESH` seconds); if Immich can't be reached the last good list is kept (`status: "error"`, retried
-  every minute). Empty `photos` = the screens show their built-in painted scenes. `url` is an absolute path; clients
+  every minute). Empty `photos` = the screens show their built-in painted scenes. `taken_at` is Immich's local time
+  (wall-clock time where the photo was taken, written with a `Z`: show its digits, don't convert it). `place` is the
+  Home Assistant zone the photo's GPS position falls in (its friendly name, e.g. "Home"; the smallest if zones overlap),
+  else the town Immich found for it (else region, else country); null without location data. Zones are read from HA
+  over the same connection as the weather at each refresh; without HA only towns are used. `url` is an absolute path; clients
   prefix their base path.
 - `GET /api/immich/assets/{id}/preview` -> the preview image streamed from Immich, `Cache-Control: private, max-age=86400`.
   404 unless the id is in the current photo list (so the proxy can't read the rest of the library), 502 if Immich fails.

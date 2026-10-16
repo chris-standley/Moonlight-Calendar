@@ -6,7 +6,7 @@ import {
 } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { Avatar, Segmented, tint } from "../components/ui";
-import { IconLeft, IconPin, IconPlus, IconRepeat, IconRight, WeatherIcon } from "../components/icons";
+import { IconDrop, IconLeft, IconPin, IconPlus, IconRepeat, IconRight, WeatherIcon } from "../components/icons";
 import { EventDetail, EventForm, newEventDefaults } from "./EventSheets";
 
 export type CalView = "day" | "week" | "month" | "schedule";
@@ -465,12 +465,12 @@ export function ScheduleView({ start, days, events, meals, weather, people, onOp
           .sort((x, y) => x.at - y.at || ("o" in x && x.o && "o" in y && y.o ? x.o.start.localeCompare(y.o.start) : 0));
         const w = weather?.daily.find((x) => x.date === d);
         const dinner = meals.find((m) => m.date === d && m.slot === "dinner");
-        if (!items.length && !dinner && compact) return null;
         return (
           <section key={d} className={"sched-day" + (d === t ? " today" : "")}>
             <header>
               <div className="sd-date"><span className="sd-num">{dayNum(d)}</span><span><b>{relativeDay(d)}</b><em>{diffDays(d, t) > 1 || diffDays(d, t) < -1 ? fmtDayMonth(d) : fmtDow(d) + " " + fmtDayMonth(d)}</em></span></div>
-              {w && <span className="dh-wx"><WeatherIcon condition={w.condition} size={22} />{w.high}°<em>{w.low}°</em></span>}
+              {w && <span className="dh-wx sd-wx"><WeatherIcon condition={w.condition} size={compact ? 26 : 22} />{w.high}°<em>{w.low}°</em>
+                {!!w.rain && <span className="wx-rain" aria-label={`${w.rain}% chance of rain`}><IconDrop size={14} />{w.rain}%</span>}</span>}
             </header>
             {items.length === 0 && <div className="sched-none">Nothing planned</div>}
             {items.map((it) => {

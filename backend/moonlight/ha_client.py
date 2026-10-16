@@ -7,7 +7,8 @@ MOONLIGHT_WEATHER_ENTITY is the fallback when none is saved. No entity means dem
 
 `get_weather(temp_unit)` returns the /api/weather shape:
   {source: "homeassistant"|"demo", entity: str|null, unit: "C"|"F",
-   current: {temp, condition}, daily: [{date, high, low, condition}]}
+   current: {temp, condition}, daily: [{date, high, low, condition, rain}]}
+  `rain` is the chance of rain or snow in percent (HA's `precipitation_probability`), or null when not given.
 """
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ CONDITION_MAP = {
     "hail": "snowy",
     "windy-variant": "windy",
     "exceptional": "cloudy",
+    "lightning": "lightning-rainy",
 }
 
 
@@ -102,8 +104,10 @@ def parse_ha(state: dict, forecast_response: dict, entity: str, today: date,
         if d is None or high is None or d < today or d in by_day:
             continue
         low = _num(f.get("templow"))
+        rain = _num(f.get("precipitation_probability"))
         by_day[d] = {"date": d.isoformat(), "high": high, "low": high if low is None else low,
-                     "condition": _condition(f.get("condition"))}
+                     "condition": _condition(f.get("condition")),
+                     "rain": None if rain is None else max(0, min(100, round(rain)))}
     daily = [by_day[d] for d in sorted(by_day)][:DAYS]
     if temp is None:
         temp = daily[0]["high"] if daily else None
@@ -277,6 +281,35 @@ async def list_entities() -> list[dict]:
                     "unit": _unit(attrs.get("temperature_unit")),
                     "attribution": attrs.get("attribution")})
     out.sort(key=lambda w: (not w["available"], str(w["name"]).lower()))
+    return out
+
+
+async def zones() -> list[dict]:
+    """Home Assistant's zones (Home, School, any place added under Settings > Areas & zones) as
+    [{name, latitude, longitude, radius}] in metres. Empty when HA isn't connected or can't be reached."""
+    conn = connection()
+    if conn is None:
+        return []
+    base, token = conn
+    try:
+        async with httpx.AsyncClient(base_url=base, headers={"Authorization": f"Bearer {token}"}, timeout=10,
+                                     transport=_transport) as http:
+            r = await http.get("/states")
+            r.raise_for_status()
+            states = r.json()
+    except Exception as e:  # network, HTTP status, bad JSON
+        log.info("Couldn't read Home Assistant's zones (%s); photos are labelled by town only", e.__class__.__name__)
+        return []
+    out = []
+    for s in states if isinstance(states, list) else []:
+        if not isinstance(s, dict) or not str(s.get("entity_id", "")).startswith("zone."):
+            continue
+        a = s.get("attributes") or {}
+        lat, lon, radius = _num(a.get("latitude")), _num(a.get("longitude")), _num(a.get("radius"))
+        if lat is None or lon is None:
+            continue
+        out.append({"name": str(a.get("friendly_name") or s["entity_id"][5:]), "latitude": lat, "longitude": lon,
+                    "radius": radius if radius and radius > 0 else 100.0})
     return out
 
 

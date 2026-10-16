@@ -19,7 +19,11 @@ PREVIEW_CACHE = "private, max-age=86400"  # a day: an asset edited in Immich get
 # ---------------------------------------------------------------- settings hook
 
 def apply_settings(c, body: dict) -> None:
-    """Called from PATCH /api/settings for the screensaver timing keys."""
+    """Called from PATCH /api/settings for the screensaver keys."""
+    if "photo_details" in body:
+        if not isinstance(body["photo_details"], bool):
+            raise bad("photo_details must be a boolean")
+        db.set_setting(c, "photo_details", body["photo_details"])
     if "screensaver_seconds" in body:
         secs = as_int(body["screensaver_seconds"], "screensaver_seconds")
         if not 3 <= secs <= 3600:
@@ -185,7 +189,7 @@ async def immich_albums():
 
 @router.get("/screensaver/photos")
 async def screensaver_photos():
-    """The photos to show: {source: "immich"|"none", status, photos: [{id, width, height, taken_at, url}]}.
+    """The photos to show: {source: "immich"|"none", status, photos: [{id, width, height, taken_at, place, url}]}.
     Empty `photos` = show the built-in scenes (not set up, nothing chosen, or Immich down with nothing cached)."""
     cache = await immich.cache.get()
     if cache.status == "unconfigured":

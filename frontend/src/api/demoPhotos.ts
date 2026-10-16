@@ -6,15 +6,15 @@ import { addDays, isoDT, today } from "../dates";
 type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "updateDisplay" | "thisScreen" | "immich" | "saveImmich" | "disconnectImmich" |
   "testImmich" | "immichAlbums" | "screensaverPhotos">;
 
-interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number }
+interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number; place?: string }
 const LOOKS: Look[] = [
-  { name: "lake-sunset.jpg", sky: ["#1B2A4A", "#5B4A86", "#F09A73", "#FFD3A1"], sun: "#FFE3B5", sunY: 0.52, hills: ["#2A2140", "#3B2C55", "#523D6B"], water: true, ago: 12 },
-  { name: "spring-meadow.jpg", sky: ["#7FB7F5", "#B9DAF7", "#EEF4EA"], sun: "#FFF8DC", sunY: 0.2, hills: ["#3F7A47", "#5E9A57", "#8FBF74"], ago: 40 },
+  { name: "lake-sunset.jpg", place: "Windermere", sky: ["#1B2A4A", "#5B4A86", "#F09A73", "#FFD3A1"], sun: "#FFE3B5", sunY: 0.52, hills: ["#2A2140", "#3B2C55", "#523D6B"], water: true, ago: 12 },
+  { name: "spring-meadow.jpg", place: "Home", sky: ["#7FB7F5", "#B9DAF7", "#EEF4EA"], sun: "#FFF8DC", sunY: 0.2, hills: ["#3F7A47", "#5E9A57", "#8FBF74"], ago: 40 },
   { name: "mountain-night.jpg", sky: ["#070D24", "#13224F", "#2C4C80"], sun: "#F5F1E2", sunY: 0.22, hills: ["#060B1E", "#0E1A3C", "#1B2C58"], stars: true, ago: 75 },
-  { name: "beach-day.jpg", sky: ["#5AB0F0", "#A6D8F7", "#F6E7C8"], sun: "#FFFFFF", sunY: 0.16, hills: ["#E8CF9C", "#3B9CB6", "#5CB8CC"], water: true, ago: 110 },
-  { name: "autumn-hills.jpg", sky: ["#F6C27A", "#F59B6B", "#E06C6C"], sun: "#FFF0C2", sunY: 0.45, hills: ["#6E2F3A", "#9A4A3E", "#C4713F"], ago: 160 },
+  { name: "beach-day.jpg", place: "St Ives", sky: ["#5AB0F0", "#A6D8F7", "#F6E7C8"], sun: "#FFFFFF", sunY: 0.16, hills: ["#E8CF9C", "#3B9CB6", "#5CB8CC"], water: true, ago: 110 },
+  { name: "autumn-hills.jpg", place: "Peppa Pig World", sky: ["#F6C27A", "#F59B6B", "#E06C6C"], sun: "#FFF0C2", sunY: 0.45, hills: ["#6E2F3A", "#9A4A3E", "#C4713F"], ago: 160 },
   { name: "misty-morning.jpg", sky: ["#9FB7C9", "#C9D6DF", "#EEF1F2"], sun: "#FFFFFF", sunY: 0.3, hills: ["#4F6B78", "#6F8A95", "#9AB0B8"], water: true, ago: 220 },
-  { name: "lavender-dusk.jpg", sky: ["#2E2350", "#7B5BA6", "#E9A8C8"], sun: "#FFE1EC", sunY: 0.58, hills: ["#2B1D46", "#4A3270", "#6E4F98"], w: 1000, h: 1400, ago: 300 },
+  { name: "lavender-dusk.jpg", place: "Home", sky: ["#2E2350", "#7B5BA6", "#E9A8C8"], sun: "#FFE1EC", sunY: 0.58, hills: ["#2B1D46", "#4A3270", "#6E4F98"], w: 1000, h: 1400, ago: 300 },
 ];
 
 function rand(seed: number) { return () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; }
@@ -95,7 +95,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
       const w = look.w ?? 1800, h = look.h ?? 1200;
       return {
         id: `0000000${i}-demo-4000-8000-00000000000${i}`, width: w, height: h,
-        taken_at: `${addDays(t, -look.ago)}T${String(9 + i).padStart(2, "0")}:30:00`,
+        taken_at: `${addDays(t, -look.ago)}T${String(9 + i).padStart(2, "0")}:30:00`, place: look.place ?? null,
         url: paint(look, w, h, 1000 + i * 7919).toDataURL("image/jpeg", 0.85),
       };
     });

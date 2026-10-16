@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, STYLE_LABEL, Weather } from "../api/types";
+import { ApiError, STYLE_LABEL, Theme, Weather } from "../api/types";
 import { useApp, useData } from "../state";
 import { Segmented } from "../components/ui";
 import { WeatherIcon } from "../components/icons";
@@ -26,6 +26,12 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
     try { await api.updateSettings({ week_start: v, pin }); toast("Saved"); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
   }
+  async function setTheme(v: Theme) {
+    const pin = await askPin("Change the appearance");
+    if (!pin) return;
+    try { await api.updateSettings({ theme: v, pin }); toast("Saved"); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
+  }
   async function changePin() {
     // With no PIN yet, the new PIN is also the one that authorises the change (see PATCH /api/settings).
     let current: string | null = null;
@@ -49,6 +55,10 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
         <FamilyPanel first={noFamily} />
         <section className="panel">
           <h2 className="panel-title">Display</h2>
+          <div className="set-row"><span>Appearance</span>
+            <Segmented value={settings?.theme ?? "auto"} onChange={setTheme}
+              options={[{ value: "auto", label: "Match device" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
+          </div>
           <div className="set-row"><span>Week starts on</span>
             <Segmented value={settings?.week_start ?? "monday"} onChange={setWeekStart} options={[{ value: "monday", label: "Monday" }, { value: "sunday", label: "Sunday" }]} />
           </div>

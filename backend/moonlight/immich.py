@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import socket
 import ssl
@@ -31,7 +32,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from . import db
+from . import db, ha_client
 from .common import log
 
 TIMEOUT = httpx.Timeout(15.0, connect=5.0)
@@ -190,9 +191,9 @@ class Client:
         use_filter = False
         while len(out) < limit:
             if use_filter:
-                body = {"filter": new, "size": PAGE_SIZE, **({"cursor": cursor} if cursor else {})}
+                body = {"filter": new, "size": PAGE_SIZE, "withExif": True, **({"cursor": cursor} if cursor else {})}
             else:
-                body = {**flat, "type": "IMAGE", "size": PAGE_SIZE, "page": page}
+                body = {**flat, "type": "IMAGE", "size": PAGE_SIZE, "page": page, "withExif": True}
             try:
                 res = await self._call(http, "POST", "/search/metadata", "search photos", json=body)
             except ImmichError as e:
@@ -248,7 +249,29 @@ def is_image(a: dict) -> bool:
             and isinstance(a.get("id"), str))
 
 
-def photo_out(a: dict) -> dict:
+def _distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon1)
+    h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * 6_371_000 * math.asin(min(1.0, math.sqrt(h)))
+
+
+def place_name(exif: dict, zones: list[dict]) -> str | None:
+    """Where a photo was taken: the Home Assistant zone it falls in (the smallest, if zones overlap), else the
+    town Immich found from its GPS (else the region or country). None without location data."""
+    lat, lon = exif.get("latitude"), exif.get("longitude")
+    if isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and not isinstance(lat, bool):
+        inside = [z for z in zones if _distance_m(lat, lon, z["latitude"], z["longitude"]) <= z["radius"]]
+        if inside:
+            return min(inside, key=lambda z: z["radius"])["name"]
+    for key in ("city", "state", "country"):
+        v = exif.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def photo_out(a: dict, zones: list[dict] | None = None) -> dict:
     w, h = a.get("width"), a.get("height")
     exif = a.get("exifInfo") or {}
     if not (isinstance(w, int) and isinstance(h, int)):
@@ -258,6 +281,7 @@ def photo_out(a: dict) -> dict:
         "width": w if isinstance(w, int) and w > 0 else None,
         "height": h if isinstance(h, int) and h > 0 else None,
         "taken_at": (a.get("localDateTime") or a.get("fileCreatedAt") or None),
+        "place": place_name(exif if isinstance(exif, dict) else {}, zones or []),
         "url": f"/api/immich/assets/{a['id']}/preview",
     }
 
@@ -344,13 +368,14 @@ class Cache:
     async def _fetch(self, cfg: dict, tz: str) -> tuple[list[dict], str | None]:
         client = Client(cfg["server_url"], cfg["api_key"], cfg.get("skip_cert_check", False))
         found: dict[str, dict] = {}
+        zones = await ha_client.zones()  # friendly place names ("Home") for photos taken inside a zone
 
         def add(assets: list[dict]) -> None:
             for a in assets:
                 if len(found) >= MAX_ASSETS:
                     return
                 if is_image(a) and a["id"] not in found:
-                    found[a["id"]] = photo_out(a)
+                    found[a["id"]] = photo_out(a, zones)
 
         async with client.http() as http:
             version = await client.version(http)
