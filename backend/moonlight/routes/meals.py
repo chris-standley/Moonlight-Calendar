@@ -1,13 +1,10 @@
-"""Meals, recipes and weather."""
+"""Meals and weather (recipes are in recipes.py)."""
 from __future__ import annotations
-
-import json
 
 from fastapi import APIRouter, Body, HTTPException
 
 from .. import db, ha_client
-from ..common import as_date, as_int, bad, body_dict, choice, hub, not_found, opt_str, req_str
-from .lists import insert_item
+from ..common import as_date, bad, body_dict, choice, hub, not_found, opt_str, req_str
 
 router = APIRouter(prefix="/api")
 
@@ -80,97 +77,6 @@ async def delete_meal(meal_id: str):
             raise not_found("Meal not found")
     await hub.broadcast("meals")
     return {"ok": True}
-
-
-# ---------------------------------------------------------------- recipes
-
-def recipe_out(r: dict) -> dict:
-    return {"id": r["id"], "title": r["title"], "emoji": r["emoji"], "minutes": r["minutes"],
-            "ingredients": json.loads(r["ingredients"]), "url": r["url"]}
-
-
-@router.get("/recipes")
-def list_recipes():
-    with db.connect() as c:
-        return [recipe_out(r) for r in db.rows(c, "SELECT * FROM recipes ORDER BY title")]
-
-
-def recipe_fields(body: dict, partial: bool) -> dict:
-    """Validated recipe columns from a POST (all) or PATCH (only those present) body."""
-    out: dict = {}
-    if not partial or "title" in body:
-        out["title"] = req_str(body, "title")
-    if not partial or "emoji" in body:
-        out["emoji"] = opt_str(body, "emoji")
-    if not partial or "minutes" in body:
-        minutes = body.get("minutes")
-        out["minutes"] = None if minutes in (None, "") else as_int(minutes, "minutes")
-        if out["minutes"] is not None and out["minutes"] < 0:
-            raise bad("minutes can't be negative")
-    if not partial or "ingredients" in body:
-        ingredients = body.get("ingredients") or []
-        if not isinstance(ingredients, list) or not all(isinstance(i, str) for i in ingredients):
-            raise bad("ingredients must be a list of strings")
-        out["ingredients"] = [i.strip() for i in ingredients if i.strip()]
-    if not partial or "url" in body:
-        out["url"] = opt_str(body, "url") or None
-    return out
-
-
-@router.post("/recipes")
-async def create_recipe(body: dict = Body(...)):
-    r = {"id": db.new_id("rc"), **recipe_fields(body_dict(body), partial=False)}
-    with db.connect() as c:
-        c.execute("INSERT INTO recipes(id, title, emoji, minutes, ingredients, url) VALUES(?,?,?,?,?,?)",
-                  (r["id"], r["title"], r["emoji"], r["minutes"], json.dumps(r["ingredients"]), r["url"]))
-    await hub.broadcast("recipes")
-    return r
-
-
-@router.patch("/recipes/{recipe_id}")
-async def update_recipe(recipe_id: str, body: dict = Body(...)):
-    fields = recipe_fields(body_dict(body), partial=True)
-    if "ingredients" in fields:
-        fields["ingredients"] = json.dumps(fields["ingredients"])
-    with db.connect() as c:
-        if not db.row(c, "SELECT 1 FROM recipes WHERE id = ?", (recipe_id,)):
-            raise not_found("Recipe not found")
-        if fields:
-            sets = ", ".join(f"{k} = ?" for k in fields)
-            c.execute(f"UPDATE recipes SET {sets} WHERE id = ?", (*fields.values(), recipe_id))
-        out = recipe_out(db.row(c, "SELECT * FROM recipes WHERE id = ?", (recipe_id,)))
-    await hub.broadcast("recipes")
-    return out
-
-
-@router.delete("/recipes/{recipe_id}")
-async def delete_recipe(recipe_id: str):
-    """Deletes the recipe; planned meals that used it keep their title but lose the link."""
-    with db.connect() as c:
-        if c.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,)).rowcount == 0:
-            raise not_found("Recipe not found")
-        unlinked = c.execute("UPDATE meals SET recipe_id = NULL WHERE recipe_id = ?", (recipe_id,)).rowcount
-    await hub.broadcast("recipes")
-    if unlinked:
-        await hub.broadcast("meals")
-    return {"ok": True}
-
-
-@router.post("/recipes/{recipe_id}/to-list")
-async def recipe_to_list(recipe_id: str, body: dict = Body(...)):
-    body = body_dict(body)
-    with db.connect() as c:
-        r = db.row(c, "SELECT * FROM recipes WHERE id = ?", (recipe_id,))
-        if not r:
-            raise not_found("Recipe not found")
-        list_id = body.get("list_id")
-        if not isinstance(list_id, str) or not c.execute("SELECT 1 FROM lists WHERE id = ?", (list_id,)).fetchone():
-            raise not_found("List not found")
-        ingredients = json.loads(r["ingredients"])
-        for ing in ingredients:
-            insert_item(c, list_id, ing)
-    await hub.broadcast("lists")
-    return {"added": len(ingredients)}
 
 
 # ---------------------------------------------------------------- weather

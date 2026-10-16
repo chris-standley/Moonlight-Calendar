@@ -116,6 +116,34 @@ CREATE TABLE IF NOT EXISTS recipes (
 );
 """
 
+# Added to recipes after the first release (see routes/recipes.py). `ingredients` holds lines of text, `steps` JSON
+# [{text, minutes, photo}], photos are ids in the images table.
+RECIPE_EXTRA_COLUMNS = {
+    "description": "TEXT NOT NULL DEFAULT ''",
+    "photo": "TEXT",
+    "rating": "INTEGER NOT NULL DEFAULT 0",
+    "favourite": "INTEGER NOT NULL DEFAULT 0",
+    "servings": "INTEGER",
+    "prep_minutes": "INTEGER",
+    "cook_minutes": "INTEGER",
+    "steps": "TEXT NOT NULL DEFAULT '[]'",
+    "tags": "TEXT NOT NULL DEFAULT '[]'",
+    "notes": "TEXT NOT NULL DEFAULT ''",
+    "cooked_count": "INTEGER NOT NULL DEFAULT 0",
+    "last_cooked": "TEXT",
+    "created_at": "TEXT",
+    "updated_at": "TEXT",
+}
+# Pictures uploaded from the screens and apps (recipe and step photos). Kept in the database so a backup has them.
+IMAGES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS images (
+    id         TEXT PRIMARY KEY,
+    mime       TEXT NOT NULL,
+    data       BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
+
 # Calendar sync (see caldav_sync.py). Credentials live only in this database file.
 SYNC_SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
@@ -243,6 +271,11 @@ def init_db() -> None:
         c.executescript(SCHEMA)
         c.executescript(SYNC_SCHEMA)
         c.executescript(IMMICH_SCHEMA)
+        c.executescript(IMAGES_SCHEMA)
+        have = {r[1] for r in c.execute("PRAGMA table_info(recipes)")}
+        for col, decl in RECIPE_EXTRA_COLUMNS.items():
+            if col not in have:
+                c.execute(f"ALTER TABLE recipes ADD COLUMN {col} {decl}")
         have = {r[1] for r in c.execute("PRAGMA table_info(events)")}
         for col, decl in EVENT_SOURCE_COLUMNS.items():
             if col not in have:

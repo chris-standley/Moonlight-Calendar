@@ -315,11 +315,13 @@ def test_meals_range(client):
 def test_recipe_edit_and_delete(client):
     rc = client.post("/api/recipes", json={"title": "Chilli", "emoji": "🌶️", "minutes": 40,
                                            "ingredients": ["Beans", " ", "Mince"]}).json()
-    assert rc["ingredients"] == ["Beans", "Mince"]
+    assert [i["text"] for i in rc["ingredients"]] == ["Beans", "Mince"]
     r = client.patch(f"/api/recipes/{rc['id']}", json={"title": "Veggie chilli", "ingredients": ["Beans", "Peppers"],
                                                       "minutes": None, "url": "https://example.com/chilli"})
-    assert r.json() == {"id": rc["id"], "title": "Veggie chilli", "emoji": "🌶️", "minutes": None,
-                        "ingredients": ["Beans", "Peppers"], "url": "https://example.com/chilli"}
+    got = r.json()
+    assert {k: got[k] for k in ("id", "title", "emoji", "minutes", "url")} == {
+        "id": rc["id"], "title": "Veggie chilli", "emoji": "🌶️", "minutes": None, "url": "https://example.com/chilli"}
+    assert [i["text"] for i in got["ingredients"]] == ["Beans", "Peppers"]
     assert client.patch(f"/api/recipes/{rc['id']}", json={"title": " "}).status_code == 400
     assert client.patch(f"/api/recipes/{rc['id']}", json={"minutes": -5}).status_code == 400
     assert client.patch("/api/recipes/nope", json={"title": "x"}).status_code == 404
@@ -335,7 +337,7 @@ def test_recipe_edit_and_delete(client):
 def test_recipe_to_list(client):
     rc = client.post("/api/recipes", json={"title": "Tacos", "emoji": "🌮", "minutes": 25,
                                            "ingredients": ["Tortillas", "Lime"], "url": None}).json()
-    assert rc["ingredients"] == ["Tortillas", "Lime"]
+    assert [i["text"] for i in rc["ingredients"]] == ["Tortillas", "Lime"]
     lid = client.post("/api/lists", json={"name": "Shop", "emoji": "", "color": "", "kind": "grocery"}).json()["id"]
     assert client.post(f"/api/recipes/{rc['id']}/to-list", json={"list_id": lid}).json() == {"added": 2}
     assert [i["title"] for i in client.get(f"/api/lists/{lid}/items").json()] == ["Tortillas", "Lime"]
