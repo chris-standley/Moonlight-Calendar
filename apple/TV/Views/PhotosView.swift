@@ -78,6 +78,16 @@ struct Slideshow: View {
                 .shadow(color: .black.opacity(0.5), radius: 16)
                 .padding(70)
             }
+            if model.settings?.photo_details != false, !photos.isEmpty, let caption = photos[index % photos.count].caption {
+                Text(caption)
+                    .font(Theme.font(24, .bold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .shadow(color: .black.opacity(0.6), radius: 10)
+                    .padding(.top, 50).padding(.trailing, 70)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .id("caption\(index)")
+                    .transition(.opacity)
+            }
             if paused {
                 Image(systemName: "pause.fill").font(.system(size: 60)).foregroundStyle(.white.opacity(0.8))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -11,6 +11,8 @@ export interface Settings {
   chore_approval: boolean;
   /** Photo screensaver: seconds per photo, idle minutes per screen (0 = never). Photos come from Immich. */
   screensaver_seconds?: number;
+  /** Show when and where each screensaver photo was taken (default true). */
+  photo_details?: boolean;
   idle_minutes?: Partial<Record<Layout, number>>;
   timezone?: string;
   /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
@@ -129,7 +131,8 @@ export interface ImmichAlbum { id: string; name: string; asset_count: number; sh
 export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
 export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
 /** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
-export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; url: string }
+/** `taken_at`: local time where it was taken (show the digits as they are). `place`: HA zone name or town, if known. */
+export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; place?: string | null; url: string }
 export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[] }
 
 export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media";

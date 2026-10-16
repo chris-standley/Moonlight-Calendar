@@ -178,6 +178,7 @@ DEFAULT_SETTINGS = {
     "chore_approval": False,
     # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
+    "photo_details": True,  # when and where each photo was taken, small at the top right
     "idle_minutes": {"large": 5, "compact": 3, "phone": 0},
     # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
     # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.

@@ -1,6 +1,6 @@
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { SlidePhoto } from "../api/types";
-import { addDays, fmtFull, fmtTime, isoDT, today } from "../dates";
+import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { IconDrop, WeatherIcon } from "../components/icons";
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
@@ -46,6 +46,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const photos = data?.photos ?? [];
   const listKey = photos.map((p) => p.id).join();
   const usePhotos = photos.length > 0 && broken !== listKey;
+  const [shown, setShown] = useState<SlidePhoto | null>(null);
   const t = today();
   const [events] = useData((api) => api.events(t, addDays(t, 2)), ["events"], [t]);
   const [weather] = useData((api) => api.weather(), ["settings"], []);
@@ -57,9 +58,10 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   return (
     <div className="screensaver" onClick={onWake}>
       {data && (usePhotos
-        ? <PhotoShow key={listKey} photos={photos} seconds={seconds} onFail={() => setBroken(listKey)} />
+        ? <PhotoShow key={listKey} photos={photos} seconds={seconds} onFail={() => setBroken(listKey)} onShow={setShown} />
         : <SceneShow seconds={seconds} />)}
       <div className="ss-shade" />
+      {usePhotos && shown && settings?.photo_details !== false && <PhotoCaption photo={shown} />}
       <div className="ss-info">
         {weather && <div className="ss-wx">
           <WeatherIcon condition={weather.current.condition} size={44} /> {weather.current.temp}°
@@ -74,6 +76,19 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
       </div>
     </div>
   );
+}
+
+/** When and where the photo on screen was taken, small at the top right: "14 July 2025 · 3:30pm · Home". */
+function PhotoCaption({ photo }: { photo: SlidePhoto }) {
+  // Immich's local time is the wall clock where the photo was taken; use its digits as they are.
+  const taken = photo.taken_at?.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)?.[0];
+  const parts = [
+    taken && parse(taken).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+    taken && fmtTime(taken),
+    photo.place,
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  return <div key={photo.id} className="ss-caption">{parts.join(" · ")}</div>;
 }
 
 function SceneShow({ seconds }: { seconds: number }) {
@@ -99,12 +114,16 @@ function load(url: string): Promise<number> {
 
 /** Immich photos: shuffled, crossfading, with a slow Ken Burns zoom (off for prefers-reduced-motion).
  * A photo that won't load is skipped; if several in a row fail, `onFail` hands back to the painted scenes. */
-function PhotoShow({ photos, seconds, onFail }: { photos: SlidePhoto[]; seconds: number; onFail: () => void }) {
+function PhotoShow({ photos, seconds, onFail, onShow }: {
+  photos: SlidePhoto[]; seconds: number; onFail: () => void; onShow: (p: SlidePhoto) => void;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const [order] = useState(() => shuffle(photos)); // keyed by the list's ids, so a refetch doesn't restart it
   const [slides, setSlides] = useState<Slide[]>([]);
   const failRef = useRef(onFail);
   failRef.current = onFail;
+  const showRef = useRef(onShow);
+  showRef.current = onShow;
   useEffect(() => {
     let n = -1, alive = true, failures = 0, busy = false, shown = false;
     const giveUp = Math.min(3, order.length);
@@ -118,7 +137,7 @@ function PhotoShow({ photos, seconds, onFail }: { photos: SlidePhoto[]; seconds:
         failures = 0;
         shown = true;
         busy = false;
-        if (alive) setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect }]);
+        if (alive) { setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect }]); showRef.current(photo); }
       }, () => {
         busy = false;
         if (++failures >= giveUp) { if (alive) failRef.current(); }

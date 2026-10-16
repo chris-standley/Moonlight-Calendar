@@ -423,6 +423,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ss-wx { display: flex; align-items: center; gap: 0.45rem; font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; }
 .ss-wx svg { filter: drop-shadow(0 0.1rem 0.5rem rgba(0, 0, 0, 0.45)); }
 .ss-hilo { display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.5rem; font-size: 1.3rem; font-weight: 700; opacity: 0.9; }
+.ss-caption { position: absolute; top: 1.4rem; right: 2rem; max-width: 50%; font-size: 0.95rem; font-weight: 700; opacity: 0.85; text-align: right; text-shadow: 0 0.1rem 0.6rem rgba(0, 0, 0, 0.6); animation: fade 1.6s; }
 .ss-right { position: absolute; right: 3rem; bottom: 2.6rem; display: flex; flex-direction: column; align-items: flex-end; gap: 1rem; max-width: 45%; }
 .screensaver .ss-right .ss-np { position: static; }
 .ss-next { font-size: 1.3rem; font-weight: 600; padding: 0.5rem 1rem; border-radius: 1rem; background: rgba(0, 0, 0, 0.3); text-shadow: 0 0.1rem 1rem rgba(0, 0, 0, 0.35); }
@@ -509,6 +510,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-phone .fab { bottom: 1rem; right: 1rem; width: 3.6rem; height: 3.6rem; }
 .layout-phone .ss-info { left: 1.4rem; bottom: 2rem; }
 .layout-phone .ss-time { font-size: 4rem; }
+.layout-phone .ss-caption { display: none; } /* the music card and next event sit at the top */
 .layout-phone .ss-right { left: 1.2rem; right: 1.2rem; top: 1.4rem; bottom: auto; align-items: stretch; max-width: none; }
 
 /* ---------- preview shell (published demo only) ---------- */
