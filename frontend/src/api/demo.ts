@@ -8,7 +8,7 @@ import {
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
-import { metricNote, parseIngredient, parseText, stepTimers } from "../recipes/recipeText";
+import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 
 interface Completion { chore_id: string; date: string; at: string }
 /** A recipe as the add-on stores it: ingredient lines and steps; the rest is worked out when read (recipeOut). */
@@ -315,14 +315,15 @@ export function demoApi(): Api {
   const imageUrl = (id: string | null | undefined) => (id ? st.images?.[id] ?? null : null);
   /** The Recipe the add-on would return for a stored row (see routes/recipes.py recipe_out). */
   const recipeOut = (r: RecipeRow | (Partial<RecipeRow> & { id: null; title: string })): Recipe => {
+    const ingredients = (r.ingredients ?? []).map(parseIngredient);
     const total = r.minutes ?? (r.prep_minutes == null && r.cook_minutes == null ? null : (r.prep_minutes ?? 0) + (r.cook_minutes ?? 0));
     return {
       id: r.id as string, title: r.title, emoji: r.emoji ?? "", description: r.description ?? "", photo: r.photo ?? null,
       photo_url: imageUrl(r.photo), rating: r.rating ?? 0, favourite: !!r.favourite, servings: r.servings ?? null,
       prep_minutes: r.prep_minutes ?? null, cook_minutes: r.cook_minutes ?? null, minutes: total,
-      ingredients: (r.ingredients ?? []).map(parseIngredient),
+      ingredients,
       steps: (r.steps ?? []).map((x) => ({ text: x.text, minutes: x.minutes, photo: x.photo, photo_url: imageUrl(x.photo),
-        timers: stepTimers(x.text, x.minutes), metric_text: metricNote(x.text) })),
+        timers: stepTimers(x.text, x.minutes), metric_text: metricNote(x.text), uses: stepUses(x.text, ingredients) })),
       tags: r.tags ?? [], notes: r.notes ?? "", url: r.url ?? null, cooked_count: r.cooked_count ?? 0,
       last_cooked: r.last_cooked ?? null, created_at: r.created_at ?? null, updated_at: r.updated_at ?? null,
     };

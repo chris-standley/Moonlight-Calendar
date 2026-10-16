@@ -895,6 +895,13 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .step-n { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: #eef0fe; color: var(--accent); font-weight: 800; }
 .step-list p { margin: 0.2rem 0 0; font-size: 1.05rem; line-height: 1.5; font-weight: 600; }
 .step-list img { margin-top: 0.6rem; max-width: 100%; max-height: 18rem; border-radius: 0.8rem; object-fit: cover; }
+.step-amounts { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
+.step-amounts span { font-size: 0.85rem; font-weight: 700; padding: 0.15rem 0.6rem; border-radius: 999px; background: var(--surface-2); }
+.step-amounts em { font-style: normal; color: var(--accent); }
+.step-amounts.big { justify-content: center; gap: 0.5rem; margin-top: 0; }
+.step-amounts.big span { font-size: 1.1rem; padding: 0.35rem 0.9rem; }
+.cook-voice { text-align: center; padding: 0.45rem 1rem; font-weight: 700; color: var(--accent); }
+.cook-voice.err { color: var(--danger, #e0475b); }
 .step-timers { display: flex; gap: 0.4rem; margin-top: 0.4rem; flex-wrap: wrap; }
 .step-timers span, .rf-chip { font-size: 0.82rem; font-weight: 800; padding: 0.15rem 0.6rem; border-radius: 999px; background: var(--surface-2); }
 .rp-notes { white-space: pre-wrap; line-height: 1.45; font-weight: 600; }

@@ -231,3 +231,15 @@ def test_photo_import_needs_the_reader(client, monkeypatch):
     d = client.post("/api/recipes/import", json={"images": [img, img]}).json()
     assert seen == {"key": "sk-ant-test-abcd", "n": 2} and d["title"] == "Read" and d["servings"] == 2
     assert client.request("DELETE", "/api/recipes-reader", json={"pin": PIN}).json()["configured"] is False
+
+
+def test_step_uses_names_the_ingredients_a_step_mentions():
+    ings = [recipe_text.parse_ingredient(t) for t in [
+        "225g unsalted butter, softened", "2 large eggs", "1 red onion, finely chopped", "2 spring onions",
+        "6 chicken thighs, sliced", "100g blueberries", "2 peppers, sliced", "Salt and pepper"]]
+    uses = lambda t: recipe_text.step_uses(t, ings)  # noqa: E731
+    assert uses("Beat the butter, then add the eggs one at a time.") == [0, 1]
+    assert uses("Toss the chicken thigh with the red onion.") == [4, 2]   # plural/singular, order of mention
+    assert uses("Fry the onion.") == []                                   # two kinds of onion: not guessed
+    assert uses("Scatter over the spring onions and a blueberry.") == [3, 5]
+    assert uses("Season with salt and pepper.") == []                     # not the peppers, no amount for the salt

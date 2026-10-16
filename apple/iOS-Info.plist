@@ -18,6 +18,10 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Moonlight uses the camera to scan recipes from cookbooks and to take recipe pictures.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>In hands-free cook mode, Moonlight listens for "next", "back", "repeat" and "start the timer".</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Hands-free cook mode understands "next", "back", "repeat" and "start the timer" on your phone.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>

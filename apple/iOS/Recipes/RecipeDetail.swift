@@ -148,6 +148,7 @@ struct RecipeDetail: View {
                         .frame(width: 30, height: 30).background(Theme.accent.opacity(0.12), in: Circle())
                     VStack(alignment: .leading, spacing: 8) {
                         Text(s.shown).font(Theme.text(.body, .medium)).foregroundStyle(Theme.text)
+                        StepAmounts(recipe: r, step: s, factor: r.factor(servings))
                         if s.photo_url != nil {
                             RemoteImage(path: s.photo_url).frame(height: 160).frame(maxWidth: .infinity)
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

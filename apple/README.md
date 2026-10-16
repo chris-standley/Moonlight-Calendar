@@ -38,7 +38,9 @@ for the shopping list, with everyday staples and things already on the list left
   pages are read a column at a time) and sorted into a recipe by the add-on; with an Anthropic key set in the add-on
   (Settings › Recipes on a wall screen), "Read with Claude" sends the photos to Claude instead. Either way the recipe
   opens in the editor to check before it's saved.
-- **Cook mode** shows one step at a time, large, with its timer buttons; swipe or tap Next. The screen stays on.
+- **Cook mode** shows one step at a time, large, with the amounts of the ingredients it mentions and its timer
+  buttons; swipe or tap Next. The screen stays on. **Hands-free** (the microphone button) listens for "next",
+  "back", "repeat", "start the timer", "stop" and "ingredients", recognised on the phone, and reads each step aloud.
 - **Timers** go off with the app closed or the phone locked: each books a local notification with **+1 minute** and
   **Stop** buttons that work from the Lock Screen without opening the app.
 - **Live Activity**: while cook mode is open the current step and the next timer's countdown show on the Lock Screen

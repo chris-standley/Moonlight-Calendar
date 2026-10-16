@@ -211,7 +211,10 @@ last_cooked: date|null, created_at, updated_at}`
   568 ml, oz, lb, fl oz, sticks of butter); teaspoons and tablespoons are left alone. Lines like "For the sauce:" are
   `heading: true`. Screens scale `quantity`, `quantity_max` and `metric` by servings and rebuild the line; when
   `quantity` is null they show `text` as is.
-- Step = `{text, minutes: number|null, photo|null, photo_url|null, timers: [{seconds, label}], metric_text: str|null}`.
+- Step = `{text, minutes: number|null, photo|null, photo_url|null, timers: [{seconds, label}], metric_text: str|null,
+  uses: [int]}`. `uses` are the ingredients the step mentions (indexes into `ingredients`, in the order the step
+  mentions them), so screens can show their scaled amounts with the step; only lines with an amount count, and a
+  word shared by two ingredients ("red onion", "spring onions") only counts when the step names the whole one.
   `timers` are the times the text mentions ("simmer for 10-15 minutes" -> 600, the shorter end) plus `minutes` when
   set; `metric_text` is `text` with metric figures added in brackets ("350°F (175°C)", "9-inch (23 cm)",
   "1 cup (240 ml)"), null when nothing needed converting.

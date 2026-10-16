@@ -24,7 +24,7 @@ struct KitchenTimer: Codable, Identifiable, Hashable {
 @MainActor
 final class KitchenTimers {
     static let shared = KitchenTimers()
-    static let category = "moonlight.kitchen-timer"
+    nonisolated static let category = "moonlight.kitchen-timer"
     private static let idPrefix = "timer."  // not "moonlight.": Reminders clears those when it reschedules
     private static let saved = "kitchen.timers"
 

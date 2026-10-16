@@ -95,10 +95,11 @@ def _total(r: dict) -> int | None:
     return (r.get("prep_minutes") or 0) + (r.get("cook_minutes") or 0)
 
 
-def step_out(s: dict) -> dict:
+def step_out(s: dict, ingredients: list[dict]) -> dict:
     text = s.get("text", "")
     return {"text": text, "minutes": s.get("minutes"), "photo": s.get("photo"), "photo_url": image_url(s.get("photo")),
-            "timers": recipe_text.step_timers(text, s.get("minutes")), "metric_text": recipe_text.metric_note(text)}
+            "timers": recipe_text.step_timers(text, s.get("minutes")), "metric_text": recipe_text.metric_note(text),
+            "uses": recipe_text.step_uses(text, ingredients)}
 
 
 def _lines(raw) -> list[str]:
@@ -110,14 +111,15 @@ def _lines(raw) -> list[str]:
 def recipe_out(r: dict) -> dict:
     steps = json.loads(r["steps"]) if isinstance(r.get("steps"), str) else r.get("steps") or []
     tags = json.loads(r["tags"]) if isinstance(r.get("tags"), str) else r.get("tags") or []
+    ingredients = [recipe_text.parse_ingredient(t) for t in _lines(r.get("ingredients"))]
     return {
         "id": r.get("id"), "title": r["title"], "emoji": r.get("emoji") or "", "description": r.get("description") or "",
         "photo": r.get("photo"), "photo_url": image_url(r.get("photo")),
         "rating": r.get("rating") or 0, "favourite": bool(r.get("favourite")),
         "servings": r.get("servings"), "prep_minutes": r.get("prep_minutes"), "cook_minutes": r.get("cook_minutes"),
         "minutes": _total(r),
-        "ingredients": [recipe_text.parse_ingredient(t) for t in _lines(r.get("ingredients"))],
-        "steps": [step_out(s) for s in steps],
+        "ingredients": ingredients,
+        "steps": [step_out(s, ingredients) for s in steps],
         "tags": tags, "notes": r.get("notes") or "", "url": r.get("url"),
         "cooked_count": r.get("cooked_count") or 0, "last_cooked": r.get("last_cooked"),
         "created_at": r.get("created_at"), "updated_at": r.get("updated_at"),

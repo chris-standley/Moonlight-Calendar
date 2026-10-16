@@ -32,6 +32,8 @@ struct RecipeStep: Codable, Hashable {
     let photo_url: String?
     let timers: [StepTimer]
     let metric_text: String?
+    /// Ingredients the step mentions (indexes into the recipe's ingredients), in the order it mentions them.
+    let uses: [Int]?
 
     var shown: String { metric_text ?? text }
 }

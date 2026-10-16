@@ -125,7 +125,10 @@ the event is also missing on those days on phones.
 Meals > Recipes holds the family's recipes: picture, rating, servings and times, ingredients and steps (with step
 pictures). Amounts scale with the servings you pick; cups, ounces, pounds and °F stay as written with grams,
 millilitres and °C shown beside them. Times in a step ("simmer for 10 minutes") get a timer button, and cook mode
-shows one step at a time with the screen kept on. Add to list, and planning a meal with a recipe, offer the
+shows one step at a time, with the amounts of the ingredients it uses, with the screen kept on. Hands-free
+(the microphone button) listens for "next", "back", "repeat", "start the timer" and "stop the timer" and reads each
+step aloud; on the wall screens it needs a browser with speech recognition (Chrome does; it's hidden where it isn't
+available). Add to list, and planning a meal with a recipe, offer the
 ingredients for a shopping list.
 
 Bring recipes in from a web page (most recipe sites mark out their recipes, so they come straight in), pasted text,

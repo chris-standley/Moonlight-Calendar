@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode } from "react";
-import { Ingredient, Recipe } from "../../api/types";
+import { Ingredient, Recipe, Step } from "../../api/types";
 import { IconStar } from "../../components/icons";
 import { fmtMinutes, fmtNumber, ingredientLine, metricAmount } from "../../recipes/recipeText";
 
@@ -73,6 +73,20 @@ export function TimeFacts({ recipe }: { recipe: Recipe }) {
   return (
     <div className="rc-facts">
       {shown.map(([k, v]) => <div key={k}><span>{k}</span><b>{fmtMinutes(v)}</b></div>)}
+    </div>
+  );
+}
+
+/** The amounts of the ingredients a step mentions ("225 g butter · 2 eggs"), scaled, with metric where it helps. */
+export function StepAmounts({ recipe, step, factor, big }: { recipe: Recipe; step: Step; factor: number; big?: boolean }) {
+  const ings = (step.uses ?? []).map((n) => recipe.ingredients[n]).filter(Boolean);
+  if (!ings.length) return null;
+  return (
+    <div className={"step-amounts" + (big ? " big" : "")}>
+      {ings.map((ing, n) => {
+        const m = metricAmount(ing, factor);
+        return <span key={n}>{ingredientLine(ing, factor, false)}{m && <em> ({m})</em>}</span>;
+      })}
     </div>
   );
 }

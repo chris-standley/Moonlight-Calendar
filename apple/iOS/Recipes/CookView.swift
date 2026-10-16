@@ -13,6 +13,7 @@ struct CookView: View {
     @State private var showIngredients = false
     @State private var ticked: Set<Int> = []
     private var timers: KitchenTimers { KitchenTimers.shared }
+    @State private var voice = HandsFree()
 
     private var count: Int { recipe.steps.count }
 
@@ -22,6 +23,13 @@ struct CookView: View {
             ProgressView(value: Double(min(index + 1, count)), total: Double(max(1, count)))
                 .tint(Theme.accent)
                 .padding(.horizontal, 16)
+            if voice.listening || voice.problem != nil {
+                Text(voice.problem ?? "Say \"next\", \"back\", \"repeat\", \"start the timer\" or \"stop\"")
+                    .font(Theme.text(.subheadline, .bold))
+                    .foregroundStyle(voice.problem == nil ? Theme.accent : Theme.danger)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16).padding(.top, 8)
+            }
             TabView(selection: $index) {
                 ForEach(recipe.steps.indices, id: \.self) { i in
                     page(i).tag(i)
@@ -39,12 +47,50 @@ struct CookView: View {
             CookingLiveActivity.shared.begin(recipe)
         }
         .onDisappear {
+            voice.stop()
             UIApplication.shared.isIdleTimerDisabled = false
             CookingLiveActivity.shared.end()
         }
         .onChange(of: index) { _, i in
             CookingLiveActivity.shared.show(step: i, of: count, text: i < count ? recipe.steps[i].shown : "All done. Enjoy!")
         }
+    }
+
+    /// A spoken command from hands-free mode.
+    private func heard(_ c: HandsFree.Command) {
+        switch c {
+        case .next:
+            let n = min(count, index + 1)
+            withAnimation { index = n }
+            read(n)
+        case .back:
+            let n = max(0, index - 1)
+            withAnimation { index = n }
+            read(n)
+        case .repeatStep:
+            read(index)
+        case .ingredients:
+            showIngredients.toggle()
+        case .startTimer:
+            guard index < count else { return }
+            let label = { (t: StepTimer) in "Step \(index + 1): \(t.label)" }
+            if let t = recipe.steps[index].timers.first(where: { !timers.running(label: label($0), recipe: recipe.title) }) {
+                timers.start(label(t), seconds: t.seconds, recipe: recipe.title)
+                voice.say("Timer started for \(t.label)")
+            } else {
+                voice.say(recipe.steps[index].timers.isEmpty ? "This step has no timer" : "That timer is already running")
+            }
+        case .stopTimer:
+            let mine = timers.timers.filter { $0.recipe == recipe.title }
+            if let t = mine.first(where: { $0.done(at: timers.now) }) ?? mine.last {
+                timers.stop(t.id)
+                voice.say("Timer stopped")
+            }
+        }
+    }
+
+    private func read(_ n: Int) {
+        voice.say(n < count ? "Step \(n + 1). \(recipe.steps[n].shown)" : "That's everything. Enjoy!")
     }
 
     private var header: some View {
@@ -59,6 +105,24 @@ struct CookView: View {
                     .font(Theme.text(.subheadline)).foregroundStyle(Theme.muted)
             }
             Spacer()
+            Button {
+                if voice.listening {
+                    voice.stop()
+                } else {
+                    voice.onCommand = { heard($0) }
+                    Task {
+                        await voice.start()
+                        if voice.listening { read(index) }
+                    }
+                }
+            } label: {
+                Image(systemName: voice.listening ? "mic.fill" : "mic")
+                    .font(.headline)
+                    .frame(width: 40, height: 40)
+                    .foregroundStyle(voice.listening ? .white : Theme.text)
+                    .background(voice.listening ? Theme.accent : Theme.surface, in: Circle())
+            }
+            .accessibilityLabel(voice.listening ? "Stop hands-free" : "Hands-free")
             Button { showIngredients = true } label: {
                 Label("Ingredients", systemImage: "list.bullet").font(Theme.text(.subheadline, .bold))
             }
@@ -86,6 +150,8 @@ struct CookView: View {
                     .font(Theme.text(.title2, .bold))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.text)
+                    .frame(maxWidth: 720)
+                StepAmounts(recipe: recipe, step: step, factor: factor, big: true)
                     .frame(maxWidth: 720)
                 ForEach(step.timers, id: \.seconds) { t in
                     let label = "Step \(i + 1): \(t.label)"

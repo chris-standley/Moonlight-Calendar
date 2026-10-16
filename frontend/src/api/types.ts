@@ -96,6 +96,8 @@ export interface Step {
   timers: StepTimer[];
   /** The text with metric figures added in brackets, or null when nothing needed converting. */
   metric_text: string | null;
+  /** Ingredients the step mentions (indexes into `ingredients`), in the order it mentions them. */
+  uses: number[];
 }
 export interface Recipe {
   /** null for an unsaved draft (preview, import). */

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Recipe } from "../../api/types";
 import { useApp } from "../../state";
-import { IconCheck, IconClose, IconLeft, IconRight } from "../../components/icons";
-import { startTimer, useTimers } from "../../recipes/timers";
-import { IngredientRow, IngredientText } from "./bits";
+import { IconCheck, IconClose, IconLeft, IconMic, IconRight } from "../../components/icons";
+import { startTimer, stopTimer, useTimers } from "../../recipes/timers";
+import { VoiceCommand, speak, useVoice, voiceSupported } from "../../recipes/voice";
+import { IngredientRow, IngredientText, StepAmounts } from "./bits";
 import { TimerTray } from "./TimerTray";
 
 /** Step by step: the current step large in the middle, its timers one tap away, ingredients to tick off at the side.
@@ -17,6 +18,7 @@ export function CookMode({ recipe, factor, onClose }: { recipe: Recipe; factor: 
   const steps = recipe.steps;
   const last = steps.length; // one past the steps: the "done" page
   const step = steps[i];
+  const [handsFree, setHandsFree] = useState(false);
 
   // Keep the screen awake while cooking (where the browser supports it).
   useEffect(() => {
@@ -53,6 +55,25 @@ export function CookMode({ recipe, factor, onClose }: { recipe: Recipe; factor: 
     try { await api.recipeCooked(recipe.id); toast("Marked as made. Enjoy!"); } catch { /* still close */ }
     onClose();
   }
+  // Hands-free: "next", "back", "repeat", "start the timer", "stop the timer", "ingredients". Steps are read out.
+  const say = (n: number) => speak(n < last ? `Step ${n + 1}. ${steps[n].metric_text ?? steps[n].text}` : "That's everything. Enjoy!");
+  const onVoice = (c: VoiceCommand) => {
+    if (c === "next") { const n = Math.min(last, i + 1); setI(n); say(n); }
+    else if (c === "back") { const n = Math.max(0, i - 1); setI(n); say(n); }
+    else if (c === "repeat") say(i);
+    else if (c === "ingredients") setShowIngs((v) => !v);
+    else if (c === "start-timer") {
+      const t = step?.timers.find((x) => !running(x.seconds));
+      if (t) { startTimer(`Step ${i + 1}: ${t.label}`, t.seconds, recipe.title); speak(`Timer started for ${t.label}`); }
+      else speak(step?.timers.length ? "That timer is already running" : "This step has no timer");
+    } else if (c === "stop-timer") {
+      const mine = timers.filter((t) => t.recipe === recipe.title);
+      const t = mine.find((x) => x.ringing) ?? mine[mine.length - 1];
+      if (t) { stopTimer(t.id); speak("Timer stopped"); }
+    }
+  };
+  const voiceError = useVoice(handsFree, onVoice);
+
   const running = (seconds: number) => timers.some((t) => t.total === seconds && t.recipe === recipe.title && !t.ringing);
 
   return (
@@ -60,8 +81,16 @@ export function CookMode({ recipe, factor, onClose }: { recipe: Recipe; factor: 
       <header className="cook-top">
         <button className="icon-btn" onClick={onClose} aria-label="Close cook mode"><IconClose /></button>
         <div className="cook-title"><b>{recipe.title}</b><span>{i < last ? `Step ${i + 1} of ${steps.length}` : "All done"}</span></div>
+        {voiceSupported() && (
+          <button className={"btn ghost small" + (handsFree ? " on" : "")} aria-pressed={handsFree}
+            onClick={() => { const v = !handsFree; setHandsFree(v); if (v) say(i); }}
+            title='Say "next", "back", "repeat", "start the timer" or "stop the timer"'>
+            <IconMic size={18} /> {handsFree ? "Listening" : "Hands-free"}
+          </button>
+        )}
         <button className={"btn ghost small" + (showIngs ? " on" : "")} onClick={() => setShowIngs(!showIngs)}>Ingredients</button>
       </header>
+      {handsFree && <div className={"cook-voice" + (voiceError ? " err" : "")}>{voiceError ?? <>Say <b>next</b>, <b>back</b>, <b>repeat</b>, <b>start the timer</b> or <b>stop the timer</b></>}</div>}
       <div className="cook-progress"><span style={{ width: `${(Math.min(i + 1, last) / Math.max(1, last)) * 100}%` }} /></div>
       <div className={"cook-body" + (showIngs ? " with-ings" : "")}>
         {showIngs && (
@@ -85,6 +114,7 @@ export function CookMode({ recipe, factor, onClose }: { recipe: Recipe; factor: 
             <div className="cook-num">{i + 1}</div>
             {step.photo_url && <img className="cook-photo" src={step.photo_url} alt="" draggable={false} />}
             <p className="cook-text">{step.metric_text ?? step.text}</p>
+            <StepAmounts recipe={recipe} step={step} factor={factor} big />
             {step.timers.length > 0 && (
               <div className="cook-timers">
                 {step.timers.map((t) => (

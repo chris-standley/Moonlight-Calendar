@@ -210,6 +210,60 @@ def step_timers(text: str, minutes: float | None) -> list[dict]:
 
 # ---------------------------------------------------------------- metric notes in step text
 
+# Words that describe an ingredient rather than name it ("2 large free-range eggs" is "eggs" in the method).
+_FILLER = {"large", "small", "medium", "big", "fresh", "dried", "frozen", "ripe", "chopped", "sliced", "diced",
+           "minced", "grated", "crushed", "ground", "whole", "tin", "tins", "can", "cans", "jar", "pack", "packet",
+           "of", "and", "or", "the", "a", "an", "free", "range", "organic", "unsalted", "salted", "plain", "extra",
+           "virgin", "light", "dark", "finely", "roughly", "thinly", "boneless", "skinless", "good", "quality",
+           "heaped", "level", "about", "approx", "x"}
+
+
+def _singular(word: str) -> str:
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith("oes") or word.endswith("ches") or word.endswith("shes"):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
+        return word[:-1]
+    return word
+
+
+def _forms(word: str) -> str:
+    """A word in the singular or plural: egg / eggs, tomato / tomatoes, berry / berries."""
+    stem = _singular(word)
+    if stem.endswith("y"):
+        return rf"(?:{re.escape(stem)}|{re.escape(stem[:-1])}ies)"
+    return rf"{re.escape(stem)}(?:e?s)?"
+
+
+def step_uses(text: str, ingredients: list[dict]) -> list[int]:
+    """Which ingredients a step mentions, in the order it mentions them (indexes into `ingredients`), so screens can
+    show their amounts with the step. Only lines with an amount count. A shared last word ("red onion", "spring
+    onion" -> "onion") only counts when the step names the whole ingredient."""
+    # "Season with salt and pepper" isn't about the peppers on the list.
+    low = re.sub(r"salt\s*(?:and|&)\s*(?:black\s+)?pepper", lambda m: " " * len(m.group()), (text or "").lower())
+    found: list[tuple[int, int]] = []
+    words = {i: [w for w in re.findall(r"[a-z]+", (ing.get("name") or "").lower()) if w not in _FILLER]
+             for i, ing in enumerate(ingredients) if not ing.get("heading") and ing.get("quantity") is not None}
+    heads = [_singular(ws[-1]) for ws in words.values() if ws]
+    for i, ws in words.items():
+        if not ws:
+            continue
+        pats = []
+        if len(ws) > 1:
+            pats.append(r"\s+".join([re.escape(w) for w in ws[:-1]] + [_forms(ws[-1])]))
+        if len(ws[-1]) >= 3 and heads.count(_singular(ws[-1])) == 1:
+            pats.append(_forms(ws[-1]))
+        best = None
+        for pat in pats:
+            m = re.search(rf"(?<![a-z]){pat}(?![a-z])", low)
+            if m and (best is None or m.start() < best):
+                best = m.start()
+        if best is not None:
+            found.append((best, i))
+    return [i for _, i in sorted(found)]
+
+
 def _nice(v: float) -> str:
     return str(int(v)) if float(v).is_integer() else f"{v:.1f}".rstrip("0").rstrip(".")
 

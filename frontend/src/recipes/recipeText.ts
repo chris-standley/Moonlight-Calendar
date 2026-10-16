@@ -210,6 +210,53 @@ export function stepTimers(text: string, minutes: number | null | undefined): St
   return secs.map((s) => ({ seconds: s, label: fmtDuration(s) }));
 }
 
+// Words that describe an ingredient rather than name it ("2 large free-range eggs" is "eggs" in the method).
+const FILLER = new Set(["large", "small", "medium", "big", "fresh", "dried", "frozen", "ripe", "chopped", "sliced", "diced",
+  "minced", "grated", "crushed", "ground", "whole", "tin", "tins", "can", "cans", "jar", "pack", "packet",
+  "of", "and", "or", "the", "a", "an", "free", "range", "organic", "unsalted", "salted", "plain", "extra",
+  "virgin", "light", "dark", "finely", "roughly", "thinly", "boneless", "skinless", "good", "quality",
+  "heaped", "level", "about", "approx", "x"]);
+
+function singular(word: string): string {
+  if (word.endsWith("ies") && word.length > 4) return word.slice(0, -3) + "y";
+  if (word.endsWith("oes") || word.endsWith("ches") || word.endsWith("shes")) return word.slice(0, -2);
+  if (word.endsWith("s") && !word.endsWith("ss") && word.length > 3) return word.slice(0, -1);
+  return word;
+}
+
+/** A word in the singular or plural: egg / eggs, tomato / tomatoes, berry / berries. */
+function forms(word: string): string {
+  const stem = singular(word);
+  if (stem.endsWith("y")) return `(?:${esc(stem)}|${esc(stem.slice(0, -1))}ies)`;
+  return `${esc(stem)}(?:e?s)?`;
+}
+
+/** Which ingredients a step mentions, in the order it mentions them (indexes), so screens can show their amounts. */
+export function stepUses(text: string, ingredients: Ingredient[]): number[] {
+  // "Season with salt and pepper" isn't about the peppers on the list.
+  const low = (text ?? "").toLowerCase().replace(/salt\s*(?:and|&)\s*(?:black\s+)?pepper/g, (m) => " ".repeat(m.length));
+  const words = new Map<number, string[]>();
+  ingredients.forEach((ing, i) => {
+    if (!ing.heading && ing.quantity != null) words.set(i, ((ing.name ?? "").toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => !FILLER.has(w)));
+  });
+  const heads = [...words.values()].filter((ws) => ws.length).map((ws) => singular(ws[ws.length - 1]));
+  const found: [number, number][] = [];
+  for (const [i, ws] of words) {
+    if (!ws.length) continue;
+    const last = ws[ws.length - 1];
+    const pats: string[] = [];
+    if (ws.length > 1) pats.push([...ws.slice(0, -1).map(esc), forms(last)].join("\\s+"));
+    if (last.length >= 3 && heads.filter((h) => h === singular(last)).length === 1) pats.push(forms(last));
+    let best: number | null = null;
+    for (const pat of pats) {
+      const m = new RegExp(`(?<![a-z])${pat}(?![a-z])`).exec(low);
+      if (m && (best == null || m.index < best)) best = m.index;
+    }
+    if (best != null) found.push([best, i]);
+  }
+  return found.sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, i]) => i);
+}
+
 const nice = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.?0+$/, ""));
 const TEMP_RE = /(\d{2,3})\s*(?:°|º|˚|degrees?\s*)\s*F(?:ahrenheit)?\b|(\d{3})\s*F\b/g;
 const INCH_RE = /(\d+(?:\.\d+)?)(?:\s*[x×]\s*(\d+(?:\.\d+)?))?(?:\s*-\s*|\s*)(?:inch(?:es)?\b|in\.(?!\w)|″|")/g;

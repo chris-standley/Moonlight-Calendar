@@ -4,7 +4,7 @@ import { useApp } from "../../state";
 import { Segmented, Sheet } from "../../components/ui";
 import { IconCalendar, IconCart, IconLeft } from "../../components/icons";
 import { addDays, dayNum, fmtDayMonth, fmtDow, today } from "../../dates";
-import { Heart, IngredientRow, RecipePicture, ServingsStepper, Stars, TimeFacts, defaultServings, factorFor } from "./bits";
+import { Heart, IngredientRow, RecipePicture, ServingsStepper, Stars, StepAmounts, TimeFacts, defaultServings, factorFor } from "./bits";
 import { AddToListSheet } from "./AddToListSheet";
 import { CookMode } from "./CookMode";
 import { RecipeEditor } from "./RecipeEditor";
@@ -79,6 +79,7 @@ export function RecipePage({ recipe, onClose }: { recipe: Recipe; onClose: () =>
                     <span className="step-n">{n + 1}</span>
                     <div>
                       <p>{s.metric_text ?? s.text}</p>
+                      <StepAmounts recipe={recipe} step={s} factor={factor} />
                       {s.photo_url && <img src={s.photo_url} alt="" loading="lazy" />}
                       {s.timers.length > 0 && <div className="step-timers">{s.timers.map((t) => <span key={t.seconds}>⏱ {t.label}</span>)}</div>}
                     </div>
