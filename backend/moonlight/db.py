@@ -212,9 +212,9 @@ DEFAULT_SETTINGS = {
     # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
     # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
     "screens": {
-        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"]},
-        "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
-        "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "lists"]},
+        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists"]},
+        "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
+        "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
     },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
 }
@@ -294,6 +294,7 @@ def init_db() -> None:
         if "skip_cert_check" not in have:
             c.execute("ALTER TABLE immich ADD COLUMN skip_cert_check INTEGER NOT NULL DEFAULT 0")
         _rename_layouts(c)
+        _add_recipes_section(c)
 
 
 # Screen styles were named after rooms until 0.3.8.
@@ -309,10 +310,43 @@ def _rename_layouts(c: sqlite3.Connection) -> None:
             set_setting(c, key, {OLD_LAYOUTS.get(k, k): v for k, v in val.items()})
 
 
+# Recipes became their own menu section in 0.5.1 (they were inside Meals). Once, give every menu that shows Meals
+# Recipes too, right after it; the marker keeps a later choice to hide Recipes.
+RECIPES_MARKER = "recipes_section_added"
+
+
+def _with_recipes(secs: Any) -> Any:
+    if isinstance(secs, list) and "meals" in secs and "recipes" not in secs:
+        i = secs.index("meals") + 1
+        return secs[:i] + ["recipes"] + secs[i:]
+    return secs
+
+
+def _add_recipes_section(c: sqlite3.Connection) -> None:
+    if get_setting(c, RECIPES_MARKER):
+        return
+    screens = get_setting(c, "screens")
+    if isinstance(screens, dict):
+        for conf in screens.values():
+            if isinstance(conf, dict) and "sections" in conf:
+                conf["sections"] = _with_recipes(conf["sections"])
+        set_setting(c, "screens", screens)
+    for d in c.execute("SELECT id, setup FROM displays WHERE setup IS NOT NULL").fetchall():
+        try:
+            setup = json.loads(d["setup"])
+        except ValueError:
+            continue
+        if isinstance(setup, dict) and "sections" in setup:
+            setup["sections"] = _with_recipes(setup["sections"])
+            c.execute("UPDATE displays SET setup = ? WHERE id = ?", (json.dumps(setup), d["id"]))
+    set_setting(c, RECIPES_MARKER, True)
+
+
 def is_empty() -> bool:
     with connect() as c:
         n = c.execute(
-            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings WHERE key != 'instance_id')"
+            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings WHERE key NOT IN ('instance_id', ?))",
+            (RECIPES_MARKER,),
         ).fetchone()[0]
     return n == 0
 

@@ -28,7 +28,7 @@ Text uses the system's text styles in the rounded design, so Dynamic Type works.
 
 ### Recipes
 
-Meals › Recipes is the family recipe box: search, favourites, tags, and a page per recipe with its picture, rating,
+The Recipes tab is the family recipe box: search, favourites, tags, and a page per recipe with its picture, rating,
 times, ingredients scaled to the servings you pick (metric amounts shown beside cups, ounces and pounds), the method
 with step pictures, and Start cooking / Add to list / Plan it. Planning a meal with a recipe offers its ingredients
 for the shopping list, with everyday staples and things already on the list left unticked.

@@ -29,11 +29,11 @@ export interface Settings {
 export interface HolidayRegion { country: string; subdiv: string }
 export interface Holiday { date: string; name: string }
 export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
-export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists";
-export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "lists"];
+export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists";
+export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"];
 export interface ScreenSetup { start: Section; sections: Section[] }
 export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
-  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "lists"] },
+  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists"] },
   compact: { start: "today", sections: [...SECTIONS] },
   phone: { start: "today", sections: [...SECTIONS] },
 };

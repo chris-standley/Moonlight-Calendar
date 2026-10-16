@@ -207,7 +207,7 @@ def test_one_address_and_per_screen_setup(app_on, ha):
     assert s.get("/display").status_code == 200
     token, d = pair(ha, s, name="Landing", layout="large")
     assert d["layout"] == "large" and d["own_setup"] is False
-    assert d["setup"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "lists"],
+    assert d["setup"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists"],
                           "speaker": "", "idle_minutes": 5}
     auth = {"Authorization": f"Bearer {token}"}
     me = s.get("/api/auth/status", headers=auth).json()["display"]
@@ -257,6 +257,35 @@ def test_old_style_names_are_renamed(tmp_path):
         assert dict(c.execute("SELECT id, layout FROM displays")) == {"ds_1": "large", "ds_2": "compact"}
         assert c.execute("SELECT value FROM settings WHERE key = 'idle_minutes'").fetchone()[0] == \
             '{"large": 9, "compact": 2, "phone": 0}'
+
+
+def test_recipes_join_menus_that_show_meals_once(tmp_path):
+    import json
+    import sqlite3
+
+    from moonlight import db
+
+    path = str(tmp_path / "old.db")
+    create_app(db_path=path, demo=False, static_dir=tmp_path / "x", auth_enabled=True)
+    with sqlite3.connect(path) as c:
+        c.execute("DELETE FROM settings WHERE key = ?", (db.RECIPES_MARKER,))
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('screens', ?)", (json.dumps(
+            {"large": {"start": "meals", "sections": ["calendar", "meals", "lists"]},
+             "compact": {"start": "today", "sections": ["today", "lists"]}}),))
+        c.execute("INSERT INTO displays(id, name, layout, token_hash, created_at, revoked, setup) "
+                  "VALUES('ds_1', 'Hall', 'large', 'h1', '2026-10-01', 0, ?)", (json.dumps({"sections": ["meals"]}),))
+    db.init_db()
+    with sqlite3.connect(path) as c:
+        screens = json.loads(c.execute("SELECT value FROM settings WHERE key = 'screens'").fetchone()[0])
+        assert screens["large"]["sections"] == ["calendar", "meals", "recipes", "lists"]
+        assert screens["compact"]["sections"] == ["today", "lists"]
+        assert json.loads(c.execute("SELECT setup FROM displays").fetchone()[0])["sections"] == ["meals", "recipes"]
+        # Hiding Recipes later sticks.
+        c.execute("UPDATE settings SET value = ? WHERE key = 'screens'",
+                  (json.dumps({"large": {"start": "meals", "sections": ["meals"]}}),))
+    db.init_db()
+    with sqlite3.connect(path) as c:
+        assert json.loads(c.execute("SELECT value FROM settings WHERE key = 'screens'").fetchone()[0])["large"]["sections"] == ["meals"]
 
 
 def test_the_phone_app_is_not_a_screen(app_on, ha):

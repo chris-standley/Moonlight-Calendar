@@ -2,12 +2,9 @@ import { useState } from "react";
 import { Meal, Recipe, Slot } from "../api/types";
 import { addDays, dayNum, fmtDayMonth, fmtDow, today, weekStart } from "../dates";
 import { useApp, useData } from "../state";
-import { Segmented, Sheet } from "../components/ui";
+import { Sheet } from "../components/ui";
 import { IconLeft, IconPlus, IconRight, IconTrash } from "../components/icons";
-import { RecipeBox } from "./recipes/RecipeBox";
 import { RecipePage } from "./recipes/RecipePage";
-import { RecipeEditor } from "./recipes/RecipeEditor";
-import { ImportSheet } from "./recipes/ImportSheet";
 import { AddToListSheet } from "./recipes/AddToListSheet";
 
 export const SLOTS: { key: Slot; label: string; icon: string }[] = [
@@ -19,7 +16,6 @@ export const SLOTS: { key: Slot; label: string; icon: string }[] = [
 
 export function MealsView() {
   const { settings } = useApp();
-  const [tab, setTab] = useState<"plan" | "recipes">("plan");
   const [start, setStart] = useState(() => weekStart(today(), settings?.week_start ?? "monday"));
   const end = addDays(start, 7);
   const [meals] = useData((api) => api.meals(start, end), ["meals"], [start]);
@@ -27,53 +23,29 @@ export function MealsView() {
   const [edit, setEdit] = useState<{ date: string; slot: Slot; meal?: Meal } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const open = recipes?.find((r) => r.id === openId);
-  const [editing, setEditing] = useState<Recipe | "new" | null>(null);
-  const [adding, setAdding] = useState<"menu" | "link" | "text" | "photo" | null>(null);
   const [shop, setShop] = useState<Recipe | null>(null);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   return (
     <div className="meals">
       <div className="toolbar">
         <div className="toolbar-l">
-          {tab === "plan" ? <>
-            <button className="btn ghost" onClick={() => setStart(weekStart(today(), settings?.week_start ?? "monday"))}>This week</button>
-            <button className="icon-btn" onClick={() => setStart(addDays(start, -7))} aria-label="Previous week"><IconLeft /></button>
-            <button className="icon-btn" onClick={() => setStart(addDays(start, 7))} aria-label="Next week"><IconRight /></button>
-            <h1 className="toolbar-title">{fmtDayMonth(start)} – {fmtDayMonth(addDays(end, -1))}</h1>
-          </> : <h1 className="toolbar-title">Recipe box</h1>}
-        </div>
-        <div className="toolbar-r">
-          <Segmented value={tab} onChange={setTab} options={[{ value: "plan", label: "Meal plan" }, { value: "recipes", label: "Recipes" }]} />
+          <button className="btn ghost" onClick={() => setStart(weekStart(today(), settings?.week_start ?? "monday"))}>This week</button>
+          <button className="icon-btn" onClick={() => setStart(addDays(start, -7))} aria-label="Previous week"><IconLeft /></button>
+          <button className="icon-btn" onClick={() => setStart(addDays(start, 7))} aria-label="Next week"><IconRight /></button>
+          <h1 className="toolbar-title">{fmtDayMonth(start)} – {fmtDayMonth(addDays(end, -1))}</h1>
         </div>
       </div>
-      {tab === "plan" ? (
-        <div className="meal-grid">
-          <div className="mg-corner" />
-          {days.map((d) => (
-            <div key={d} className={"mg-day" + (d === today() ? " today" : "")}><span>{fmtDow(d)}</span><b>{dayNum(d)}</b></div>
-          ))}
-          {SLOTS.map((s) => (
-            <MealRow key={s.key} slot={s} days={days} meals={meals ?? []} recipes={recipes ?? []} onEdit={(date, meal) => setEdit({ date, slot: s.key, meal })} />
-          ))}
-        </div>
-      ) : (<>
-        <RecipeBox recipes={recipes ?? []} onOpen={(r) => setOpenId(r.id)} />
-        <button className="fab" onClick={() => setAdding("menu")} aria-label="Add a recipe"><IconPlus size={30} /></button>
-      </>)}
-      {adding === "menu" && (
-        <Sheet title="Add a recipe" onClose={() => setAdding(null)}>
-          <div className="add-menu">
-            <button onClick={() => { setAdding(null); setEditing("new"); }}><span>✍️</span><b>Type it in</b><small>Start from a blank recipe</small></button>
-            <button onClick={() => setAdding("link")}><span>🔗</span><b>From a link</b><small>A recipe web page</small></button>
-            <button onClick={() => setAdding("photo")}><span>📷</span><b>From photos</b><small>A cookbook or recipe card</small></button>
-            <button onClick={() => setAdding("text")}><span>📋</span><b>Paste text</b><small>From a message or a note</small></button>
-          </div>
-        </Sheet>
-      )}
-      {adding && adding !== "menu" && <ImportSheet start={adding} onClose={() => setAdding(null)} onDraft={(d) => { setAdding(null); setEditing(d); }} />}
+      <div className="meal-grid">
+        <div className="mg-corner" />
+        {days.map((d) => (
+          <div key={d} className={"mg-day" + (d === today() ? " today" : "")}><span>{fmtDow(d)}</span><b>{dayNum(d)}</b></div>
+        ))}
+        {SLOTS.map((s) => (
+          <MealRow key={s.key} slot={s} days={days} meals={meals ?? []} recipes={recipes ?? []} onEdit={(date, meal) => setEdit({ date, slot: s.key, meal })} />
+        ))}
+      </div>
       {open && <RecipePage key={open.id} recipe={open} onClose={() => setOpenId(null)} />}
-      {editing && <RecipeEditor recipe={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={(r) => { setTab("recipes"); setOpenId(r.id); }} />}
-      {edit && <MealSheet {...edit} recipes={recipes ?? []} onClose={() => setEdit(null)} onOpenRecipe={(id) => { setEdit(null); setTab("recipes"); setOpenId(id); }}
+      {edit && <MealSheet {...edit} recipes={recipes ?? []} onClose={() => setEdit(null)} onOpenRecipe={(id) => { setEdit(null); setOpenId(id); }}
         onPlanned={(r) => setShop(r)} />}
       {shop && <AddToListSheet recipe={shop} title="Add the ingredients to a list?" onClose={() => setShop(null)} />}
     </div>

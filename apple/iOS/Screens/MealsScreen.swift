@@ -1,18 +1,8 @@
 import SwiftUI
 
-/// The Meals tab: the week's plan, or the recipe box.
-struct MealsTab: View {
-    @SceneStorage("meals.mode") private var mode = "plan"
-
-    var body: some View {
-        if mode == "recipes" { RecipesScreen(mode: $mode) } else { MealsScreen(mode: $mode) }
-    }
-}
-
 /// The week's meals. Narrow: a day per card. Wider: a grid with a column per day. Tap a slot to plan or change it.
 struct MealsScreen: View {
     @Environment(AppModel.self) private var model
-    @Binding var mode: String
     @State private var anchor: String?
     @State private var meals: [Meal] = []
     @State private var editing: MealSlotEdit?
@@ -30,7 +20,6 @@ struct MealsScreen: View {
         let days = d.days(from: start, count: 7)
         Page(title: "Meals") { room in
             ScrollView {
-                MealsModePicker(mode: $mode).padding(.horizontal, 16).padding(.top, 8)
                 if room == .narrow {
                     VStack(spacing: 12) {
                         ForEach(days, id: \.self) { day in dayCard(day) }

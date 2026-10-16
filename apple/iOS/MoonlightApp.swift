@@ -63,7 +63,8 @@ struct MainTabs: View {
             Tab("Calendar", systemImage: "calendar", value: "calendar") { CalendarScreen() }
             Tab("Chores", systemImage: "checkmark.circle", value: "chores") { ChoresScreen() }
             Tab("Rewards", systemImage: "star", value: "rewards") { RewardsScreen() }
-            Tab("Meals", systemImage: "fork.knife", value: "meals") { MealsTab() }
+            Tab("Meals", systemImage: "fork.knife", value: "meals") { MealsScreen() }
+            Tab("Recipes", systemImage: "book.closed", value: "recipes") { RecipesScreen() }
             Tab("Lists", systemImage: "list.bullet", value: "lists") { ListsScreen() }
             Tab("Settings", systemImage: "gearshape", value: "settings") { SettingsScreen() }
         }
