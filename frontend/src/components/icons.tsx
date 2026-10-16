@@ -19,6 +19,9 @@ export const IconStar = ({ size, filled, ...p }: P & { filled?: boolean }) => (
 export const IconMeals = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><path d="M6 3v7a2 2 0 002 2v9M10 3v7a2 2 0 01-2 2M8 3v5" /><path d="M17 21V3c-2.2 1-3.5 3.5-3.5 7v3H17" /></svg>
 );
+export const IconRecipes = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}><path d="M5 4.5A1.5 1.5 0 016.5 3H19v15H6.5A1.5 1.5 0 005 19.5z" /><path d="M5 19.5A1.5 1.5 0 006.5 21H19v-3" /><path d="M10 7v4M12 7v4M14 7v4M12 11v4" /></svg>
+);
 export const IconLists = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><path d="M9.5 6.5H20M9.5 12H20M9.5 17.5H20" /><path d="M4 6.5l1 1 2-2M4 12l1 1 2-2" /><circle cx="5.2" cy="17.5" r="1.2" /></svg>
 );

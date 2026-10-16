@@ -122,7 +122,7 @@ the event is also missing on those days on phones.
 
 ## Recipes
 
-Meals > Recipes holds the family's recipes: picture, rating, servings and times, ingredients and steps (with step
+The Recipes section holds the family's recipes: picture, rating, servings and times, ingredients and steps (with step
 pictures). Amounts scale with the servings you pick; cups, ounces, pounds and °F stay as written with grams,
 millilitres and °C shown beside them. Times in a step ("simmer for 10 minutes") get a timer button, and cook mode
 shows one step at a time, with the amounts of the ingredients it uses, with the screen kept on. Hands-free

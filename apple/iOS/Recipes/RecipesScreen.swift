@@ -3,7 +3,6 @@ import SwiftUI
 /// The recipe box: search, quick filters (favourites, quick, tags), sorting, and a card per recipe.
 struct RecipesScreen: View {
     @Environment(AppModel.self) private var model
-    @Binding var mode: String
     @State private var recipes: [Recipe] = []
     @State private var loaded = false
     @State private var query = ""
@@ -41,7 +40,6 @@ struct RecipesScreen: View {
             .navigationTitle("Recipes")
             .searchable(text: $query, prompt: "Recipes or ingredients")
             .toolbar {
-                ToolbarItem(placement: .principal) { MealsModePicker(mode: $mode) }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("Sort", selection: $sort) {
@@ -160,19 +158,5 @@ struct RecipesScreen: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
-    }
-}
-
-/// Plan / Recipes, at the top of the Meals tab.
-struct MealsModePicker: View {
-    @Binding var mode: String
-
-    var body: some View {
-        Picker("Show", selection: $mode) {
-            Text("Plan").tag("plan")
-            Text("Recipes").tag("recipes")
-        }
-        .pickerStyle(.segmented)
-        .frame(width: 200)
     }
 }

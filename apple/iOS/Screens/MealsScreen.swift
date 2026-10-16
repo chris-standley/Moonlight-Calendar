@@ -1,18 +1,8 @@
 import SwiftUI
 
-/// The Meals tab: the week's plan, or the recipe box.
-struct MealsTab: View {
-    @SceneStorage("meals.mode") private var mode = "plan"
-
-    var body: some View {
-        if mode == "recipes" { RecipesScreen(mode: $mode) } else { MealsScreen(mode: $mode) }
-    }
-}
-
 /// The week's meals. Narrow: a day per card. Wider: a grid with a column per day. Tap a slot to plan or change it.
 struct MealsScreen: View {
     @Environment(AppModel.self) private var model
-    @Binding var mode: String
     @State private var anchor: String?
     @State private var meals: [Meal] = []
     @State private var editing: MealSlotEdit?
@@ -44,7 +34,6 @@ struct MealsScreen: View {
             ToolbarItem(placement: .topBarLeading) {
                 DateStepper(label: "This week", onToday: { anchor = nil }) { anchor = d.addDays(start, 7 * $0) }
             }
-            ToolbarItem(placement: .principal) { MealsModePicker(mode: $mode) }
         }
         .task(id: "\(start)|\(model.rev("meals"))") {
             if let v = await model.call({ try await $0.meals(start, d.addDays(start, 7)) }) { meals = v }

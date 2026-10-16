@@ -26,7 +26,7 @@ implementation of the same contract, used for the published preview). Keep them 
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
   `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
-  chores, rewards, meals, lists` (Settings is always shown), and the one it opens on (default large
+  chores, rewards, meals, recipes, lists` (Settings is always shown), and the one it opens on (default large
   `{start: "calendar", sections: all but today}`, compact and phone `{start: "today", sections: all}`).
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).

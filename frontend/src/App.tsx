@@ -4,7 +4,7 @@ import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
-  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconSettings, IconStar, Logo, WeatherIcon,
+  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconRecipes, IconSettings, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -17,14 +17,16 @@ import { SettingsView } from "./views/SettingsView";
 import { SyncBanner } from "./views/SyncBanner";
 import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
 import { TimerTray } from "./views/recipes/TimerTray";
+import { RecipesView } from "./views/RecipesView";
 
-type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "lists" | "settings";
+type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { key: "today", label: "Today", icon: IconHome },
   { key: "calendar", label: "Calendar", icon: IconCalendar },
   { key: "chores", label: "Chores", icon: IconChores },
   { key: "rewards", label: "Rewards", icon: IconStar },
   { key: "meals", label: "Meals", icon: IconMeals },
+  { key: "recipes", label: "Recipes", icon: IconRecipes },
   { key: "lists", label: "Lists", icon: IconLists },
   { key: "settings", label: "Settings", icon: IconSettings },
 ];
@@ -178,6 +180,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
               {tab === "chores" && <ChoresView />}
               {tab === "rewards" && <RewardsView />}
               {tab === "meals" && <MealsView />}
+              {tab === "recipes" && <RecipesView />}
               {tab === "lists" && <ListsView />}
               {tab === "settings" && <SettingsView onScreensaver={() => setSaver(true)} />}
             </>}
