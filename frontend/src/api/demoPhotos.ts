@@ -1,6 +1,6 @@
 // Demo-mode screens and a simulated Immich server for the photo screensaver. Sample photos are painted on a canvas
 // at runtime (so the single-file preview stays small). Kept in memory only.
-import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, Layout, SECTIONS, SlidePhoto, Topic } from "./types";
+import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, ImmichSeason, Layout, PhotoAlbum, SECTIONS, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
 type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "updateDisplay" | "thisScreen" | "immich" | "saveImmich" | "disconnectImmich" |
@@ -59,9 +59,10 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // The pretend Immich library: which sample photos are in which album, favourites and "on this day".
 const ALBUMS: (ImmichAlbum & { looks: number[] })[] = [
-  { id: "5d0c7c52-3f7e-4d55-9a8e-0f6a1b2c3d41", name: "Family", asset_count: 7, shared: true, looks: [0, 1, 2, 3, 4, 5, 6] },
-  { id: "8a1f2e33-6b4c-4e9a-8d17-2c3b4a5d6e72", name: "Garden", asset_count: 3, shared: false, looks: [1, 4, 5] },
-  { id: "c47b9d10-2e8f-4a63-b5c4-7d8e9f0a1b23", name: "Summer holiday", asset_count: 3, shared: false, looks: [0, 3, 6] },
+  { id: "5d0c7c52-3f7e-4d55-9a8e-0f6a1b2c3d41", name: "Family", asset_count: 7, shared: true, updated_at: "2026-09-20T10:00:00.000Z", looks: [0, 1, 2, 3, 4, 5, 6] },
+  { id: "8a1f2e33-6b4c-4e9a-8d17-2c3b4a5d6e72", name: "Garden", asset_count: 3, shared: false, updated_at: "2026-06-02T10:00:00.000Z", looks: [1, 4, 5] },
+  { id: "c47b9d10-2e8f-4a63-b5c4-7d8e9f0a1b23", name: "Summer holiday", asset_count: 3, shared: false, updated_at: "2026-08-14T10:00:00.000Z", looks: [0, 3, 6] },
+  { id: "e2a6f0b8-91d3-4c5e-a7f2-3b4c5d6e7f80", name: "Christmas", asset_count: 2, shared: true, updated_at: "2025-12-27T10:00:00.000Z", looks: [2, 5] },
 ];
 const FAVOURITES = [2, 3];
 const ON_THIS_DAY = [5];
@@ -84,8 +85,10 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
 
   // Starts connected to one album, so the preview's screensaver shows photos. Any address and key work;
   // the key "wrong" is rejected and an address containing "offline" can't be reached.
-  let cfg: { server_url: string; key: string; album_ids: string[]; favorites: boolean; memories: boolean; skip_cert_check?: boolean } | null =
-    { server_url: "http://192.168.1.10:2283", key: "demo", album_ids: [ALBUMS[0].id], favorites: false, memories: false };
+  type Cfg = { server_url: string; key: string; mode: ImmichMode; album_ids: string[]; excluded_album_ids: string[]; seasons: ImmichSeason[];
+    favorites: boolean; memories: boolean; skip_cert_check?: boolean };
+  let cfg: Cfg | null = { server_url: "http://192.168.1.10:2283", key: "demo", mode: "albums", album_ids: [ALBUMS[0].id], excluded_album_ids: [],
+    seasons: [], favorites: false, memories: false };
   let refreshed = ago(2);
   let painted: SlidePhoto[] | null = null;
   function library(): SlidePhoto[] {
@@ -101,18 +104,30 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     });
     return painted;
   }
-  const chosen = (): SlidePhoto[] => {
-    if (!cfg) return [];
-    const idx = new Set<number>();
-    for (const id of cfg.album_ids) ALBUMS.find((a) => a.id === id)?.looks.forEach((i) => idx.add(i));
-    if (cfg.favorites) FAVOURITES.forEach((i) => idx.add(i));
-    if (cfg.memories) ON_THIS_DAY.forEach((i) => idx.add(i));
-    return [...idx].sort().map((i) => library()[i]);
+  const looksOf = (ids: string[]) => ids.flatMap((id) => ALBUMS.find((a) => a.id === id)?.looks ?? []);
+  const seasonNow = (c: Cfg) => {
+    const md = today().slice(5);
+    return [...new Set(c.seasons.filter((s) => (s.start <= s.end ? s.start <= md && md <= s.end : md >= s.start || md <= s.end)).map((s) => s.album_id))];
   };
+  // Like the add-on: whole albums (newest first), seasonal ones only in their dates, hidden albums' photos hidden everywhere.
+  const groups = (): (Omit<PhotoAlbum, "photos"> & { looks: number[] })[] => {
+    if (!cfg) return [];
+    const now = seasonNow(cfg);
+    const hidden = now.length ? [] : [...cfg.seasons.map((s) => s.album_id), ...(cfg.mode === "all" ? cfg.excluded_album_ids : [])];
+    const hide = new Set(looksOf(hidden));
+    const ids = now.length ? now : cfg.mode === "all" ? ALBUMS.map((a) => a.id).filter((id) => !hidden.includes(id)) : cfg.album_ids.filter((id) => !hidden.includes(id));
+    const out = ALBUMS.filter((a) => ids.includes(a.id)).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))
+      .map(({ id, name, updated_at, looks }) => ({ id, name, updated_at: updated_at ?? null, looks }));
+    if (!now.length && cfg.favorites) out.push({ id: "favorites", name: "Favourites", updated_at: null, looks: FAVOURITES });
+    if (!now.length && cfg.memories) out.push({ id: "on-this-day", name: "On this day", updated_at: today(), looks: ON_THIS_DAY });
+    return out.map((g) => ({ ...g, looks: g.looks.filter((i) => !hide.has(i)) })).filter((g) => g.looks.length);
+  };
+  const chosen = (): SlidePhoto[] => [...new Set(groups().flatMap((g) => g.looks))].sort().map((i) => library()[i]);
   const out = (): ImmichConfig => cfg
-    ? { configured: true, server_url: cfg.server_url, key_set: true, album_ids: [...cfg.album_ids], favorites: cfg.favorites,
+    ? { configured: true, server_url: cfg.server_url, key_set: true, mode: cfg.mode, album_ids: [...cfg.album_ids],
+        excluded_album_ids: [...cfg.excluded_album_ids], seasons: cfg.seasons.map((s) => ({ ...s })), season_now: seasonNow(cfg), favorites: cfg.favorites,
         memories: cfg.memories, skip_cert_check: !!cfg.skip_cert_check, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
-    : { configured: false, server_url: "", key_set: false, album_ids: [], favorites: false, memories: false, skip_cert_check: false, status: "unconfigured",
+    : { configured: false, server_url: "", key_set: false, mode: "albums", album_ids: [], excluded_album_ids: [], seasons: [], favorites: false, memories: false, skip_cert_check: false, status: "unconfigured",
         last_error: null, last_refresh: null, photo_count: 0, version: null };
   const albums = () => ALBUMS.map(({ looks, ...a }) => ({ ...a }));
   async function check(url: string, key: string) {
@@ -158,12 +173,13 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
     immich: async () => out(),
-    async saveImmich({ pin, server_url, api_key, album_ids, favorites, memories, skip_cert_check }) {
+    async saveImmich({ pin, server_url, api_key, mode, album_ids, excluded_album_ids, seasons, favorites, memories, skip_cert_check }) {
       checkPin(pin);
       const url = server_url !== undefined ? clean(server_url) : cfg?.server_url ?? "";
       const key = api_key ? api_key.trim() : cfg?.key ?? "";
       if (!cfg || url !== cfg.server_url || key !== cfg.key) await check(url, key);
-      cfg = { server_url: url, key, album_ids: album_ids ?? cfg?.album_ids ?? [], favorites: favorites ?? cfg?.favorites ?? false,
+      cfg = { server_url: url, key, mode: mode ?? cfg?.mode ?? "albums", album_ids: album_ids ?? cfg?.album_ids ?? [],
+        excluded_album_ids: excluded_album_ids ?? cfg?.excluded_album_ids ?? [], seasons: seasons ?? cfg?.seasons ?? [], favorites: favorites ?? cfg?.favorites ?? false,
         memories: memories ?? cfg?.memories ?? false, skip_cert_check: skip_cert_check ?? cfg?.skip_cert_check ?? false };
       refreshed = ago(0);
       emit("photos");
@@ -180,7 +196,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     },
     async immichAlbums() { if (!cfg) throw new ApiError(404, "Immich isn't connected"); return albums(); },
     screensaverPhotos: async () => cfg
-      ? { source: "immich", status: "ok", photos: chosen() }
-      : { source: "none", status: "unconfigured", photos: [] },
+      ? { source: "immich", status: "ok", photos: chosen(), albums: groups().map(({ looks, ...g }) => ({ ...g, photos: looks.map((i) => library()[i].id) })) }
+      : { source: "none", status: "unconfigured", photos: [], albums: [] },
   };
 }

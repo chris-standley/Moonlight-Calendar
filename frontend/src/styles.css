@@ -463,6 +463,8 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ss-wx svg { filter: drop-shadow(0 0.1rem 0.5rem rgba(0, 0, 0, 0.45)); }
 .ss-hilo { display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.5rem; font-size: 1.3rem; font-weight: 700; opacity: 0.9; }
 .ss-caption { position: absolute; top: 1.4rem; right: 2rem; max-width: 50%; display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; font-weight: 700; opacity: 0.85; text-shadow: 0 0.1rem 0.6rem rgba(0, 0, 0, 0.6); animation: fade 1.6s; }
+.ss-album { position: absolute; top: 1.4rem; left: 50%; transform: translateX(-50%); max-width: 60%; display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.5rem 1.2rem 0.5rem 0.9rem; border-radius: 999px; background: rgba(0, 0, 0, 0.38); -webkit-backdrop-filter: blur(0.8rem); backdrop-filter: blur(0.8rem); font-size: 1.25rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0.1rem 0.6rem rgba(0, 0, 0, 0.4); animation: ss-album 5s ease both; pointer-events: none; }
+@keyframes ss-album { 0% { opacity: 0; transform: translate(-50%, -0.6rem); } 10%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
 .ss-cap-text { display: flex; flex-direction: column; align-items: flex-end; text-align: right; line-height: 1.3; min-width: 0; }
 .ss-cap-text span + span { font-weight: 600; opacity: 0.9; }
 .ss-caption svg { flex: none; filter: drop-shadow(0 0.1rem 0.4rem rgba(0, 0, 0, 0.5)); }
@@ -552,6 +554,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-phone .fab { bottom: 1rem; right: 1rem; width: 3.6rem; height: 3.6rem; }
 .layout-phone .ss-info { left: 1.4rem; bottom: 2rem; }
 .layout-phone .ss-time { font-size: 4rem; }
+.layout-phone .ss-album { top: auto; bottom: 11rem; max-width: 80%; }
 .layout-phone .ss-caption { display: none; } /* the music card and next event sit at the top */
 .layout-phone .ss-right { left: 1.2rem; right: 1.2rem; top: 1.4rem; bottom: auto; align-items: stretch; max-width: none; }
 
@@ -628,6 +631,12 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .immich-panel .acct { margin-bottom: 0.2rem; }
 .immich-albums .chip-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
 .immich-albums .chip-btn span { font-size: 0.8em; opacity: 0.65; }
+.immich-albums .chip-btn.off { text-decoration: line-through; opacity: 0.6; }
+.season-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.season-row > select { flex: 1 1 12rem; min-width: 0; }
+.season-dates { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.season-day { display: inline-flex; gap: 0.3rem; }
+.season-day select { width: auto; }
 .immich-ok { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 0.8rem; background: rgba(47, 181, 138, 0.12); color: var(--ok-text); font-weight: 800; }
 .layout-phone .rail-item { min-width: 3rem; }
 

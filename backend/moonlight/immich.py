@@ -14,7 +14,10 @@ screens, so screens never see the key or talk to Immich. Written against the Imm
 - `GET  /api/memories?for=YYYY-MM-DD&type=on_this_day` -> [{assets: [Asset]}]  (memory.read, optional)
 - `GET  /api/assets/{id}/thumbnail?size=preview` -> JPEG/WebP, EXIF orientation already applied (asset.view)
 
-Only images are used (videos skipped). The asset list is cached and refreshed every few minutes; if Immich can't be
+What is shown: the chosen albums (plus favourites and memories), or with mode "all" every album except the excluded
+ones. Seasonal albums (`seasons`, e.g. a Christmas album from 12-01 to 12-26) are hidden outside their dates and
+shown on their own within them. The list is grouped by album (oldest photo first) so the screens can play one album
+at a time; an album's photos are only fetched again when Immich says it changed. Only images are used (videos skipped). The asset list is cached and refreshed every few minutes; if Immich can't be
 reached the last good list is kept, and with none the screensaver falls back to its painted scenes.
 """
 from __future__ import annotations
@@ -38,6 +41,8 @@ from .common import log
 TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 PAGE_SIZE = 1000
 MAX_ASSETS = 5000  # per refresh, across every source: plenty for a slideshow, bounded memory
+HIDE_LIMIT = 20000  # photos read from each excluded or out-of-season album
+MODES = ("albums", "all")
 REFRESH_SECONDS = float(os.environ.get("MOONLIGHT_IMMICH_REFRESH", "300"))
 RETRY_SECONDS = 60.0  # after a failed refresh, how soon to try again
 HIDDEN_VISIBILITY = {"hidden", "locked"}
@@ -67,6 +72,9 @@ def load_config(c) -> dict | None:
     if not r:
         return None
     r["album_ids"] = json.loads(r["album_ids"])
+    r["mode"] = r.get("mode") if r.get("mode") in MODES else "albums"
+    r["excluded_album_ids"] = json.loads(r.get("excluded_album_ids") or "[]")
+    r["seasons"] = json.loads(r.get("seasons") or "[]")
     r["favorites"] = bool(r["favorites"])
     r["memories"] = bool(r["memories"])
     r["skip_cert_check"] = bool(r.get("skip_cert_check"))
@@ -75,16 +83,37 @@ def load_config(c) -> dict | None:
 
 def save_config(c, cfg: dict) -> None:
     c.execute(
-        "INSERT INTO immich(id, server_url, api_key, album_ids, favorites, memories, skip_cert_check, updated_at) "
-        "VALUES(1, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET server_url=excluded.server_url, "
-        "api_key=excluded.api_key, album_ids=excluded.album_ids, favorites=excluded.favorites, "
-        "memories=excluded.memories, skip_cert_check=excluded.skip_cert_check, updated_at=excluded.updated_at",
+        "INSERT INTO immich(id, server_url, api_key, album_ids, favorites, memories, skip_cert_check, mode, "
+        "excluded_album_ids, seasons, updated_at) VALUES(1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+        "server_url=excluded.server_url, api_key=excluded.api_key, album_ids=excluded.album_ids, "
+        "favorites=excluded.favorites, memories=excluded.memories, skip_cert_check=excluded.skip_cert_check, "
+        "mode=excluded.mode, excluded_album_ids=excluded.excluded_album_ids, seasons=excluded.seasons, "
+        "updated_at=excluded.updated_at",
         (cfg["server_url"], cfg["api_key"], json.dumps(cfg["album_ids"]), int(cfg["favorites"]),
-         int(cfg["memories"]), int(cfg.get("skip_cert_check", False)), db.now_iso()))
+         int(cfg["memories"]), int(cfg.get("skip_cert_check", False)), cfg.get("mode", "albums"),
+         json.dumps(cfg.get("excluded_album_ids", [])), json.dumps(cfg.get("seasons", [])), db.now_iso()))
 
 
 def delete_config(c) -> None:
     c.execute("DELETE FROM immich")
+
+
+def household_today(tz: str) -> date:
+    try:
+        return datetime.now(ZoneInfo(tz)).date()
+    except Exception:
+        return date.today()
+
+
+def in_season(season: dict, day: date) -> bool:
+    """`start`..`end` as "MM-DD", both included; a range like 12-20..01-05 runs over New Year."""
+    md, start, end = day.strftime("%m-%d"), season["start"], season["end"]
+    return start <= md <= end if start <= end else (md >= start or md <= end)
+
+
+def active_seasons(cfg: dict, day: date) -> list[str]:
+    """The seasonal albums whose dates include `day`: while there are any, only they are shown."""
+    return sorted({s["album_id"] for s in cfg.get("seasons", []) if in_season(s, day)})
 
 
 # ---------------------------------------------------------------- client
@@ -173,8 +202,10 @@ class Client:
         seen: dict[str, dict] = {}
         for a in raw:
             if isinstance(a, dict) and isinstance(a.get("id"), str) and a["id"] not in seen:
+                stamps = [a.get(k) for k in ("lastModifiedAssetTimestamp", "updatedAt") if isinstance(a.get(k), str)]
                 seen[a["id"]] = {"id": a["id"], "name": str(a.get("albumName") or "Untitled"),
-                                 "asset_count": int(a.get("assetCount") or 0), "shared": bool(a.get("shared"))}
+                                 "asset_count": int(a.get("assetCount") or 0), "shared": bool(a.get("shared")),
+                                 "updated_at": max(stamps) if stamps else None}
         return sorted(seen.values(), key=lambda a: a["name"].lower())
 
     async def test(self) -> dict:
@@ -271,6 +302,14 @@ def place_name(exif: dict, zones: list[dict]) -> str | None:
     return None
 
 
+def slim(a: dict) -> dict:
+    """What photo_out needs of an asset, kept between refreshes for albums that haven't changed."""
+    exif = a.get("exifInfo") if isinstance(a.get("exifInfo"), dict) else {}
+    keep = ("id", "type", "isTrashed", "visibility", "width", "height", "localDateTime", "fileCreatedAt")
+    return {**{k: a.get(k) for k in keep}, "exifInfo": {k: exif.get(k) for k in (
+        "latitude", "longitude", "city", "state", "country", "exifImageWidth", "exifImageHeight")}}
+
+
 def photo_out(a: dict, zones: list[dict] | None = None) -> dict:
     w, h = a.get("width"), a.get("height")
     exif = a.get("exifInfo") or {}
@@ -293,8 +332,12 @@ class Cache:
 
     def __init__(self) -> None:
         self.photos: list[dict] = []
+        self.albums: list[dict] = []  # [{id, name, updated_at, photos: [id]}]: what the screens play, album by album
+        self._album_assets: dict[str, tuple[Any, list[dict]]] = {}  # album id -> (what Immich said of it, its assets)
         self.ids: set[str] = set()
         self.key: str | None = None  # which config the list belongs to
+        self.season: list[str] = []  # the seasonal albums in their dates when the list was made
+        self.day: str | None = None  # with "on this day" memories, the day they are for
         self.fetched_at = 0.0
         self.tried_at = 0.0
         self.status = "unconfigured"  # unconfigured | ok | auth_failed | error
@@ -318,12 +361,15 @@ class Cache:
         if not cfg:
             return None
         return json.dumps([cfg["server_url"], cfg["api_key"], sorted(cfg["album_ids"]), cfg["favorites"],
-                           cfg["memories"], cfg.get("skip_cert_check", False)])
+                           cfg["memories"], cfg.get("skip_cert_check", False), cfg.get("mode", "albums"),
+                           sorted(cfg.get("excluded_album_ids", [])), cfg.get("seasons", [])])
 
-    def _due(self, key: str | None) -> bool:
+    def _due(self, key: str | None, season: list[str] | None = None, day: str | None = None) -> bool:
         now = time.monotonic()
         if key != self.key:
             return True
+        if key is not None and (season != self.season or day != self.day):
+            return True  # a season started or ended, or a new day's memories
         if self.status in ("ok",):
             return now - self.fetched_at >= REFRESH_SECONDS
         return now - self.tried_at >= RETRY_SECONDS
@@ -339,62 +385,103 @@ class Cache:
             cfg = load_config(c)
             tz = db.get_setting(c, "timezone", db.default_timezone())
         key = self.config_key(cfg)
-        if not force and not self._due(key):
+        today = household_today(tz)
+        season = active_seasons(cfg, today) if cfg else []
+        day = today.isoformat() if cfg and cfg.get("memories") else None
+        if not force and not self._due(key, season, day):
             return self
         async with self._get_lock():
-            if not force and not self._due(key):
+            if not force and not self._due(key, season, day):
                 return self
             if cfg is None:
                 self.reset()
                 return self
             if key != self.key:  # new server, key or albums: never serve the old list
-                self.photos, self.ids, self.version = [], set(), None
+                self.photos, self.albums, self.ids, self.version = [], [], set(), None
+                self._album_assets = {}
                 self.key = key
             self.tried_at = time.monotonic()
             try:
-                photos, version = await self._fetch(cfg, tz)
+                photos, albums, version = await self._fetch(cfg, today)
             except ImmichError as e:
                 self.status = "auth_failed" if isinstance(e, AuthFailed) else "error"
                 self.error = str(e)
                 log.warning("Immich refresh failed: %s", e)
                 return self
-            self.photos, self.ids = photos, {p["id"] for p in photos}
+            self.photos, self.albums, self.ids = photos, albums, {p["id"] for p in photos}
+            self.season, self.day = season, day
             self.version = version or self.version
             self.status, self.error = "ok", None
             self.fetched_at = time.monotonic()
             self.last_refresh = db.now_iso()
             return self
 
-    async def _fetch(self, cfg: dict, tz: str) -> tuple[list[dict], str | None]:
+    async def _album(self, client: Client, http: httpx.AsyncClient, album: dict, limit: int) -> list[dict]:
+        """An album's assets, from the last refresh if Immich reports the same change time and size."""
+        stamp = (album["updated_at"], album["asset_count"])
+        had = self._album_assets.get(album["id"])
+        if had and had[0] == stamp and stamp[0] is not None and len(had[1]) <= limit:
+            return had[1]
+        assets = [slim(a) for a in await client.album_assets(http, album["id"], limit) if is_image(a)]
+        self._album_assets[album["id"]] = (stamp, assets)
+        return assets
+
+    async def _fetch(self, cfg: dict, today: date) -> tuple[list[dict], list[dict], str | None]:
         client = Client(cfg["server_url"], cfg["api_key"], cfg.get("skip_cert_check", False))
         found: dict[str, dict] = {}
+        groups: list[dict] = []
         zones = await ha_client.zones()  # friendly place names ("Home") for photos taken inside a zone
 
-        def add(assets: list[dict]) -> None:
-            for a in assets:
-                if len(found) >= MAX_ASSETS:
-                    return
-                if is_image(a) and a["id"] not in found:
+        def add(group: dict, assets: list[dict], hide: set[str]) -> None:
+            ids = []
+            for a in sorted((a for a in assets if is_image(a) and a["id"] not in hide),
+                            key=lambda a: str(a.get("localDateTime") or a.get("fileCreatedAt") or "")):
+                if a["id"] not in found:
+                    if len(found) >= MAX_ASSETS:
+                        continue
                     found[a["id"]] = photo_out(a, zones)
+                if a["id"] not in ids:
+                    ids.append(a["id"])
+            if ids:
+                groups.append({**group, "photos": ids})
 
         async with client.http() as http:
             version = await client.version(http)
-            for album_id in cfg["album_ids"]:
-                add(await client.album_assets(http, album_id, MAX_ASSETS - len(found)))
-            if cfg["favorites"] and len(found) < MAX_ASSETS:
-                add(await client.favorite_assets(http, MAX_ASSETS - len(found)))
-            if cfg["memories"] and len(found) < MAX_ASSETS:
+            albums = {a["id"]: a for a in await client.albums(http)}
+            season = active_seasons(cfg, today)
+            if season:  # e.g. the Christmas albums in December, and nothing else
+                shown, hidden = [i for i in season if i in albums], []
+            else:
+                hidden = {s["album_id"] for s in cfg.get("seasons", [])}
+                if cfg.get("mode") == "all":
+                    hidden |= set(cfg.get("excluded_album_ids", []))
+                    shown = [i for i in albums if i not in hidden]
+                else:
+                    shown = [i for i in cfg["album_ids"] if i in albums and i not in hidden]
+            # Most recently changed first, so if the cap is reached it's old albums that miss out.
+            shown.sort(key=lambda i: albums[i]["updated_at"] or "", reverse=True)
+            hide: set[str] = set()
+            for album_id in sorted(i for i in hidden if i in albums):  # a hidden album's photos stay hidden elsewhere
+                hide.update(a["id"] for a in await self._album(client, http, albums[album_id], HIDE_LIMIT))
+            for album_id in shown:
+                if len(found) >= MAX_ASSETS:
+                    break
+                a = albums[album_id]
+                add({"id": a["id"], "name": a["name"], "updated_at": a["updated_at"]},
+                    await self._album(client, http, a, MAX_ASSETS), hide)
+            if not season and cfg["favorites"] and len(found) < MAX_ASSETS:
+                add({"id": "favorites", "name": "Favourites", "updated_at": None},
+                    await client.favorite_assets(http, MAX_ASSETS - len(found)), hide)
+            if not season and cfg["memories"] and len(found) < MAX_ASSETS:
                 try:
-                    today = datetime.now(ZoneInfo(tz)).date()
-                except Exception:
-                    today = date.today()
-                try:
-                    add(await client.memory_assets(http, today))
+                    add({"id": "on-this-day", "name": "On this day", "updated_at": today.isoformat()},
+                        await client.memory_assets(http, today), hide)
                 except AuthFailed:
                     raise
                 except ImmichError as e:  # optional extra: an older server or a key without memory.read
                     log.info("Immich memories skipped: %s", e)
-        return list(found.values()), version
+        self._album_assets = {k: v for k, v in self._album_assets.items() if k in albums}
+        return list(found.values()), groups, version
 
 
 cache = Cache()

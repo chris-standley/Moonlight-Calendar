@@ -46,6 +46,8 @@ class FakeImmich:
             self.private: [asset(), asset()],
         }
         self.names = {self.holiday: "Holiday 2025", self.garden: "Garden", self.private: "Private"}
+        self.updated = {self.holiday: "2025-08-01T10:00:00.000Z", self.garden: "2026-05-01T10:00:00.000Z",
+                        self.private: "2024-01-01T10:00:00.000Z"}
         self.favs = [asset(isFavorite=True), asset("VIDEO", isFavorite=True)]
         self.memory = [asset(), asset("VIDEO")]
 
@@ -64,7 +66,8 @@ class FakeImmich:
             return httpx.Response(401, json={"message": "Invalid API key", "statusCode": 401})
         if path == "/api/albums" and req.method == "GET":
             return httpx.Response(200, json=[
-                {"id": k, "albumName": self.names[k], "assetCount": len(v), "shared": False, "albumThumbnailAssetId": None}
+                {"id": k, "albumName": self.names[k], "assetCount": len(v), "shared": False, "albumThumbnailAssetId": None,
+                 "updatedAt": self.updated[k], "lastModifiedAssetTimestamp": self.updated[k]}
                 for k, v in self.photos.items()])
         if path == "/api/search/metadata" and req.method == "POST":
             return self.search(json.loads(req.content))
@@ -137,7 +140,7 @@ def no_key(resp: httpx.Response) -> None:
 def test_not_configured_falls_back(client, fake):
     r = client.get("/api/immich").json()
     assert r["configured"] is False and r["status"] == "unconfigured"
-    assert client.get("/api/screensaver/photos").json() == {"source": "none", "status": "unconfigured", "photos": []}
+    assert client.get("/api/screensaver/photos").json() == {"source": "none", "status": "unconfigured", "photos": [], "albums": []}
     assert client.get("/api/immich/albums").status_code == 404
     assert fake.requests == []
 
@@ -149,7 +152,8 @@ def test_test_connection_and_album_listing(client, fake):
     body = r.json()
     assert body["ok"] is True and body["version"] == "3.3.1"
     assert [a["name"] for a in body["albums"]] == ["Garden", "Holiday 2025", "Private"]
-    assert body["albums"][1] == {"id": fake.holiday, "name": "Holiday 2025", "asset_count": 5, "shared": False}
+    assert body["albums"][1] == {"id": fake.holiday, "name": "Holiday 2025", "asset_count": 5, "shared": False,
+                                 "updated_at": "2025-08-01T10:00:00.000Z"}
     no_key(r)
     r = client.post("/api/immich/test", json={"pin": PIN, "server_url": URL, "api_key": "nope"})
     assert r.status_code == 400 and "API key" in r.json()["detail"]
@@ -258,7 +262,7 @@ def test_immich_down(client, fake):
     # Down from the start (e.g. after a restart): nothing cached, so the screens show their scenes.
     immich.cache.reset()
     body = client.get("/api/screensaver/photos").json()
-    assert body == {"source": "immich", "status": "error", "photos": []}
+    assert body == {"source": "immich", "status": "error", "photos": [], "albums": []}
     assert client.get(photos[0]["url"]).status_code == 404
     fake.down = False
     immich.cache.tried_at -= immich.RETRY_SECONDS + 1
@@ -422,3 +426,89 @@ def test_photo_details_setting(client):
     assert client.get("/api/settings").json()["photo_details"] is True
     assert client.patch("/api/settings", json={"pin": PIN, "photo_details": False}).json()["photo_details"] is False
     assert client.patch("/api/settings", json={"pin": PIN, "photo_details": "no"}).status_code == 400
+
+
+def images(xs) -> set[str]:
+    return {a["id"] for a in xs if a["type"] == "IMAGE" and not a["isTrashed"] and a["visibility"] == "timeline"}
+
+
+def test_all_albums_except_excluded(client, fake):
+    loose = asset()  # in no album: only shown as a favourite
+    fake.favs.append(loose)
+    cfg = connect(client, fake, mode="all", excluded_album_ids=[fake.garden], album_ids=[])
+    assert cfg["mode"] == "all" and cfg["excluded_album_ids"] == [fake.garden]
+    want = images(fake.photos[fake.holiday]) | images(fake.photos[fake.private])
+    ids = {p["id"] for p in client.get("/api/screensaver/photos").json()["photos"]}
+    assert ids == want and len(want) == 5
+    garden = next(iter(images(fake.photos[fake.garden])))
+    assert client.get(f"/api/immich/assets/{garden}/preview").status_code == 404
+    # A photo that is also in an excluded album stays hidden.
+    fake.photos[fake.garden].append(fake.photos[fake.holiday][0])
+    fake.updated[fake.garden] = "2026-06-01T10:00:00.000Z"
+    assert client.put("/api/immich", json={"pin": PIN, "favorites": True}).json()["photo_count"] == 6  # 5 - the shared one + 2 favourites
+    # Back to chosen albums: the exclusions are kept for next time but don't apply.
+    r = client.put("/api/immich", json={"pin": PIN, "mode": "albums", "album_ids": [fake.garden], "favorites": False}).json()
+    assert r["photo_count"] == 2 and r["excluded_album_ids"] == [fake.garden]
+    for bad in ({"mode": "some"}, {"excluded_album_ids": ["x"]}):
+        assert client.put("/api/immich", json={"pin": PIN, **bad}).status_code == 400
+
+
+def test_photos_come_grouped_by_album(client, fake):
+    for i, a in enumerate(fake.photos[fake.holiday]):
+        a["localDateTime"] = f"2025-07-1{5 - i}T10:00:00.000Z"  # listed newest first by Immich
+    connect(client, fake, mode="all", album_ids=[], favorites=True)
+    body = client.get("/api/screensaver/photos").json()
+    # Most recently changed album first; Favourites after the albums.
+    assert [a["name"] for a in body["albums"]] == ["Garden", "Holiday 2025", "Private", "Favourites"]
+    holiday = body["albums"][1]
+    assert holiday["id"] == fake.holiday and holiday["updated_at"] == "2025-08-01T10:00:00.000Z"
+    taken = {p["id"]: p["taken_at"] for p in body["photos"]}
+    assert [taken[i] for i in holiday["photos"]] == sorted(taken[i] for i in holiday["photos"])  # oldest first
+    assert {i for a in body["albums"] for i in a["photos"]} == {p["id"] for p in body["photos"]}
+    # Unchanged albums aren't read again on the next refresh; a changed one is.
+    fake.requests.clear()
+    immich.cache.fetched_at -= immich.REFRESH_SECONDS + 1
+    client.get("/api/screensaver/photos")
+    searched = [json.loads(q.content) for q in fake.requests if q.url.path == "/api/search/metadata"]
+    assert all("albumIds" not in b for b in searched) and searched  # only favourites
+    fake.photos[fake.private].append(asset())
+    fake.requests.clear()
+    immich.cache.fetched_at -= immich.REFRESH_SECONDS + 1
+    body = client.get("/api/screensaver/photos").json()
+    searched = [json.loads(q.content) for q in fake.requests if q.url.path == "/api/search/metadata"]
+    assert [b["albumIds"] for b in searched if "albumIds" in b] == [[fake.private]]  # its asset count changed
+    assert len(body["albums"][2]["photos"]) == 3
+
+
+def test_seasonal_albums(client, fake, monkeypatch):
+    from datetime import date
+    day = {"d": date(2026, 10, 17)}
+    monkeypatch.setattr(immich, "household_today", lambda tz: day["d"])
+    xmas = fake.private  # the festive album
+    connect(client, fake, mode="all", album_ids=[], seasons=[{"album_id": xmas, "start": "12-01", "end": "12-26"}])
+    body = client.get("/api/screensaver/photos").json()
+    ids = {p["id"] for p in body["photos"]}
+    assert ids and not ids & images(fake.photos[xmas])  # out of season: hidden from "all"
+    assert xmas not in [a["id"] for a in body["albums"]]
+    assert client.get("/api/immich").json()["season_now"] == []
+    day["d"] = date(2026, 12, 1)  # the season starts: only the festive album, straight away
+    body = client.get("/api/screensaver/photos").json()
+    assert {p["id"] for p in body["photos"]} == images(fake.photos[xmas])
+    assert [a["id"] for a in body["albums"]] == [xmas]
+    assert client.get("/api/immich").json()["season_now"] == [xmas]
+    day["d"] = date(2026, 12, 27)
+    assert not {p["id"] for p in client.get("/api/screensaver/photos").json()["photos"]} & images(fake.photos[xmas])
+    # Chosen-albums mode too: a seasonal album that is also chosen only shows in its dates.
+    r = client.put("/api/immich", json={"pin": PIN, "mode": "albums", "album_ids": [xmas, fake.holiday]}).json()
+    assert r["photo_count"] == 3
+    for bad in ([{"album_id": xmas, "start": "02-30", "end": "03-01"}], [{"album_id": "x", "start": "12-01", "end": "12-02"}],
+                [{"album_id": xmas, "start": "12-1", "end": "12-26"}], "12-01"):
+        assert client.put("/api/immich", json={"pin": PIN, "seasons": bad}).status_code == 400
+
+
+def test_season_dates_can_run_over_new_year():
+    from datetime import date
+    s = {"album_id": uid(), "start": "12-20", "end": "01-05"}
+    assert immich.in_season(s, date(2026, 12, 20)) and immich.in_season(s, date(2027, 1, 5))
+    assert immich.in_season(s, date(2026, 12, 31)) and not immich.in_season(s, date(2027, 1, 6))
+    assert not immich.in_season({"album_id": "a", "start": "12-01", "end": "12-26"}, date(2026, 11, 30))
