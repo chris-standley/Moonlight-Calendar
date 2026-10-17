@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS immich (
     skip_cert_check INTEGER NOT NULL DEFAULT 0,  -- HTTPS without checking the certificate (self-signed, by IP)
     mode         TEXT NOT NULL DEFAULT 'albums',  -- albums = the chosen ones; all = whole library minus excluded
     excluded_album_ids TEXT NOT NULL DEFAULT '[]',
-    seasons      TEXT NOT NULL DEFAULT '[]',     -- [{album_id, start: "MM-DD", end: "MM-DD"}], see immich.py
+    festive      INTEGER NOT NULL DEFAULT 1,     -- Christmas albums only in December, see immich.py
     updated_at   TEXT NOT NULL
 );
 """
@@ -193,7 +193,7 @@ IMMICH_EXTRA_COLUMNS = {
     "skip_cert_check": "INTEGER NOT NULL DEFAULT 0",
     "mode": "TEXT NOT NULL DEFAULT 'albums'",
     "excluded_album_ids": "TEXT NOT NULL DEFAULT '[]'",
-    "seasons": "TEXT NOT NULL DEFAULT '[]'",
+    "festive": "INTEGER NOT NULL DEFAULT 1",  # replaced 0.5.3's per-album date ranges ("seasons", now unused)
 }
 # Nullable source columns on events; NULL calendar_id = local-only event.
 EVENT_SOURCE_COLUMNS = {

@@ -158,20 +158,19 @@ export const STYLE_LABEL: Record<Layout, string> = { large: "Large", compact: "C
 export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
 /** `albums` = the chosen albums (+ favourites, memories); `all` = the whole library except the excluded albums. */
 export type ImmichMode = "albums" | "all";
-/** A seasonal album: hidden outside `start`..`end` ("MM-DD", may run over New Year), shown on its own within them. */
-export interface ImmichSeason { album_id: string; start: string; end: string }
 export interface ImmichConfig {
   configured: boolean; server_url: string; key_set: boolean; mode: ImmichMode; album_ids: string[]; excluded_album_ids: string[];
-  seasons: ImmichSeason[]; favorites: boolean; memories: boolean;
-  /** The seasonal albums showing today (in their dates), if any. */
-  season_now?: string[];
+  /** Festive filter: albums named for Christmas only in December, and in December only those and winter albums. */
+  festive: boolean; favorites: boolean; memories: boolean;
+  /** It's December and only festive and winter albums are showing. */
+  festive_now?: boolean;
   /** HTTPS without checking the certificate (self-signed, or one made for a domain name while Moonlight uses the IP). */
   skip_cert_check: boolean;
   status: ImmichStatus; last_error: string | null; last_refresh: string | null; photo_count: number; version: string | null;
 }
 export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean; updated_at?: string | null }
 /** PUT /api/immich: `api_key` may be left out once one is saved. */
-export interface ImmichIn { server_url?: string; api_key?: string; mode?: ImmichMode; album_ids?: string[]; excluded_album_ids?: string[]; seasons?: ImmichSeason[]; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
+export interface ImmichIn { server_url?: string; api_key?: string; mode?: ImmichMode; album_ids?: string[]; excluded_album_ids?: string[]; festive?: boolean; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
 export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
 /** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
 /** `taken_at`: local time where it was taken (show the digits as they are). `place`: HA zone name or town, if known. */

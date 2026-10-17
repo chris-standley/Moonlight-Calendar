@@ -141,8 +141,9 @@ console.anthropic.com; the photos and text are then sent to Anthropic). Pictures
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter
 Immich's address (e.g. `http://192.168.1.10:2283`, using your server's IP address: `.local` names often don't work from inside an add-on, and a reverse-proxy address only works if that proxy can reach Immich) and an API key made in Immich (Account Settings > API Keys;
 permissions `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on this day"), test the connection and
-choose albums, or choose All albums and tap the ones to leave out. Under Seasonal albums, add an album with its dates
-(for example Christmas, 1 to 26 December): it is hidden the rest of the year and shown on its own between those dates. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
+choose albums, or choose All albums and tap the ones to leave out. Albums with Christmas, Xmas, festive, Yule,
+Advent, Santa, nativity, carol or Boxing Day in their name only show in December, when only they and winter albums
+(winter, snow, frost, skiing...) are shown; turn off "Christmas albums only in December" to stop that. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
 painted landscapes. If Immich is itself a Home Assistant add-on, check its port (2283) is filled in under the add-on's Network settings; Immich opened only through the Home Assistant sidebar can't be reached by Moonlight. If Immich uses HTTPS, start the address with `https://`; when its certificate is self-signed or made for a domain name rather than the IP address, turn on Skip certificate check.
 
 ## Data
