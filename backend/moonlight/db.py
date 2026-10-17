@@ -183,9 +183,18 @@ CREATE TABLE IF NOT EXISTS immich (
     favorites    INTEGER NOT NULL DEFAULT 0,
     memories     INTEGER NOT NULL DEFAULT 0,
     skip_cert_check INTEGER NOT NULL DEFAULT 0,  -- HTTPS without checking the certificate (self-signed, by IP)
+    mode         TEXT NOT NULL DEFAULT 'albums',  -- albums = the chosen ones; all = whole library minus excluded
+    excluded_album_ids TEXT NOT NULL DEFAULT '[]',
+    seasons      TEXT NOT NULL DEFAULT '[]',     -- [{album_id, start: "MM-DD", end: "MM-DD"}], see immich.py
     updated_at   TEXT NOT NULL
 );
 """
+IMMICH_EXTRA_COLUMNS = {
+    "skip_cert_check": "INTEGER NOT NULL DEFAULT 0",
+    "mode": "TEXT NOT NULL DEFAULT 'albums'",
+    "excluded_album_ids": "TEXT NOT NULL DEFAULT '[]'",
+    "seasons": "TEXT NOT NULL DEFAULT '[]'",
+}
 # Nullable source columns on events; NULL calendar_id = local-only event.
 EVENT_SOURCE_COLUMNS = {
     "calendar_id": "TEXT", "uid": "TEXT", "href": "TEXT", "etag": "TEXT", "raw_ics": "TEXT",
@@ -291,8 +300,9 @@ def init_db() -> None:
         if "setup" not in have:
             c.execute("ALTER TABLE displays ADD COLUMN setup TEXT")  # JSON, see routes/displays.py
         have = {r[1] for r in c.execute("PRAGMA table_info(immich)")}
-        if "skip_cert_check" not in have:
-            c.execute("ALTER TABLE immich ADD COLUMN skip_cert_check INTEGER NOT NULL DEFAULT 0")
+        for col, decl in IMMICH_EXTRA_COLUMNS.items():
+            if col not in have:
+                c.execute(f"ALTER TABLE immich ADD COLUMN {col} {decl}")
         _rename_layouts(c)
         _add_recipes_section(c)
 

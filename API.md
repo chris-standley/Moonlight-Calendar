@@ -387,11 +387,16 @@ fields, falling back to the v3.2+ `filter` form if a server rejects them), `GET 
 and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already applied), all with the `x-api-key` header.
 The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
 
-ImmichConfig = `{configured, server_url, key_set: bool, album_ids: [id], favorites: bool, memories: bool, skip_cert_check: bool,
+ImmichConfig = `{configured, server_url, key_set: bool, mode: "albums"|"all", album_ids: [id], excluded_album_ids: [id],
+seasons: [{album_id, start: "MM-DD", end: "MM-DD"}], season_now: [id], favorites: bool, memories: bool, skip_cert_check: bool,
 status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error", last_error|null, last_refresh|null, photo_count, version|null}`.
-The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
+`mode` `albums` (default) shows `album_ids`; `all` shows every album except `excluded_album_ids` (albums made later
+included). Favourites and memories are added in either mode. A season's album is hidden outside its dates (inclusive,
+household timezone; `12-20`..`01-05` runs over New Year), and its photos with it wherever else they appear; while any
+season is on, only those albums are shown (`season_now`). The API key is never returned.
+ImmichAlbum = `{id, name, asset_count, shared, updated_at|null}` (`updated_at` = Immich's last change to the album).
 - `GET /api/immich` -> ImmichConfig
-- `PUT /api/immich` `{pin, server_url, api_key, album_ids?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out
+- `PUT /api/immich` `{pin, server_url, api_key, mode?, album_ids?, excluded_album_ids?, seasons?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out
   once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
   `server_url` is the Immich address (`http://192.168.1.10:2283`; a trailing `/api` is dropped). `skip_cert_check` (default
   false) uses HTTPS without checking the certificate, for a self-signed one or one made for a domain name. The 502 detail
@@ -400,9 +405,14 @@ The API key is never returned. ImmichAlbum = `{id, name, asset_count, shared}`.
 - `POST /api/immich/test` `{pin, server_url?, api_key?, skip_cert_check?}` -> `{ok: true, version|null, albums: [ImmichAlbum]}`; without
   `server_url`/`api_key` the saved ones are tested. Nothing is saved. 400 / 502 as above.
 - `GET /api/immich/albums` -> `[ImmichAlbum]` live from Immich with the saved key (404 not connected, 400/502 as above)
-- `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, place|null, url}]}`.
-  Images only (videos, trashed, hidden and locked assets skipped), from the chosen albums plus favourites / today's
-  memories if enabled, de-duplicated, at most 5000. The list is cached and refreshed every 5 minutes
+- `GET /api/screensaver/photos` -> `{source: "immich"|"none", status, photos: [{id, width|null, height|null, taken_at|null, place|null, url}],
+  albums: [{id, name, updated_at|null, photos: [photo id]}]}`.
+  Images only (videos, trashed, hidden and locked assets skipped), from the albums shown (see ImmichConfig) plus
+  favourites / today's memories if enabled, de-duplicated, at most 5000. `albums` groups them for playing one album at
+  a time: albums most recently changed first, then `favorites` ("Favourites") and `on-this-day` ("On this day"), each
+  album's photos oldest first (a photo can be in more than one). An album's contents are only fetched again when its
+  `updated_at` or size changes. The screens play a whole album, then pick the next: "on this day" first each day, then
+  at random weighted towards recently changed albums, not one of the last three; each screen keeps its place. The list is cached and refreshed every 5 minutes
   (`MOONLIGHT_IMMICH_REFRESH` seconds); if Immich can't be reached the last good list is kept (`status: "error"`, retried
   every minute). Empty `photos` = the screens show their built-in painted scenes. `taken_at` is Immich's local time
   (wall-clock time where the photo was taken, written with a `Z`: show its digits, don't convert it). `place` is the

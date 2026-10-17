@@ -52,13 +52,15 @@ def config_out(cfg: dict | None, cache: immich.Cache | None = None) -> dict:
     cache = cache or immich.cache
     fresh = cache.key is not None and cache.key == immich.Cache.config_key(cfg)
     if not cfg:
-        return {"configured": False, "server_url": "", "key_set": False, "album_ids": [], "favorites": False,
-                "memories": False, "skip_cert_check": False, "status": "unconfigured", "last_error": None, "last_refresh": None,
+        return {"configured": False, "server_url": "", "key_set": False, "mode": "albums", "album_ids": [],
+                "excluded_album_ids": [], "seasons": [], "favorites": False, "memories": False, "skip_cert_check": False, "status": "unconfigured", "last_error": None, "last_refresh": None,
                 "photo_count": 0, "version": None}
     return {
         "configured": True, "server_url": cfg["server_url"], "key_set": bool(cfg["api_key"]),
-        "album_ids": cfg["album_ids"], "favorites": cfg["favorites"], "memories": cfg["memories"],
-        "skip_cert_check": cfg.get("skip_cert_check", False),
+        "mode": cfg.get("mode", "albums"), "album_ids": cfg["album_ids"],
+        "excluded_album_ids": cfg.get("excluded_album_ids", []), "seasons": cfg.get("seasons", []),
+        "favorites": cfg["favorites"], "memories": cfg["memories"], "skip_cert_check": cfg.get("skip_cert_check", False),
+        "season_now": cache.season if fresh else [],
         "status": cache.status if fresh else "pending", "last_error": cache.error if fresh else None,
         "last_refresh": cache.last_refresh if fresh else None, "photo_count": len(cache.photos) if fresh else 0,
         "version": cache.version if fresh else None,
@@ -85,13 +87,36 @@ def _key(body: dict) -> str:
     return key
 
 
-def _album_ids(body: dict) -> list[str]:
-    ids = body.get("album_ids")
+def _album_ids(body: dict, key: str = "album_ids") -> list[str]:
+    ids = body.get(key)
     if not isinstance(ids, list) or not all(isinstance(i, str) and UUID.match(i) for i in ids):
-        raise bad("album_ids must be a list of Immich album ids")
+        raise bad(f"{key} must be a list of Immich album ids")
     if len(ids) > 50:
         raise bad("Choose at most 50 albums")
     return list(dict.fromkeys(ids))
+
+
+MONTH_DAY = re.compile(r"^(\d\d)-(\d\d)$")
+
+
+def _month_day(v, what: str) -> str:
+    m = MONTH_DAY.match(v) if isinstance(v, str) else None
+    if not m or not 1 <= int(m[1]) <= 12 or not 1 <= int(m[2]) <= (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)[int(m[1]) - 1]:
+        raise bad(f"{what} must be a day of the year like 12-01")
+    return v
+
+
+def _seasons(body: dict) -> list[dict]:
+    raw = body.get("seasons")
+    if not isinstance(raw, list) or len(raw) > 20:
+        raise bad("seasons must be a list of at most 20 {album_id, start, end}")
+    out = []
+    for s in raw:
+        if not isinstance(s, dict) or not isinstance(s.get("album_id"), str) or not UUID.match(s["album_id"]):
+            raise bad("each season needs an Immich album_id")
+        out.append({"album_id": s["album_id"], "start": _month_day(s.get("start"), "start"),
+                    "end": _month_day(s.get("end"), "end")})
+    return out
 
 
 def _bool(body: dict, key: str) -> bool:
@@ -115,20 +140,28 @@ async def get_immich():
 
 @router.put("/immich")
 async def save_immich(body: dict = Body(...)):
-    """Connect or change: {pin, server_url, api_key (optional once saved), album_ids, favorites, memories, skip_cert_check}.
+    """Connect or change: {pin, server_url, api_key (optional once saved), mode, album_ids, excluded_album_ids, seasons,
+    favorites, memories, skip_cert_check}.
     A new URL or key is checked against Immich before it is saved."""
     body = body_dict(body)
     with db.connect() as c:
         require_pin(c, body.get("pin"))
         cur = immich.load_config(c)
-    cfg = dict(cur) if cur else {"server_url": "", "api_key": "", "album_ids": [], "favorites": False, "memories": False,
-                                 "skip_cert_check": False}
+    cfg = dict(cur) if cur else {"server_url": "", "api_key": "", "mode": "albums", "album_ids": [], "excluded_album_ids": [],
+                                 "seasons": [], "favorites": False, "memories": False, "skip_cert_check": False}
     if "server_url" in body or not cur:
         cfg["server_url"] = _url(body)
     if body.get("api_key") not in (None, "") or not cur:
         cfg["api_key"] = _key(body)
-    if "album_ids" in body:
-        cfg["album_ids"] = _album_ids(body)
+    if "mode" in body:
+        if body["mode"] not in immich.MODES:
+            raise bad("mode must be albums or all")
+        cfg["mode"] = body["mode"]
+    for k in ("album_ids", "excluded_album_ids"):
+        if k in body:
+            cfg[k] = _album_ids(body, k)
+    if "seasons" in body:
+        cfg["seasons"] = _seasons(body)
     for k in ("favorites", "memories", "skip_cert_check"):
         if k in body:
             cfg[k] = _bool(body, k)
@@ -189,17 +222,19 @@ async def immich_albums():
 
 @router.get("/screensaver/photos")
 async def screensaver_photos():
-    """The photos to show: {source: "immich"|"none", status, photos: [{id, width, height, taken_at, place, url}]}.
-    Empty `photos` = show the built-in scenes (not set up, nothing chosen, or Immich down with nothing cached)."""
+    """The photos to show: {source: "immich"|"none", status, photos: [{id, width, height, taken_at, place, url}],
+    albums: [{id, name, updated_at, photos: [photo id]}]} (albums in the order they were chosen or changed, newest first;
+    their photos oldest first). Empty `photos` = show the built-in scenes (not set up, nothing chosen, or Immich down
+    with nothing cached)."""
     cache = await immich.cache.get()
     if cache.status == "unconfigured":
-        return {"source": "none", "status": "unconfigured", "photos": []}
-    return {"source": "immich", "status": cache.status, "photos": cache.photos}
+        return {"source": "none", "status": "unconfigured", "photos": [], "albums": []}
+    return {"source": "immich", "status": cache.status, "photos": cache.photos, "albums": cache.albums}
 
 
 @router.get("/immich/assets/{asset_id}/preview")
 async def immich_preview(asset_id: str):
-    """Proxy one preview image. Only assets in the chosen albums/favourites/memories are served."""
+    """Proxy one preview image. Only assets in the current photo list are served."""
     cache = await immich.cache.get()
     if not UUID.match(asset_id) or asset_id not in cache.ids:
         raise not_found("Photo not found")

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  ApiError, DEFAULT_IDLE, DEFAULT_SCREENS, Display, DisplaySetup, ImmichAlbum, ImmichConfig, Layout, MediaPlayerOption, SECTIONS, STYLE_LABEL,
+  ApiError, DEFAULT_IDLE, DEFAULT_SCREENS, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, ImmichSeason, Layout, MediaPlayerOption, SECTIONS, STYLE_LABEL,
   Section, Settings,
 } from "../api/types";
 import { useApp, useData, useNow } from "../state";
@@ -331,13 +331,39 @@ function PairSheet({ onClose }: { onClose: () => void }) {
 
 function photoCount(n: number) { return `${n} photo${n === 1 ? "" : "s"}`; }
 
+function albumNames(ids: string[], albums: ImmichAlbum[] | undefined): string {
+  const names = ids.map((id) => albums?.find((a) => a.id === id)?.name).filter(Boolean) as string[];
+  return names.length === ids.length && names.length <= 3 ? names.join(", ") : `${ids.length} album${ids.length === 1 ? "" : "s"}`;
+}
+
 function sourceText(c: ImmichConfig, albums: ImmichAlbum[] | undefined): string {
-  const names = c.album_ids.map((id) => albums?.find((a) => a.id === id)?.name).filter(Boolean) as string[];
+  if (c.season_now?.length) return `${albumNames(c.season_now, albums)} (in season)`;
   const parts = [
-    names.length === c.album_ids.length && names.length <= 3 ? names.join(", ") : c.album_ids.length ? `${c.album_ids.length} album${c.album_ids.length === 1 ? "" : "s"}` : "",
+    c.mode === "all" ? `All albums${c.excluded_album_ids.length ? ` except ${albumNames(c.excluded_album_ids, albums)}` : ""}`
+      : c.album_ids.length ? albumNames(c.album_ids, albums) : "",
     c.favorites ? "favourites" : "", c.memories ? "on this day" : "",
   ].filter(Boolean);
   return parts.length ? parts.join(" + ") : "No albums chosen yet";
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** A day of the year as "MM-DD", picked as day + month. */
+function DayOfYear({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const m = Number(value.slice(0, 2)), d = Number(value.slice(3));
+  return (
+    <span className="season-day">
+      <select className="input" aria-label={`${label} day`} value={d} onChange={(e) => onChange(`${pad2(m)}-${pad2(Number(e.target.value))}`)}>
+        {Array.from({ length: MONTH_DAYS[m - 1] }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+      </select>
+      <select className="input" aria-label={`${label} month`} value={m}
+        onChange={(e) => { const nm = Number(e.target.value); onChange(`${pad2(nm)}-${pad2(Math.min(d, MONTH_DAYS[nm - 1]))}`); }}>
+        {MONTHS.map((name, i) => <option key={i} value={i + 1}>{name}</option>)}
+      </select>
+    </span>
+  );
 }
 
 function statusText(c: ImmichConfig): string {
@@ -417,7 +443,10 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
   const [url, setUrl] = useState(cfg.server_url);
   const [key, setKey] = useState("");
   const [albums, setAlbums] = useState<ImmichAlbum[] | null>(null);
+  const [mode, setMode] = useState<ImmichMode>(cfg.mode ?? "albums");
   const [chosen, setChosen] = useState<string[]>(cfg.album_ids);
+  const [excluded, setExcluded] = useState<string[]>(cfg.excluded_album_ids ?? []);
+  const [seasons, setSeasons] = useState<ImmichSeason[]>(cfg.seasons ?? []);
   const [favorites, setFavorites] = useState(cfg.favorites);
   const [memories, setMemories] = useState(cfg.memories);
   const [skipCert, setSkipCert] = useState(cfg.skip_cert_check);
@@ -460,15 +489,20 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
     if (!p) return;
     setBusy("save"); setError(null);
     try {
-      const r = await api.saveImmich({ server_url: url.trim(), api_key: key.trim() || undefined, album_ids: chosen, favorites, memories, skip_cert_check: https && skipCert, pin: p });
+      const r = await api.saveImmich({ server_url: url.trim(), api_key: key.trim() || undefined, mode, album_ids: chosen, excluded_album_ids: excluded, seasons, favorites, memories, skip_cert_check: https && skipCert, pin: p });
       toast(r.status === "ok" ? `Saved · ${photoCount(r.photo_count)}` : "Saved, but Immich can't be reached right now");
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't save");
     } finally { setBusy(null); }
   }
-  const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
-  const nothing = !chosen.length && !favorites && !memories;
+  const flip = (xs: string[], id: string) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
+  const seasonal = new Set(seasons.map((s) => s.album_id));
+  const isOn = (id: string) => (mode === "all" ? !excluded.includes(id) : chosen.includes(id));
+  const toggle = (id: string) => (mode === "all" ? setExcluded((x) => flip(x, id)) : setChosen((c) => flip(c, id)));
+  const nothing = mode === "albums" && !chosen.filter((id) => !seasonal.has(id)).length && !favorites && !memories;
+  const setSeason = (i: number, patch: Partial<ImmichSeason>) => setSeasons((xs) => xs.map((s, k) => (k === i ? { ...s, ...patch } : s)));
+  const free = albums?.filter((a) => !seasonal.has(a.id)) ?? [];
 
   return (
     <Sheet title={cfg.configured ? "Screensaver photos" : "Connect Immich"} onClose={onClose} footer={<>
@@ -500,16 +534,45 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
         {error && <div className="connect-error" role="alert">{error}</div>}
         {checked && <div className="immich-ok" role="status">{checked}</div>}
         {albums && (<>
-          <label className="field-label">Albums to show</label>
+          <div className="set-col"><span>Show</span>
+            <Segmented value={mode} onChange={setMode}
+              options={[{ value: "albums", label: "Chosen albums" }, { value: "all", label: "All albums" }]} />
+          </div>
+          <label className="field-label">{mode === "all" ? "Albums to show (tap one to leave it out)" : "Albums to show"}</label>
           {albums.length === 0 && <p className="muted connect-note">No albums in this Immich account yet.</p>}
           <div className="chip-row immich-albums">
-            {albums.map((a) => (
-              <button type="button" key={a.id} className={"chip-btn" + (chosen.includes(a.id) ? " on" : "")}
-                aria-pressed={chosen.includes(a.id)} onClick={() => toggle(a.id)}>
+            {albums.filter((a) => !seasonal.has(a.id)).map((a) => (
+              <button type="button" key={a.id} className={"chip-btn" + (isOn(a.id) ? " on" : mode === "all" ? " off" : "")}
+                aria-pressed={isOn(a.id)} onClick={() => toggle(a.id)}>
                 {a.name} <span>{a.asset_count}</span>
               </button>
             ))}
           </div>
+          {mode === "all" && <p className="muted connect-note">New albums made in Immich are shown too, unless you leave them out here.</p>}
+          <label className="field-label">Seasonal albums</label>
+          <p className="muted connect-note">
+            Shown on their own between their dates (like Christmas from 1 to 26 December) and hidden the rest of the year.
+          </p>
+          {seasons.map((s, i) => (
+            <div className="season-row" key={i}>
+              <select className="input" aria-label="Seasonal album" value={s.album_id} onChange={(e) => setSeason(i, { album_id: e.target.value })}>
+                {albums.filter((a) => a.id === s.album_id || !seasonal.has(a.id)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                {!albums.some((a) => a.id === s.album_id) && <option value={s.album_id}>Album no longer in Immich</option>}
+              </select>
+              <span className="season-dates">
+                <DayOfYear label="From" value={s.start} onChange={(v) => setSeason(i, { start: v })} />
+                <span>to</span>
+                <DayOfYear label="To" value={s.end} onChange={(v) => setSeason(i, { end: v })} />
+              </span>
+              <button type="button" className="btn ghost small danger" onClick={() => setSeasons((xs) => xs.filter((_, k) => k !== i))}>Remove</button>
+            </div>
+          ))}
+          {free.length > 0 && seasons.length < 20 && (
+            <div><button type="button" className="btn ghost small" onClick={() => {
+              const pick = free.find((a) => /christmas|xmas|festive/i.test(a.name)) ?? free[0];
+              setSeasons((xs) => [...xs, { album_id: pick.id, start: "12-01", end: "12-26" }]);
+            }}>Add a seasonal album</button></div>
+          )}
           <div className="set-row"><span>Also show favourites</span>
             <button type="button" className={"toggle" + (favorites ? " on" : "")} onClick={() => setFavorites(!favorites)} aria-pressed={favorites} aria-label="Also show favourites"><span /></button>
           </div>
@@ -517,7 +580,10 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
             <button type="button" className={"toggle" + (memories ? " on" : "")} onClick={() => setMemories(!memories)} aria-pressed={memories} aria-label="Also show on this day memories"><span /></button>
           </div>
           {nothing && <p className="muted connect-note">Choose at least one album (or favourites) to show photos.</p>}
-          <p className="muted connect-note">Photos only (videos are skipped). New photos added in Immich show up within a few minutes.</p>
+          <p className="muted connect-note">
+            The screensaver plays one whole album at a time, choosing recently changed albums most often and "on this day"
+            first. Photos only (videos are skipped). New photos added in Immich show up within a few minutes.
+          </p>
         </>)}
         {!albums && !cfg.configured && <p className="muted connect-note">Test the connection to choose albums.</p>}
         {changedLogin && cfg.configured && <p className="muted connect-note">A new address or key is checked with Immich when you save.</p>}

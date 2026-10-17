@@ -1,8 +1,8 @@
-import { CSSProperties, useEffect, useRef, useState } from "react";
-import { SlidePhoto } from "../api/types";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { PhotoAlbum, SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
-import { IconCamera, IconDrop, WeatherIcon } from "../components/icons";
+import { IconCamera, IconDrop, IconPhotos, WeatherIcon } from "../components/icons";
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 
 // Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
@@ -43,10 +43,11 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
     const t = setInterval(() => { setBroken(""); reload(); }, REFETCH_MS); // also retry photos that failed to load
     return () => clearInterval(t);
   }, [reload]);
-  const photos = data?.photos ?? [];
-  const listKey = photos.map((p) => p.id).join();
-  const usePhotos = photos.length > 0 && broken !== listKey;
+  const albums = useMemo(() => albumsOf(data?.photos ?? [], data?.albums), [data]);
+  const listKey = albums.map((a) => `${a.id}:${a.photos.map((p) => p.id).join()}`).join("|");
+  const usePhotos = albums.length > 0 && broken !== listKey;
   const [shown, setShown] = useState<SlidePhoto | null>(null);
+  const [album, setAlbum] = useState<{ name: string; at: number } | null>(null);
   const t = today();
   const [events] = useData((api) => api.events(t, addDays(t, 2)), ["events"], [t]);
   const [weather] = useData((api) => api.weather(), ["settings"], []);
@@ -58,10 +59,12 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   return (
     <div className="screensaver" onClick={onWake}>
       {data && (usePhotos
-        ? <PhotoShow key={listKey} photos={photos} seconds={seconds} onFail={() => setBroken(listKey)} onShow={setShown} />
+        ? <PhotoShow key={listKey} albums={albums} seconds={seconds} onFail={() => setBroken(listKey)} onShow={setShown}
+            onAlbum={(name) => setAlbum({ name, at: Date.now() })} />
         : <SceneShow seconds={seconds} />)}
       <div className="ss-shade" />
       {usePhotos && shown && settings?.photo_details !== false && <PhotoCaption photo={shown} />}
+      {usePhotos && album && <AlbumToast key={album.at} name={album.name} />}
       <div className="ss-info">
         {weather && <div className="ss-wx">
           <WeatherIcon condition={weather.current.condition} size={44} /> {weather.current.temp}°
@@ -93,16 +96,63 @@ function PhotoCaption({ photo }: { photo: SlidePhoto }) {
   );
 }
 
+/** The album's name, for a few seconds when the screensaver starts and when it moves on to another album. */
+function AlbumToast({ name }: { name: string }) {
+  const [on, setOn] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setOn(false), 5000); return () => clearTimeout(t); }, []);
+  return on ? <div className="ss-album" role="status"><IconPhotos size={22} /> {name}</div> : null;
+}
+
 function SceneShow({ seconds }: { seconds: number }) {
   const [i, setI] = useState(0);
   useEffect(() => { const t = setInterval(() => setI((x) => x + 1), seconds * 1000); return () => clearInterval(t); }, [seconds]);
   return <>{SCENES.map((s, k) => <div key={k} className={"ss-slide" + (k === i % SCENES.length ? " on" : "")}><Scene s={s} /></div>)}</>;
 }
 
+interface Album { id: string; name: string; updated_at: string | null; photos: SlidePhoto[] }
+
+/** The albums to play, with their photos. A server older than 0.5.3 sends no albums: then all photos, shuffled, as one. */
+function albumsOf(photos: SlidePhoto[], albums: PhotoAlbum[] | undefined): Album[] {
+  if (!albums) return photos.length ? [{ id: "photos", name: "Photos", updated_at: null, photos: shuffle(photos) }] : [];
+  const byId = new Map(photos.map((p) => [p.id, p]));
+  return albums.map((a) => ({ ...a, photos: a.photos.map((id) => byId.get(id)).filter((p): p is SlidePhoto => !!p) }))
+    .filter((a) => a.photos.length);
+}
+
 function shuffle<T>(xs: T[]): T[] {
   const a = [...xs];
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
+}
+
+// Where this screen is up to, so the slideshow carries on after the screen is used or turned off.
+const PLACE_KEY = "moonlight.screensaver";
+interface Place { album?: string; next?: number; recent?: string[]; memories?: string }
+function loadPlace(): Place {
+  try { return JSON.parse(localStorage.getItem(PLACE_KEY) ?? "{}") ?? {}; } catch { return {}; }
+}
+function savePlace(p: Place) {
+  try { localStorage.setItem(PLACE_KEY, JSON.stringify(p)); } catch { /* storage blocked */ }
+}
+
+/** The next album: "on this day" first each day, then at random with recently changed albums far more likely
+ * (one changed today is about 10 times as likely as one last changed a year ago), never one of the last few shown. */
+export function pickAlbum(albums: Album[], place: Place, day: string, now = Date.now()): Album {
+  const memories = albums.find((a) => a.id === "on-this-day");
+  if (memories && place.memories !== day) return memories;
+  const k = Math.min(3, albums.length - 1);
+  const avoid = new Set(k > 0 ? (place.recent ?? []).slice(-k) : []);
+  const pool = albums.filter((a) => !avoid.has(a.id));
+  const weight = (a: Album) => {
+    if (a.id === "on-this-day") return 1.5;
+    const t = a.updated_at ? Date.parse(a.updated_at) : NaN;
+    const days = Number.isNaN(t) ? 180 : Math.max(0, (now - t) / 86_400_000);
+    return Math.max(0.04, 1 / (1 + days / 40));
+  };
+  const w = pool.map(weight);
+  let r = Math.random() * w.reduce((x, y) => x + y, 0);
+  for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; }
+  return pool[pool.length - 1];
 }
 
 interface Slide { key: number; photo: SlidePhoto; aspect: number }
@@ -114,32 +164,53 @@ function load(url: string): Promise<number> {
   return img.decode().then(() => img.naturalWidth / Math.max(1, img.naturalHeight));
 }
 
-/** Immich photos: shuffled, crossfading, with a slow Ken Burns zoom (off for prefers-reduced-motion).
+/** Immich photos, one whole album at a time (oldest photo first), crossfading, with a slow Ken Burns zoom (off for
+ * prefers-reduced-motion). Carries on where this screen was up to; `onAlbum` names the album when it starts.
  * A photo that won't load is skipped; if several in a row fail, `onFail` hands back to the painted scenes. */
-function PhotoShow({ photos, seconds, onFail, onShow }: {
-  photos: SlidePhoto[]; seconds: number; onFail: () => void; onShow: (p: SlidePhoto) => void;
+function PhotoShow({ albums: list, seconds, onFail, onShow, onAlbum }: {
+  albums: Album[]; seconds: number; onFail: () => void; onShow: (p: SlidePhoto) => void; onAlbum: (name: string) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const [order] = useState(() => shuffle(photos)); // keyed by the list's ids, so a refetch doesn't restart it
+  const [albums] = useState(list); // keyed by the list's ids, so a refetch doesn't restart it
   const [slides, setSlides] = useState<Slide[]>([]);
+  const albumRef = useRef(onAlbum);
+  albumRef.current = onAlbum;
   const failRef = useRef(onFail);
   failRef.current = onFail;
   const showRef = useRef(onShow);
   showRef.current = onShow;
   useEffect(() => {
-    let n = -1, alive = true, failures = 0, busy = false, shown = false;
-    const giveUp = Math.min(3, order.length);
+    let alive = true, failures = 0, busy = false, shown = false, named = "";
+    const total = albums.reduce((n, a) => n + a.photos.length, 0);
+    const giveUp = Math.min(3, total);
+    const place = loadPlace();
+    let album = albums.find((a) => a.id === place.album);
+    let n = place.next ?? 0;
+    const nextPhoto = (): [Album, SlidePhoto] => {
+      if (!album || n >= album.photos.length) { // finished that album (or none yet): choose another
+        const day = today();
+        album = pickAlbum(albums, place, day);
+        n = 0;
+        place.recent = [...(place.recent ?? []).filter((id) => id !== album!.id), album.id].slice(-10);
+        if (album.id === "on-this-day") place.memories = day;
+      }
+      const photo = album.photos[n++];
+      savePlace({ ...place, album: album.id, next: n });
+      return [album, photo];
+    };
     // Swap only once the next photo is decoded, so the crossfade never shows a half-loaded image.
     const advance = () => {
       if (busy || !alive) return;
       busy = true;
-      n = (n + 1) % order.length;
-      const photo = order[n];
+      const [from, photo] = nextPhoto();
       load(photo.url).then((aspect) => {
         failures = 0;
         shown = true;
         busy = false;
-        if (alive) { setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect }]); showRef.current(photo); }
+        if (!alive) return;
+        setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect }]);
+        showRef.current(photo);
+        if (named !== from.id) { named = from.id; albumRef.current(from.name); }
       }, () => {
         busy = false;
         if (++failures >= giveUp) { if (alive) failRef.current(); }
@@ -147,10 +218,10 @@ function PhotoShow({ photos, seconds, onFail, onShow }: {
       });
     };
     advance();
-    if (order.length < 2) return () => { alive = false; };
+    if (total < 2) return () => { alive = false; };
     const t = setInterval(advance, seconds * 1000);
     return () => { alive = false; clearInterval(t); };
-  }, [order, seconds]);
+  }, [albums, seconds]);
   const el = box.current;
   const screenAspect = el && el.clientHeight ? el.clientWidth / el.clientHeight : window.innerWidth / Math.max(1, window.innerHeight);
   return (

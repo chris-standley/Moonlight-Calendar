@@ -156,20 +156,30 @@ export const STYLE_LABEL: Record<Layout, string> = { large: "Large", compact: "C
 
 // Photo screensaver source: the family's Immich server. Moonlight keeps the API key (write-only) and proxies previews.
 export type ImmichStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
+/** `albums` = the chosen albums (+ favourites, memories); `all` = the whole library except the excluded albums. */
+export type ImmichMode = "albums" | "all";
+/** A seasonal album: hidden outside `start`..`end` ("MM-DD", may run over New Year), shown on its own within them. */
+export interface ImmichSeason { album_id: string; start: string; end: string }
 export interface ImmichConfig {
-  configured: boolean; server_url: string; key_set: boolean; album_ids: string[]; favorites: boolean; memories: boolean;
+  configured: boolean; server_url: string; key_set: boolean; mode: ImmichMode; album_ids: string[]; excluded_album_ids: string[];
+  seasons: ImmichSeason[]; favorites: boolean; memories: boolean;
+  /** The seasonal albums showing today (in their dates), if any. */
+  season_now?: string[];
   /** HTTPS without checking the certificate (self-signed, or one made for a domain name while Moonlight uses the IP). */
   skip_cert_check: boolean;
   status: ImmichStatus; last_error: string | null; last_refresh: string | null; photo_count: number; version: string | null;
 }
-export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean }
+export interface ImmichAlbum { id: string; name: string; asset_count: number; shared: boolean; updated_at?: string | null }
 /** PUT /api/immich: `api_key` may be left out once one is saved. */
-export interface ImmichIn { server_url?: string; api_key?: string; album_ids?: string[]; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
+export interface ImmichIn { server_url?: string; api_key?: string; mode?: ImmichMode; album_ids?: string[]; excluded_album_ids?: string[]; seasons?: ImmichSeason[]; favorites?: boolean; memories?: boolean; skip_cert_check?: boolean; pin: string }
 export interface ImmichTest { ok: true; version: string | null; albums: ImmichAlbum[] }
 /** A screensaver photo. `url` is ready for <img src> (the HTTP client prefixes the base path). Width/height may be null. */
 /** `taken_at`: local time where it was taken (show the digits as they are). `place`: HA zone name or town, if known. */
 export interface SlidePhoto { id: string; width: number | null; height: number | null; taken_at: string | null; place?: string | null; url: string }
-export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[] }
+/** One album's photos, oldest first. `id` is "favorites" or "on-this-day" for those; `updated_at` = last change in Immich. */
+export interface PhotoAlbum { id: string; name: string; updated_at: string | null; photos: string[] }
+/** `albums` (newest first) is what the screensaver plays, one whole album at a time; older servers send only `photos`. */
+export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[]; albums?: PhotoAlbum[] }
 
 export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media";
 
