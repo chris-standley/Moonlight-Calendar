@@ -2,6 +2,7 @@
 # checks that it starts, and on main pushes it to GHCR as <image>:<version> and <image>:latest
 # (image and version from addon/config.yaml). A version that is already published is not pushed again on
 # a plain push to main, so bump `version` in addon/config.yaml to release; workflow_dispatch always pushes.
+# After a push on main it asks home-assistant-apps to sync the new version (notify-store, below).
 name: Add-on image
 
 on:
@@ -154,3 +155,26 @@ jobs:
         run: |
           docker push "${IMAGE}:${VERSION}"
           docker push "${IMAGE}:latest"
+
+  # Tells chris-standley/home-assistant-apps to offer the new version straight away instead of
+  # waiting for its next scheduled check. Needs a MOONLIGHT_APPS_TOKEN secret (fine-grained token with
+  # Contents: read and write on that repository); without it this is skipped.
+  notify-store:
+    name: notify the add-on store
+    needs: image
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch the sync in home-assistant-apps
+        env:
+          TOKEN: ${{ secrets.MOONLIGHT_APPS_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "MOONLIGHT_APPS_TOKEN is not set; the store picks up the new version on its next scheduled check."
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/chris-standley/home-assistant-apps/dispatches \
+            -d '{"event_type":"moonlight-image-published"}'
