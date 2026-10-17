@@ -86,7 +86,7 @@ export function WeatherIcon({ condition, size = 24 }: { condition: string; size?
   let g;
   switch (condition) {
     case "sunny": g = sun; break;
-    case "clear-night": g = <path d="M15.5 4.5a7.5 7.5 0 100 15 6.2 6.2 0 010-15z" fill="#8F9BF2" transform="translate(-2 0)" />; break;
+    case "clear-night": g = <path d="M14.5 3.5A8.5 8.5 0 1 0 20.5 14.5A7 7 0 0 1 14.5 3.5z" fill="#8F9BF2" />; break;
     case "partlycloudy": g = <g><g transform="translate(-3 -3) scale(.85)">{sun}</g>{cloud(1, 1)}</g>; break;
     case "cloudy": case "fog": g = <g>{cloud(-1, -2, "#AEB9CC")}{cloud(1, 1)}</g>; break;
     case "lightning-rainy":
