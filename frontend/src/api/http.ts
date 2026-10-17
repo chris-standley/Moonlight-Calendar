@@ -35,6 +35,7 @@ export function httpApi(base = ""): Api {
   const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;
+  let serverVersion: string | null = null; // from the first "hello"; a different one later means Moonlight was updated
   function connect() {
     const url = new URL(base + "/api/ws", location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -44,6 +45,11 @@ export function httpApi(base = ""): Api {
     ws.onmessage = (m) => {
       try {
         const msg = JSON.parse(m.data);
+        // Wall screens stay open for weeks: after an update, load the new screens instead of running the old code.
+        if (msg.type === "hello" && msg.version) {
+          if (serverVersion && serverVersion !== msg.version) location.reload();
+          serverVersion = msg.version;
+        }
         if (msg.type === "changed") listeners.forEach((l) => l(msg.topic));
         // A screen was revoked: if it was this one, drop back to pairing straight away.
         if (msg.type === "changed" && msg.topic === "displays") {
