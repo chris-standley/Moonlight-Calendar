@@ -123,7 +123,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     const out = ALBUMS.filter((a) => ids.includes(a.id)).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))
       .map(({ id, name, updated_at, looks }) => ({ id, name, updated_at: updated_at ?? null, looks }));
     if (!now.length && cfg.favorites) out.push({ id: "favorites", name: "Favourites", updated_at: null, looks: FAVOURITES });
-    if (!now.length && cfg.memories) out.push({ id: "on-this-day", name: "On this day", updated_at: today(), looks: ON_THIS_DAY });
+    if (cfg.memories) out.push({ id: "on-this-day", name: "On this day", updated_at: today(), looks: ON_THIS_DAY });
     return out.map((g) => ({ ...g, looks: g.looks.filter((i) => !hide.has(i)) })).filter((g) => g.looks.length);
   };
   const chosen = (): SlidePhoto[] => [...new Set(groups().flatMap((g) => g.looks))].sort().map((i) => library()[i]);

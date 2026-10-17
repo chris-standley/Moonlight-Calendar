@@ -395,8 +395,8 @@ included). Favourites and memories are added in either mode. `festive` (default 
 Christmas, Xmas, festive, Yule(tide), Advent, Santa, nativity, carol(s) or Boxing Day as a word (any case; digits may
 touch it, "Christmas2024") are hidden outside December, with their photos wherever else they appear. In December
 (household timezone) only those and winter albums (winter, snow, frost, blizzard, skiing, sledging, ice skating...) are
-shown, from the whole library and in either mode, minus `excluded_album_ids` in mode `all` (`festive_now: true`); with
-no festive albums, December is like any other month. The API key is never returned.
+shown, from the whole library and in either mode, minus `excluded_album_ids` in mode `all`, plus "on this day" if on
+but not favourites (`festive_now: true`); with no festive albums, December is like any other month. The API key is never returned.
 ImmichAlbum = `{id, name, asset_count, shared, updated_at|null}` (`updated_at` = Immich's last change to the album).
 - `GET /api/immich` -> ImmichConfig
 - `PUT /api/immich` `{pin, server_url, api_key, mode?, album_ids?, excluded_album_ids?, festive?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out

@@ -532,7 +532,7 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
           </div>
           {festive && <p className="muted connect-note">
             Albums with Christmas, Xmas, festive, Yule, Advent, Santa, nativity, carol or Boxing Day in their name are hidden
-            until December. In December only those and winter albums (winter, snow, frost, skiing…) are shown.
+            until December. In December only those, winter albums (winter, snow, frost, skiing…) and "on this day" are shown.
           </p>}
           <div className="set-row"><span>Also show favourites</span>
             <button type="button" className={"toggle" + (favorites ? " on" : "")} onClick={() => setFavorites(!favorites)} aria-pressed={favorites} aria-label="Also show favourites"><span /></button>

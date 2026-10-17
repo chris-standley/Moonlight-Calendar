@@ -481,7 +481,7 @@ class Cache:
             if not season and cfg["favorites"] and len(found) < MAX_ASSETS:
                 add({"id": "favorites", "name": "Favourites", "updated_at": None},
                     await client.favorite_assets(http, MAX_ASSETS - len(found)), hide)
-            if not season and cfg["memories"] and len(found) < MAX_ASSETS:
+            if cfg["memories"] and len(found) < MAX_ASSETS:  # December's "on this day" is from Christmases past
                 try:
                     add({"id": "on-this-day", "name": "On this day", "updated_at": today.isoformat()},
                         await client.memory_assets(http, today), hide)

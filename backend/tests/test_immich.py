@@ -496,6 +496,11 @@ def test_festive_albums_only_in_december(client, fake, monkeypatch):
     assert sorted(a["name"] for a in body["albums"]) == ["Christmas 2024", "Snow day"]
     assert {p["id"] for p in body["photos"]} == images(fake.photos[fake.private]) | images(fake.photos[fake.garden])
     assert client.get("/api/immich").json()["festive_now"] is True
+    # "On this day" still shows in December (it's Christmases past), favourites don't.
+    body = client.put("/api/immich", json={"pin": PIN, "memories": True, "favorites": True}).json()
+    names = [a["name"] for a in client.get("/api/screensaver/photos").json()["albums"]]
+    assert "On this day" in names and "Favourites" not in names
+    client.put("/api/immich", json={"pin": PIN, "memories": False, "favorites": False})
     # Filter off: Christmas albums are ordinary albums all year.
     r = client.put("/api/immich", json={"pin": PIN, "festive": False}).json()
     assert r["festive"] is False and r["festive_now"] is False and r["photo_count"] == 5
