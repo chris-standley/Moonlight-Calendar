@@ -632,11 +632,6 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .immich-albums .chip-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
 .immich-albums .chip-btn span { font-size: 0.8em; opacity: 0.65; }
 .immich-albums .chip-btn.off { text-decoration: line-through; opacity: 0.6; }
-.season-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
-.season-row > select { flex: 1 1 12rem; min-width: 0; }
-.season-dates { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
-.season-day { display: inline-flex; gap: 0.3rem; }
-.season-day select { width: auto; }
 .immich-ok { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 0.8rem; background: rgba(47, 181, 138, 0.12); color: var(--ok-text); font-weight: 800; }
 .layout-phone .rail-item { min-width: 3rem; }
 

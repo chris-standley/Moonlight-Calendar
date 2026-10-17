@@ -88,8 +88,9 @@ same Home Assistant box) with a crossfade and slow zoom; portrait photos on a la
 blurred copy. Settings > Photo screensaver > Connect Immich: enter Immich's address and an API key (Immich > Account
 Settings > API Keys, with `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on this day"), Test
 connection, then pick albums (or show all albums except the ones you leave out) and optionally favourites and "on this
-day" memories. Seasonal albums (say Christmas, 1 to 26 December) are shown on their own between their dates and hidden
-the rest of the year. The screensaver plays one whole album at a time, oldest photo first, with its name shown as it
+day" memories. Albums named for Christmas (Christmas, Xmas, festive, Yule, Advent, Santa, nativity, carol, Boxing Day)
+are hidden until December, and in December only they and winter albums (winter, snow, frost, skiing...) are shown;
+turn "Christmas albums only in December" off to treat them like any other album. The screensaver plays one whole album at a time, oldest photo first, with its name shown as it
 starts: "on this day" first each day, then recently changed albums most often and older ones now and then. Each screen
 carries on where it was up to after it's used or turned off. Moonlight keeps the key in its
 database and proxies the preview images, so the screens never see Immich or the key, and only photos in the chosen

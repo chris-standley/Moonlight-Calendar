@@ -1,6 +1,6 @@
 // Demo-mode screens and a simulated Immich server for the photo screensaver. Sample photos are painted on a canvas
 // at runtime (so the single-file preview stays small). Kept in memory only.
-import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, ImmichSeason, Layout, PhotoAlbum, SECTIONS, SlidePhoto, Topic } from "./types";
+import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, Layout, PhotoAlbum, SECTIONS, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
 type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "updateDisplay" | "thisScreen" | "immich" | "saveImmich" | "disconnectImmich" |
@@ -85,10 +85,10 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
 
   // Starts connected to one album, so the preview's screensaver shows photos. Any address and key work;
   // the key "wrong" is rejected and an address containing "offline" can't be reached.
-  type Cfg = { server_url: string; key: string; mode: ImmichMode; album_ids: string[]; excluded_album_ids: string[]; seasons: ImmichSeason[];
+  type Cfg = { server_url: string; key: string; mode: ImmichMode; album_ids: string[]; excluded_album_ids: string[]; festive: boolean;
     favorites: boolean; memories: boolean; skip_cert_check?: boolean };
   let cfg: Cfg | null = { server_url: "http://192.168.1.10:2283", key: "demo", mode: "albums", album_ids: [ALBUMS[0].id], excluded_album_ids: [],
-    seasons: [], favorites: false, memories: false };
+    festive: true, favorites: false, memories: false };
   let refreshed = ago(2);
   let painted: SlidePhoto[] | null = null;
   function library(): SlidePhoto[] {
@@ -105,29 +105,33 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     return painted;
   }
   const looksOf = (ids: string[]) => ids.flatMap((id) => ALBUMS.find((a) => a.id === id)?.looks ?? []);
+  const FESTIVE = /(?<![a-z])(christmas|xmas|x-mas|festive|yule|yuletide|advent|santa|nativity|carols?|boxing day)(?![a-z])/i;
+  const WINTER = /(?<![a-z])(winter|wintry|snow|snowy|snowman|snowmen|snowball|frost|frosty|blizzard|sledging|sledge|sled|skiing|ski|ice skating|icicles?)(?![a-z])/i;
+  const festiveIds = (c: Cfg) => (c.festive ? ALBUMS.filter((a) => FESTIVE.test(a.name)).map((a) => a.id) : []);
   const seasonNow = (c: Cfg) => {
-    const md = today().slice(5);
-    return [...new Set(c.seasons.filter((s) => (s.start <= s.end ? s.start <= md && md <= s.end : md >= s.start || md <= s.end)).map((s) => s.album_id))];
+    const excl = c.mode === "all" ? c.excluded_album_ids : [];
+    if (!c.festive || today().slice(5, 7) !== "12" || !festiveIds(c).some((id) => !excl.includes(id))) return [];
+    return ALBUMS.filter((a) => (FESTIVE.test(a.name) || WINTER.test(a.name)) && !excl.includes(a.id)).map((a) => a.id);
   };
-  // Like the add-on: whole albums (newest first), seasonal ones only in their dates, hidden albums' photos hidden everywhere.
+  // Like the add-on: whole albums (newest first), festive ones only in December, hidden albums' photos hidden everywhere.
   const groups = (): (Omit<PhotoAlbum, "photos"> & { looks: number[] })[] => {
     if (!cfg) return [];
     const now = seasonNow(cfg);
-    const hidden = now.length ? [] : [...cfg.seasons.map((s) => s.album_id), ...(cfg.mode === "all" ? cfg.excluded_album_ids : [])];
+    const hidden = now.length ? [] : [...festiveIds(cfg), ...(cfg.mode === "all" ? cfg.excluded_album_ids : [])];
     const hide = new Set(looksOf(hidden));
     const ids = now.length ? now : cfg.mode === "all" ? ALBUMS.map((a) => a.id).filter((id) => !hidden.includes(id)) : cfg.album_ids.filter((id) => !hidden.includes(id));
     const out = ALBUMS.filter((a) => ids.includes(a.id)).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))
       .map(({ id, name, updated_at, looks }) => ({ id, name, updated_at: updated_at ?? null, looks }));
     if (!now.length && cfg.favorites) out.push({ id: "favorites", name: "Favourites", updated_at: null, looks: FAVOURITES });
-    if (!now.length && cfg.memories) out.push({ id: "on-this-day", name: "On this day", updated_at: today(), looks: ON_THIS_DAY });
+    if (cfg.memories) out.push({ id: "on-this-day", name: "On this day", updated_at: today(), looks: ON_THIS_DAY });
     return out.map((g) => ({ ...g, looks: g.looks.filter((i) => !hide.has(i)) })).filter((g) => g.looks.length);
   };
   const chosen = (): SlidePhoto[] => [...new Set(groups().flatMap((g) => g.looks))].sort().map((i) => library()[i]);
   const out = (): ImmichConfig => cfg
     ? { configured: true, server_url: cfg.server_url, key_set: true, mode: cfg.mode, album_ids: [...cfg.album_ids],
-        excluded_album_ids: [...cfg.excluded_album_ids], seasons: cfg.seasons.map((s) => ({ ...s })), season_now: seasonNow(cfg), favorites: cfg.favorites,
+        excluded_album_ids: [...cfg.excluded_album_ids], festive: cfg.festive, festive_now: seasonNow(cfg).length > 0, favorites: cfg.favorites,
         memories: cfg.memories, skip_cert_check: !!cfg.skip_cert_check, status: "ok", last_error: null, last_refresh: refreshed, photo_count: chosen().length, version: "3.3.1" }
-    : { configured: false, server_url: "", key_set: false, mode: "albums", album_ids: [], excluded_album_ids: [], seasons: [], favorites: false, memories: false, skip_cert_check: false, status: "unconfigured",
+    : { configured: false, server_url: "", key_set: false, mode: "albums", album_ids: [], excluded_album_ids: [], festive: true, favorites: false, memories: false, skip_cert_check: false, status: "unconfigured",
         last_error: null, last_refresh: null, photo_count: 0, version: null };
   const albums = () => ALBUMS.map(({ looks, ...a }) => ({ ...a }));
   async function check(url: string, key: string) {
@@ -173,13 +177,13 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     },
     async revokeDisplay(id, pin) { checkPin(pin); find(displays, id); displays = displays.filter((d) => d.id !== id); emit("displays"); },
     immich: async () => out(),
-    async saveImmich({ pin, server_url, api_key, mode, album_ids, excluded_album_ids, seasons, favorites, memories, skip_cert_check }) {
+    async saveImmich({ pin, server_url, api_key, mode, album_ids, excluded_album_ids, festive, favorites, memories, skip_cert_check }) {
       checkPin(pin);
       const url = server_url !== undefined ? clean(server_url) : cfg?.server_url ?? "";
       const key = api_key ? api_key.trim() : cfg?.key ?? "";
       if (!cfg || url !== cfg.server_url || key !== cfg.key) await check(url, key);
       cfg = { server_url: url, key, mode: mode ?? cfg?.mode ?? "albums", album_ids: album_ids ?? cfg?.album_ids ?? [],
-        excluded_album_ids: excluded_album_ids ?? cfg?.excluded_album_ids ?? [], seasons: seasons ?? cfg?.seasons ?? [], favorites: favorites ?? cfg?.favorites ?? false,
+        excluded_album_ids: excluded_album_ids ?? cfg?.excluded_album_ids ?? [], festive: festive ?? cfg?.festive ?? true, favorites: favorites ?? cfg?.favorites ?? false,
         memories: memories ?? cfg?.memories ?? false, skip_cert_check: skip_cert_check ?? cfg?.skip_cert_check ?? false };
       refreshed = ago(0);
       emit("photos");

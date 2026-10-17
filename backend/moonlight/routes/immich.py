@@ -53,14 +53,14 @@ def config_out(cfg: dict | None, cache: immich.Cache | None = None) -> dict:
     fresh = cache.key is not None and cache.key == immich.Cache.config_key(cfg)
     if not cfg:
         return {"configured": False, "server_url": "", "key_set": False, "mode": "albums", "album_ids": [],
-                "excluded_album_ids": [], "seasons": [], "favorites": False, "memories": False, "skip_cert_check": False, "status": "unconfigured", "last_error": None, "last_refresh": None,
+                "excluded_album_ids": [], "festive": True, "festive_now": False, "favorites": False, "memories": False, "skip_cert_check": False, "status": "unconfigured", "last_error": None, "last_refresh": None,
                 "photo_count": 0, "version": None}
     return {
         "configured": True, "server_url": cfg["server_url"], "key_set": bool(cfg["api_key"]),
         "mode": cfg.get("mode", "albums"), "album_ids": cfg["album_ids"],
-        "excluded_album_ids": cfg.get("excluded_album_ids", []), "seasons": cfg.get("seasons", []),
+        "excluded_album_ids": cfg.get("excluded_album_ids", []), "festive": cfg.get("festive", True),
         "favorites": cfg["favorites"], "memories": cfg["memories"], "skip_cert_check": cfg.get("skip_cert_check", False),
-        "season_now": cache.season if fresh else [],
+        "festive_now": cache.festive_now if fresh else False,
         "status": cache.status if fresh else "pending", "last_error": cache.error if fresh else None,
         "last_refresh": cache.last_refresh if fresh else None, "photo_count": len(cache.photos) if fresh else 0,
         "version": cache.version if fresh else None,
@@ -96,29 +96,6 @@ def _album_ids(body: dict, key: str = "album_ids") -> list[str]:
     return list(dict.fromkeys(ids))
 
 
-MONTH_DAY = re.compile(r"^(\d\d)-(\d\d)$")
-
-
-def _month_day(v, what: str) -> str:
-    m = MONTH_DAY.match(v) if isinstance(v, str) else None
-    if not m or not 1 <= int(m[1]) <= 12 or not 1 <= int(m[2]) <= (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)[int(m[1]) - 1]:
-        raise bad(f"{what} must be a day of the year like 12-01")
-    return v
-
-
-def _seasons(body: dict) -> list[dict]:
-    raw = body.get("seasons")
-    if not isinstance(raw, list) or len(raw) > 20:
-        raise bad("seasons must be a list of at most 20 {album_id, start, end}")
-    out = []
-    for s in raw:
-        if not isinstance(s, dict) or not isinstance(s.get("album_id"), str) or not UUID.match(s["album_id"]):
-            raise bad("each season needs an Immich album_id")
-        out.append({"album_id": s["album_id"], "start": _month_day(s.get("start"), "start"),
-                    "end": _month_day(s.get("end"), "end")})
-    return out
-
-
 def _bool(body: dict, key: str) -> bool:
     if not isinstance(body[key], bool):
         raise bad(f"{key} must be a boolean")
@@ -140,7 +117,7 @@ async def get_immich():
 
 @router.put("/immich")
 async def save_immich(body: dict = Body(...)):
-    """Connect or change: {pin, server_url, api_key (optional once saved), mode, album_ids, excluded_album_ids, seasons,
+    """Connect or change: {pin, server_url, api_key (optional once saved), mode, album_ids, excluded_album_ids, festive,
     favorites, memories, skip_cert_check}.
     A new URL or key is checked against Immich before it is saved."""
     body = body_dict(body)
@@ -148,7 +125,7 @@ async def save_immich(body: dict = Body(...)):
         require_pin(c, body.get("pin"))
         cur = immich.load_config(c)
     cfg = dict(cur) if cur else {"server_url": "", "api_key": "", "mode": "albums", "album_ids": [], "excluded_album_ids": [],
-                                 "seasons": [], "favorites": False, "memories": False, "skip_cert_check": False}
+                                 "festive": True, "favorites": False, "memories": False, "skip_cert_check": False}
     if "server_url" in body or not cur:
         cfg["server_url"] = _url(body)
     if body.get("api_key") not in (None, "") or not cur:
@@ -160,9 +137,7 @@ async def save_immich(body: dict = Body(...)):
     for k in ("album_ids", "excluded_album_ids"):
         if k in body:
             cfg[k] = _album_ids(body, k)
-    if "seasons" in body:
-        cfg["seasons"] = _seasons(body)
-    for k in ("favorites", "memories", "skip_cert_check"):
+    for k in ("favorites", "memories", "skip_cert_check", "festive"):
         if k in body:
             cfg[k] = _bool(body, k)
     if not cur or any(cfg[k] != cur.get(k) for k in ("server_url", "api_key", "skip_cert_check")):

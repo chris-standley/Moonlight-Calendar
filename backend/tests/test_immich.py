@@ -480,35 +480,43 @@ def test_photos_come_grouped_by_album(client, fake):
     assert len(body["albums"][2]["photos"]) == 3
 
 
-def test_seasonal_albums(client, fake, monkeypatch):
+def test_festive_albums_only_in_december(client, fake, monkeypatch):
     from datetime import date
     day = {"d": date(2026, 10, 17)}
     monkeypatch.setattr(immich, "household_today", lambda tz: day["d"])
-    xmas = fake.private  # the festive album
-    connect(client, fake, mode="all", album_ids=[], seasons=[{"album_id": xmas, "start": "12-01", "end": "12-26"}])
+    fake.names[fake.private] = "Christmas 2024"
+    fake.names[fake.garden] = "Snow day"
+    connect(client, fake, mode="all", album_ids=[])
     body = client.get("/api/screensaver/photos").json()
-    ids = {p["id"] for p in body["photos"]}
-    assert ids and not ids & images(fake.photos[xmas])  # out of season: hidden from "all"
-    assert xmas not in [a["id"] for a in body["albums"]]
-    assert client.get("/api/immich").json()["season_now"] == []
-    day["d"] = date(2026, 12, 1)  # the season starts: only the festive album, straight away
+    assert [a["name"] for a in body["albums"]] == ["Snow day", "Holiday 2025"]  # Christmas hidden outside December
+    # Chosen albums too: a festive album that is chosen only shows in December.
+    assert client.put("/api/immich", json={"pin": PIN, "mode": "albums", "album_ids": [fake.private, fake.holiday]}).json()["photo_count"] == 3
+    day["d"] = date(2026, 12, 1)  # December: festive and winter albums only, straight away
     body = client.get("/api/screensaver/photos").json()
-    assert {p["id"] for p in body["photos"]} == images(fake.photos[xmas])
-    assert [a["id"] for a in body["albums"]] == [xmas]
-    assert client.get("/api/immich").json()["season_now"] == [xmas]
-    day["d"] = date(2026, 12, 27)
-    assert not {p["id"] for p in client.get("/api/screensaver/photos").json()["photos"]} & images(fake.photos[xmas])
-    # Chosen-albums mode too: a seasonal album that is also chosen only shows in its dates.
-    r = client.put("/api/immich", json={"pin": PIN, "mode": "albums", "album_ids": [xmas, fake.holiday]}).json()
-    assert r["photo_count"] == 3
-    for bad in ([{"album_id": xmas, "start": "02-30", "end": "03-01"}], [{"album_id": "x", "start": "12-01", "end": "12-02"}],
-                [{"album_id": xmas, "start": "12-1", "end": "12-26"}], "12-01"):
-        assert client.put("/api/immich", json={"pin": PIN, "seasons": bad}).status_code == 400
+    assert sorted(a["name"] for a in body["albums"]) == ["Christmas 2024", "Snow day"]
+    assert {p["id"] for p in body["photos"]} == images(fake.photos[fake.private]) | images(fake.photos[fake.garden])
+    assert client.get("/api/immich").json()["festive_now"] is True
+    # "On this day" still shows in December (it's Christmases past), favourites don't.
+    body = client.put("/api/immich", json={"pin": PIN, "memories": True, "favorites": True}).json()
+    names = [a["name"] for a in client.get("/api/screensaver/photos").json()["albums"]]
+    assert "On this day" in names and "Favourites" not in names
+    client.put("/api/immich", json={"pin": PIN, "memories": False, "favorites": False})
+    # Filter off: Christmas albums are ordinary albums all year.
+    r = client.put("/api/immich", json={"pin": PIN, "festive": False}).json()
+    assert r["festive"] is False and r["festive_now"] is False and r["photo_count"] == 5
+    assert client.put("/api/immich", json={"pin": PIN, "festive": "yes"}).status_code == 400
+    # No festive albums at all: December is like any other month.
+    client.put("/api/immich", json={"pin": PIN, "festive": True, "mode": "all", "excluded_album_ids": [fake.private]})
+    assert {a["name"] for a in client.get("/api/screensaver/photos").json()["albums"]} == {"Snow day", "Holiday 2025"}
 
 
-def test_season_dates_can_run_over_new_year():
-    from datetime import date
-    s = {"album_id": uid(), "start": "12-20", "end": "01-05"}
-    assert immich.in_season(s, date(2026, 12, 20)) and immich.in_season(s, date(2027, 1, 5))
-    assert immich.in_season(s, date(2026, 12, 31)) and not immich.in_season(s, date(2027, 1, 6))
-    assert not immich.in_season({"album_id": "a", "start": "12-01", "end": "12-26"}, date(2026, 11, 30))
+def test_festive_and_winter_names():
+    for name in ("Christmas 2024", "XMAS", "Christmas2023", "Festive fun", "Yule log", "Advent calendar", "Santa visit",
+                 "Nativity play", "Carols by candlelight", "Boxing Day walk", "christmas"):
+        assert immich.is_festive(name), name
+    for name in ("Adventure park", "Caroline's birthday", "Holiday 2025", "Boxing class", "Santander trip"):
+        assert not immich.is_festive(name), name
+    for name in ("Winter 2025", "Snow day", "Skiing in Austria", "Frosty morning", "Ice skating"):
+        assert immich.is_winter(name), name
+    for name in ("Ice cream", "Skipton", "Snowdonia"):
+        assert not immich.is_winter(name), name

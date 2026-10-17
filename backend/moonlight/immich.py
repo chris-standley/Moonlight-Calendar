@@ -15,8 +15,8 @@ screens, so screens never see the key or talk to Immich. Written against the Imm
 - `GET  /api/assets/{id}/thumbnail?size=preview` -> JPEG/WebP, EXIF orientation already applied (asset.view)
 
 What is shown: the chosen albums (plus favourites and memories), or with mode "all" every album except the excluded
-ones. Seasonal albums (`seasons`, e.g. a Christmas album from 12-01 to 12-26) are hidden outside their dates and
-shown on their own within them. The list is grouped by album (oldest photo first) so the screens can play one album
+ones. With `festive` on, albums named for Christmas are hidden outside December, and in December only they and
+winter albums are shown. The list is grouped by album (oldest photo first) so the screens can play one album
 at a time; an album's photos are only fetched again when Immich says it changed. Only images are used (videos skipped). The asset list is cached and refreshed every few minutes; if Immich can't be
 reached the last good list is kept, and with none the screensaver falls back to its painted scenes.
 """
@@ -26,6 +26,7 @@ import asyncio
 import json
 import math
 import os
+import re
 import socket
 import ssl
 import time
@@ -42,6 +43,10 @@ TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 PAGE_SIZE = 1000
 MAX_ASSETS = 5000  # per refresh, across every source: plenty for a slideshow, bounded memory
 HIDE_LIMIT = 20000  # photos read from each excluded or out-of-season album
+# Album names (whole words, any case; digits may touch them, as in "Christmas2024").
+FESTIVE = re.compile(r"(?<![a-z])(christmas|xmas|x-mas|festive|yule|yuletide|advent|santa|nativity|carols?|boxing day)(?![a-z])", re.I)
+WINTER = re.compile(r"(?<![a-z])(winter|wintry|snow|snowy|snowman|snowmen|snowball|frost|frosty|blizzard|sledging|sledge|sled|"
+                    r"skiing|ski|ice skating|icicles?)(?![a-z])", re.I)
 MODES = ("albums", "all")
 REFRESH_SECONDS = float(os.environ.get("MOONLIGHT_IMMICH_REFRESH", "300"))
 RETRY_SECONDS = 60.0  # after a failed refresh, how soon to try again
@@ -74,7 +79,7 @@ def load_config(c) -> dict | None:
     r["album_ids"] = json.loads(r["album_ids"])
     r["mode"] = r.get("mode") if r.get("mode") in MODES else "albums"
     r["excluded_album_ids"] = json.loads(r.get("excluded_album_ids") or "[]")
-    r["seasons"] = json.loads(r.get("seasons") or "[]")
+    r["festive"] = bool(r.get("festive", 1))
     r["favorites"] = bool(r["favorites"])
     r["memories"] = bool(r["memories"])
     r["skip_cert_check"] = bool(r.get("skip_cert_check"))
@@ -84,14 +89,14 @@ def load_config(c) -> dict | None:
 def save_config(c, cfg: dict) -> None:
     c.execute(
         "INSERT INTO immich(id, server_url, api_key, album_ids, favorites, memories, skip_cert_check, mode, "
-        "excluded_album_ids, seasons, updated_at) VALUES(1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+        "excluded_album_ids, festive, updated_at) VALUES(1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
         "server_url=excluded.server_url, api_key=excluded.api_key, album_ids=excluded.album_ids, "
         "favorites=excluded.favorites, memories=excluded.memories, skip_cert_check=excluded.skip_cert_check, "
-        "mode=excluded.mode, excluded_album_ids=excluded.excluded_album_ids, seasons=excluded.seasons, "
+        "mode=excluded.mode, excluded_album_ids=excluded.excluded_album_ids, festive=excluded.festive, "
         "updated_at=excluded.updated_at",
         (cfg["server_url"], cfg["api_key"], json.dumps(cfg["album_ids"]), int(cfg["favorites"]),
          int(cfg["memories"]), int(cfg.get("skip_cert_check", False)), cfg.get("mode", "albums"),
-         json.dumps(cfg.get("excluded_album_ids", [])), json.dumps(cfg.get("seasons", [])), db.now_iso()))
+         json.dumps(cfg.get("excluded_album_ids", [])), int(cfg.get("festive", True)), db.now_iso()))
 
 
 def delete_config(c) -> None:
@@ -105,15 +110,17 @@ def household_today(tz: str) -> date:
         return date.today()
 
 
-def in_season(season: dict, day: date) -> bool:
-    """`start`..`end` as "MM-DD", both included; a range like 12-20..01-05 runs over New Year."""
-    md, start, end = day.strftime("%m-%d"), season["start"], season["end"]
-    return start <= md <= end if start <= end else (md >= start or md <= end)
+def is_festive(name: str) -> bool:
+    return bool(FESTIVE.search(name))
 
 
-def active_seasons(cfg: dict, day: date) -> list[str]:
-    """The seasonal albums whose dates include `day`: while there are any, only they are shown."""
-    return sorted({s["album_id"] for s in cfg.get("seasons", []) if in_season(s, day)})
+def is_winter(name: str) -> bool:
+    return bool(WINTER.search(name))
+
+
+def december(cfg: dict | None, day: date) -> bool:
+    """With the festive filter on, December shows only festive and winter albums (when there are any festive ones)."""
+    return bool(cfg and cfg.get("festive", True) and day.month == 12)
 
 
 # ---------------------------------------------------------------- client
@@ -336,7 +343,8 @@ class Cache:
         self._album_assets: dict[str, tuple[Any, list[dict]]] = {}  # album id -> (what Immich said of it, its assets)
         self.ids: set[str] = set()
         self.key: str | None = None  # which config the list belongs to
-        self.season: list[str] = []  # the seasonal albums in their dates when the list was made
+        self.december = False  # the festive filter's December rule applied when the list was made
+        self.festive_now = False  # the list is only festive and winter albums
         self.day: str | None = None  # with "on this day" memories, the day they are for
         self.fetched_at = 0.0
         self.tried_at = 0.0
@@ -362,14 +370,14 @@ class Cache:
             return None
         return json.dumps([cfg["server_url"], cfg["api_key"], sorted(cfg["album_ids"]), cfg["favorites"],
                            cfg["memories"], cfg.get("skip_cert_check", False), cfg.get("mode", "albums"),
-                           sorted(cfg.get("excluded_album_ids", [])), cfg.get("seasons", [])])
+                           sorted(cfg.get("excluded_album_ids", [])), cfg.get("festive", True)])
 
-    def _due(self, key: str | None, season: list[str] | None = None, day: str | None = None) -> bool:
+    def _due(self, key: str | None, season: bool = False, day: str | None = None) -> bool:
         now = time.monotonic()
         if key != self.key:
             return True
-        if key is not None and (season != self.season or day != self.day):
-            return True  # a season started or ended, or a new day's memories
+        if key is not None and (season != self.december or day != self.day):
+            return True  # December started or ended, or a new day's memories
         if self.status in ("ok",):
             return now - self.fetched_at >= REFRESH_SECONDS
         return now - self.tried_at >= RETRY_SECONDS
@@ -386,7 +394,7 @@ class Cache:
             tz = db.get_setting(c, "timezone", db.default_timezone())
         key = self.config_key(cfg)
         today = household_today(tz)
-        season = active_seasons(cfg, today) if cfg else []
+        season = december(cfg, today)
         day = today.isoformat() if cfg and cfg.get("memories") else None
         if not force and not self._due(key, season, day):
             return self
@@ -402,14 +410,14 @@ class Cache:
                 self.key = key
             self.tried_at = time.monotonic()
             try:
-                photos, albums, version = await self._fetch(cfg, today)
+                photos, albums, version, festive_now = await self._fetch(cfg, today)
             except ImmichError as e:
                 self.status = "auth_failed" if isinstance(e, AuthFailed) else "error"
                 self.error = str(e)
                 log.warning("Immich refresh failed: %s", e)
                 return self
             self.photos, self.albums, self.ids = photos, albums, {p["id"] for p in photos}
-            self.season, self.day = season, day
+            self.december, self.festive_now, self.day = season, festive_now, day
             self.version = version or self.version
             self.status, self.error = "ok", None
             self.fetched_at = time.monotonic()
@@ -426,7 +434,7 @@ class Cache:
         self._album_assets[album["id"]] = (stamp, assets)
         return assets
 
-    async def _fetch(self, cfg: dict, today: date) -> tuple[list[dict], list[dict], str | None]:
+    async def _fetch(self, cfg: dict, today: date) -> tuple[list[dict], list[dict], str | None, bool]:
         client = Client(cfg["server_url"], cfg["api_key"], cfg.get("skip_cert_check", False))
         found: dict[str, dict] = {}
         groups: list[dict] = []
@@ -448,16 +456,17 @@ class Cache:
         async with client.http() as http:
             version = await client.version(http)
             albums = {a["id"]: a for a in await client.albums(http)}
-            season = active_seasons(cfg, today)
-            if season:  # e.g. the Christmas albums in December, and nothing else
-                shown, hidden = [i for i in season if i in albums], []
+            excluded = set(cfg.get("excluded_album_ids", [])) if cfg.get("mode") == "all" else set()
+            festive = {i for i, a in albums.items() if is_festive(a["name"])} if cfg.get("festive", True) else set()
+            # December: the festive and winter albums and nothing else (unless there are no festive albums at all).
+            season = december(cfg, today) and bool(festive - excluded)
+            if season:
+                hidden = excluded
+                shown = [i for i, a in albums.items() if (i in festive or is_winter(a["name"])) and i not in excluded]
             else:
-                hidden = {s["album_id"] for s in cfg.get("seasons", [])}
-                if cfg.get("mode") == "all":
-                    hidden |= set(cfg.get("excluded_album_ids", []))
-                    shown = [i for i in albums if i not in hidden]
-                else:
-                    shown = [i for i in cfg["album_ids"] if i in albums and i not in hidden]
+                hidden = festive | excluded  # the rest of the year festive albums are hidden, even if chosen
+                pick = albums if cfg.get("mode") == "all" else cfg["album_ids"]
+                shown = [i for i in pick if i in albums and i not in hidden]
             # Most recently changed first, so if the cap is reached it's old albums that miss out.
             shown.sort(key=lambda i: albums[i]["updated_at"] or "", reverse=True)
             hide: set[str] = set()
@@ -472,7 +481,7 @@ class Cache:
             if not season and cfg["favorites"] and len(found) < MAX_ASSETS:
                 add({"id": "favorites", "name": "Favourites", "updated_at": None},
                     await client.favorite_assets(http, MAX_ASSETS - len(found)), hide)
-            if not season and cfg["memories"] and len(found) < MAX_ASSETS:
+            if cfg["memories"] and len(found) < MAX_ASSETS:  # December's "on this day" is from Christmases past
                 try:
                     add({"id": "on-this-day", "name": "On this day", "updated_at": today.isoformat()},
                         await client.memory_assets(http, today), hide)
@@ -481,7 +490,7 @@ class Cache:
                 except ImmichError as e:  # optional extra: an older server or a key without memory.read
                     log.info("Immich memories skipped: %s", e)
         self._album_assets = {k: v for k, v in self._album_assets.items() if k in albums}
-        return list(found.values()), groups, version
+        return list(found.values()), groups, version, season
 
 
 cache = Cache()

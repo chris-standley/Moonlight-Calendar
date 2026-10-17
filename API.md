@@ -388,15 +388,18 @@ and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already appl
 The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
 
 ImmichConfig = `{configured, server_url, key_set: bool, mode: "albums"|"all", album_ids: [id], excluded_album_ids: [id],
-seasons: [{album_id, start: "MM-DD", end: "MM-DD"}], season_now: [id], favorites: bool, memories: bool, skip_cert_check: bool,
+festive: bool, festive_now: bool, favorites: bool, memories: bool, skip_cert_check: bool,
 status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error", last_error|null, last_refresh|null, photo_count, version|null}`.
 `mode` `albums` (default) shows `album_ids`; `all` shows every album except `excluded_album_ids` (albums made later
-included). Favourites and memories are added in either mode. A season's album is hidden outside its dates (inclusive,
-household timezone; `12-20`..`01-05` runs over New Year), and its photos with it wherever else they appear; while any
-season is on, only those albums are shown (`season_now`). The API key is never returned.
+included). Favourites and memories are added in either mode. `festive` (default true): albums whose name has
+Christmas, Xmas, festive, Yule(tide), Advent, Santa, nativity, carol(s) or Boxing Day as a word (any case; digits may
+touch it, "Christmas2024") are hidden outside December, with their photos wherever else they appear. In December
+(household timezone) only those and winter albums (winter, snow, frost, blizzard, skiing, sledging, ice skating...) are
+shown, from the whole library and in either mode, minus `excluded_album_ids` in mode `all`, plus "on this day" if on
+but not favourites (`festive_now: true`); with no festive albums, December is like any other month. The API key is never returned.
 ImmichAlbum = `{id, name, asset_count, shared, updated_at|null}` (`updated_at` = Immich's last change to the album).
 - `GET /api/immich` -> ImmichConfig
-- `PUT /api/immich` `{pin, server_url, api_key, mode?, album_ids?, excluded_album_ids?, seasons?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out
+- `PUT /api/immich` `{pin, server_url, api_key, mode?, album_ids?, excluded_album_ids?, festive?, favorites?, memories?, skip_cert_check?}` -> ImmichConfig. `api_key` may be left out
   once one is saved. A new address or key is checked with Immich first: 400 key rejected, 502 unreachable, 403 wrong PIN.
   `server_url` is the Immich address (`http://192.168.1.10:2283`; a trailing `/api` is dropped). `skip_cert_check` (default
   false) uses HTTPS without checking the certificate, for a self-signed one or one made for a domain name. The 502 detail
