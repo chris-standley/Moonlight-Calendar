@@ -46,6 +46,7 @@ struct Page<Content: View, Tools: ToolbarContent>: View {
                 .background(Theme.bg.ignoresSafeArea())
                 .navigationTitle(title)
                 .toolbar(content: tools)
+                .moreTabBar()
         }
     }
 }
@@ -173,4 +174,74 @@ struct PinRequest: Identifiable {
 
 extension View {
     func pinPrompt(_ request: Binding<PinRequest?>) -> some View { modifier(PinPrompt(request: request)) }
+}
+
+/// A tab that doesn't fit in the iPhone tab bar opens under More, inside More's own navigation bar, so its screen's
+/// bar (title, buttons) would sit below a second bar holding only "‹ More". Put on the root of a tab's navigation
+/// stack: under More it hides More's bar and puts the back button in the screen's own bar instead.
+struct MoreTabBar: ViewModifier {
+    @State private var back: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .background(MoreProbe { back = $0 }.frame(width: 0, height: 0))
+            .toolbar {
+                if let back {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: back) { Image(systemName: "chevron.left").font(.headline) }
+                            .accessibilityLabel("More")
+                    }
+                }
+            }
+    }
+}
+
+extension View {
+    func moreTabBar() -> some View { modifier(MoreTabBar()) }
+}
+
+/// Finds whether its screen was pushed by the tab bar's More list, and if so hides that list's bar while the screen
+/// is showing. Hands back a way to return to the list (nil when not under More).
+private struct MoreProbe: UIViewControllerRepresentable {
+    let found: (( () -> Void)?) -> Void
+
+    func makeUIViewController(context: Context) -> Probe { Probe(found: found) }
+    func updateUIViewController(_ vc: Probe, context: Context) { vc.found = found }
+
+    final class Probe: UIViewController {
+        var found: (( () -> Void)?) -> Void
+
+        init(found: @escaping (( () -> Void)?) -> Void) {
+            self.found = found
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        /// More's navigation controller, and the screen it pushed that this probe sits in.
+        private var more: (nav: UINavigationController, screen: UIViewController)? {
+            guard let more = tabBarController?.moreNavigationController else { return nil }
+            var vc: UIViewController? = self
+            while let v = vc, let p = v.parent {
+                if p === more { return (more, v) }
+                vc = p
+            }
+            return nil
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            guard let nav = more?.nav else { found(nil); return }
+            nav.setNavigationBarHidden(true, animated: animated)
+            found { [weak nav] in _ = nav?.popToRootViewController(animated: true) }
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            // Back to the More list (not just deeper into this screen's own stack): give the list its bar back.
+            if let m = more, m.nav.topViewController !== m.screen {
+                m.nav.setNavigationBarHidden(false, animated: animated)
+            }
+        }
+    }
 }

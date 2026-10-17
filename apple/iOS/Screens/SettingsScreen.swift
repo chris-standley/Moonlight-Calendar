@@ -17,6 +17,13 @@ struct SettingsScreen: View {
                     LabeledContent("Live updates", value: model.connected ? "Connected" : "Reconnecting…")
                 }
                 ReminderSettings()
+                Section {
+                    NavigationLink("Arrange tabs") { TabOrderView() }
+                } header: {
+                    Text("Tab bar")
+                } footer: {
+                    Text("On iPhone the first four tabs are in the tab bar and the rest are under More.")
+                }
                 Section("Family") {
                     LabeledContent("Name", value: model.settings?.family_name ?? "—")
                     ForEach(model.people) { p in
@@ -30,6 +37,7 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle("Settings")
+            .moreTabBar()
             .task {
                 status = await model.call { try await $0.authStatus() }
                 version = await model.call { try await $0.health() }?.version
@@ -137,5 +145,32 @@ private struct PeoplePicker: View {
             }
         }
         .navigationTitle("Reminders for")
+    }
+}
+
+/// Settings › Tab bar › Arrange tabs: drag tabs into the order the tab bar uses.
+struct TabOrderView: View {
+    @AppStorage(AppTab.orderKey) private var order = ""
+
+    var body: some View {
+        let tabs = AppTab.ordered(order)
+        List {
+            ForEach(Array(tabs.enumerated()), id: \.element) { i, t in
+                Label(t.title, systemImage: t.symbol)
+                    .foregroundStyle(i < 4 ? Theme.text : Theme.muted)
+            }
+            .onMove { from, to in
+                var next = tabs
+                next.move(fromOffsets: from, toOffset: to)
+                order = next.map(\.rawValue).joined(separator: ",")
+            }
+        }
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("Arrange tabs")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Reset") { order = "" }.disabled(order.isEmpty)
+            }
+        }
     }
 }

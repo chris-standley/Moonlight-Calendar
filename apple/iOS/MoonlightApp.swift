@@ -56,17 +56,13 @@ struct RootView: View {
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @SceneStorage("tab") private var tab = "today"
+    @AppStorage(AppTab.orderKey) private var order = ""
 
     var body: some View {
         TabView(selection: $tab) {
-            Tab("Today", systemImage: "sun.horizon", value: "today") { TodayScreen() }
-            Tab("Calendar", systemImage: "calendar", value: "calendar") { CalendarScreen() }
-            Tab("Chores", systemImage: "checkmark.circle", value: "chores") { ChoresScreen() }
-            Tab("Rewards", systemImage: "star", value: "rewards") { RewardsScreen() }
-            Tab("Meals", systemImage: "fork.knife", value: "meals") { MealsScreen() }
-            Tab("Recipes", systemImage: "book.closed", value: "recipes") { RecipesScreen() }
-            Tab("Lists", systemImage: "list.bullet", value: "lists") { ListsScreen() }
-            Tab("Settings", systemImage: "gearshape", value: "settings") { SettingsScreen() }
+            ForEach(AppTab.ordered(order)) { t in
+                Tab(t.title, systemImage: t.symbol, value: t.rawValue) { t.screen }
+            }
         }
         .tabViewStyle(.sidebarAdaptable)
         .defaultAdaptableTabBarPlacement(.tabBar)
@@ -76,5 +72,52 @@ struct MainTabs: View {
             if let api = model.api { await Reminders.reschedule(api) }
         }
         .task(id: model.rev("people", "lists")) { MoonlightShortcuts.updateAppShortcutParameters() }
+    }
+}
+
+/// The app's tabs. On iPhone the first four fit in the tab bar and the rest go under More; the order is chosen in
+/// Settings › Tab bar and kept on this device.
+enum AppTab: String, CaseIterable, Identifiable {
+    case today, calendar, chores, rewards, meals, recipes, lists, settings
+
+    static let orderKey = "tabs.order"
+    var id: String { rawValue }
+
+    var title: String { rawValue == "today" ? "Today" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+
+    var symbol: String {
+        switch self {
+        case .today: "sun.horizon"
+        case .calendar: "calendar"
+        case .chores: "checkmark.circle"
+        case .rewards: "star"
+        case .meals: "fork.knife"
+        case .recipes: "book.closed"
+        case .lists: "list.bullet"
+        case .settings: "gearshape"
+        }
+    }
+
+    @MainActor @ViewBuilder
+    var screen: some View {
+        switch self {
+        case .today: TodayScreen()
+        case .calendar: CalendarScreen()
+        case .chores: ChoresScreen()
+        case .rewards: RewardsScreen()
+        case .meals: MealsScreen()
+        case .recipes: RecipesScreen()
+        case .lists: ListsScreen()
+        case .settings: SettingsScreen()
+        }
+    }
+
+    /// The saved order ("meals,today,…"), with any tab it doesn't name added at the end in the usual order.
+    static func ordered(_ saved: String) -> [AppTab] {
+        var out: [AppTab] = []
+        for id in saved.split(separator: ",") {
+            if let t = AppTab(rawValue: String(id)), !out.contains(t) { out.append(t) }
+        }
+        return out + allCases.filter { !out.contains($0) }
     }
 }
