@@ -8,6 +8,8 @@ struct RecipeEditor: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     var recipe: Recipe? = nil
+    /// Set when checking a recipe found in a cookbook scan: saving keeps it and takes it off the list to check.
+    var draftId: String? = nil
     var onSaved: ((Recipe) -> Void)? = nil
 
     private struct StepDraft: Identifiable {
@@ -308,7 +310,12 @@ struct RecipeEditor: View {
         defer { busy = false }
         do {
             guard let api = model.api else { return }
-            let r = try await api.saveRecipe(id: recipe?.id, payload())
+            let r: Recipe
+            if let draftId {
+                r = try await api.saveDraft(draftId, payload())
+            } else {
+                r = try await api.saveRecipe(id: recipe?.id, payload())
+            }
             model.bump("recipes")
             onSaved?(r)
             dismiss()

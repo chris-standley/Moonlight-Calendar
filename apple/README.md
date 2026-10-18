@@ -38,6 +38,9 @@ for the shopping list, with everyday staples and things already on the list left
   pages are read a column at a time) and sorted into a recipe by the add-on; with an Anthropic key set in the add-on
   (Settings › Recipes on a wall screen), "Read with Claude" sends the photos to Claude instead. Either way the recipe
   opens in the editor to check before it's saved.
+- **Scanning a whole cookbook** (+ › Scan a whole cookbook, needs the Anthropic key): scan or choose up to 200 pages;
+  they're sent to the add-on, where Claude reads them in the background. A Cookbook scan card at the top of Recipes
+  shows progress and the recipes found: tap one to check it in the editor, tick to save it as read, or Save all.
 - **Cook mode** shows one step at a time, large, with the amounts of the ingredients it mentions and its timer
   buttons; swipe or tap Next. The screen stays on. **Hands-free** (the microphone button) listens for "next",
   "back", "repeat", "start the timer", "stop" and "ingredients", recognised on the phone, and reads each step aloud.

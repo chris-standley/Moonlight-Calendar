@@ -249,23 +249,74 @@ If several pages are given they are one recipe, in order. If there is no recipe,
 async def read_with_claude(api_key: str, model: str, *, images: list[tuple[str, bytes]] | None = None,
                            text: str | None = None) -> dict:
     """Ask Claude to read a recipe from photos (mime, bytes) or a page's text. Returns draft fields."""
-    import anthropic
-
-    content: list[dict] = []
-    for mime, data in images or []:
-        content.append({"type": "image", "source": {"type": "base64", "media_type": mime,
-                                                     "data": base64.standard_b64encode(data).decode()}})
+    content = _images(images)
     what = "photo" if images and len(images) == 1 else "photos" if images else "web page text"
     if text:
         content.append({"type": "text", "text": f"<page>\n{text}\n</page>"})
     content.append({"type": "text", "text": READER_PROMPT.format(what=what)})
+    data = await _ask(api_key, model, content, READER_SCHEMA)
+    if not data.get("found") or not (data.get("ingredients") or data.get("steps")):
+        raise ImportError_("No recipe found there. Try a clearer photo with the ingredients and method in view.")
+    return _draft(data)
+
+
+# One page of a cookbook read on its own, for scanning a whole book (recipe_batch.py). A page can hold several
+# recipes, or carry on a recipe from the page before.
+PAGE_SCHEMA = {
+    "type": "object",
+    "properties": {"recipes": {"type": "array", "items": {
+        "type": "object",
+        "properties": {
+            "continues_previous_page": {"type": "boolean", "description":
+                                        "True when this is the rest of a recipe that started on the page before."},
+            **{k: v for k, v in READER_SCHEMA["properties"].items() if k != "found"},
+        },
+        "required": ["continues_previous_page"] + [k for k in READER_SCHEMA["required"] if k != "found"],
+        "additionalProperties": False,
+    }}},
+    "required": ["recipes"],
+    "additionalProperties": False,
+}
+
+PAGE_PROMPT = READER_PROMPT.split("If several pages")[0].replace(
+    "Read the recipe in this {what} and return it as JSON",
+    "This photo is one page of a cookbook. Read every recipe on it and return them as JSON") + """\
+- continues_previous_page: true only for a recipe at the top of the page that has no title of its own because it \
+carries on from the page before (its title, and the fields you can't see, stay empty).
+Pages with no recipe (a contents page, an introduction, a full-page photo) give an empty list."""
+
+
+async def read_cookbook_page(api_key: str, model: str, image: tuple[str, bytes]) -> list[dict]:
+    """The recipes, or parts of recipes, on one cookbook page, in order. Each is draft fields plus `continues`."""
+    content = _images([image]) + [{"type": "text", "text": PAGE_PROMPT}]
+    data = await _ask(api_key, model, content, PAGE_SCHEMA)
+    out = []
+    for r in data.get("recipes") or []:
+        if isinstance(r, dict) and (r.get("ingredients") or r.get("steps")):
+            out.append({**_draft(r), "continues": bool(r.get("continues_previous_page"))})
+    return out
+
+
+def _images(images: list[tuple[str, bytes]] | None) -> list[dict]:
+    return [{"type": "image", "source": {"type": "base64", "media_type": mime,
+                                         "data": base64.standard_b64encode(data).decode()}}
+            for mime, data in images or []]
+
+
+class Busy(ImportError_):
+    """Anthropic was busy or out of reach: worth trying again in a while."""
+
+
+async def _ask(api_key: str, model: str, content: list[dict], schema: dict) -> dict:
+    import anthropic
+
     client = anthropic.AsyncAnthropic(api_key=api_key, timeout=120, max_retries=1)
     try:
         resp = await client.beta.messages.create(
             model=model or READER_MODEL,
             max_tokens=16000,
             betas=["server-side-fallback-2026-07-01"],
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": READER_SCHEMA}},
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
             messages=[{"role": "user", "content": content}],
             extra_body={"fallbacks": "default"},
         )
@@ -274,25 +325,26 @@ async def read_with_claude(api_key: str, model: str, *, images: list[tuple[str, 
     except anthropic.PermissionDeniedError as e:
         raise ImportError_(f"Anthropic refused the request: {_api_message(e)}")
     except anthropic.RateLimitError:
-        raise ImportError_("Anthropic is busy or the account's limit was reached. Try again in a minute.")
+        raise Busy("Anthropic is busy or the account's limit was reached. Try again in a minute.")
     except anthropic.BadRequestError as e:
         raise ImportError_(f"Anthropic couldn't read that: {_api_message(e)}")
     except anthropic.APIStatusError as e:
-        raise ImportError_(f"Anthropic answered with error {e.status_code}. Try again in a minute.")
+        raise Busy(f"Anthropic answered with error {e.status_code}. Try again in a minute.")
     except anthropic.APIConnectionError:
-        raise ImportError_("Couldn't reach Anthropic from Home Assistant. Check the internet connection.")
+        raise Busy("Couldn't reach Anthropic from Home Assistant. Check the internet connection.")
     if resp.stop_reason == "refusal":
         raise ImportError_("Claude declined to read that. Try another photo, or type the recipe in.")
     if resp.stop_reason == "max_tokens":
         raise ImportError_("That recipe was too long to read in one go. Try fewer pages at a time.")
     raw = next((b.text for b in resp.content if getattr(b, "type", "") == "text"), "")
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except ValueError:
         log.warning("Recipe reader returned unreadable JSON")
         raise ImportError_("Claude's answer couldn't be read. Try again.")
-    if not data.get("found") or not (data.get("ingredients") or data.get("steps")):
-        raise ImportError_("No recipe found there. Try a clearer photo with the ingredients and method in view.")
+
+
+def _draft(data: dict) -> dict:
     return {
         "title": str(data.get("title") or "")[:120], "description": str(data.get("description") or "")[:1000],
         "servings": _servings(data.get("servings")),

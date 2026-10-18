@@ -79,6 +79,27 @@ struct UploadedImage: Codable {
 
 struct AddedResponse: Codable { let added: Int }
 
+/// A whole cookbook being read by Claude on the server, page by page, with the recipes found so far to check.
+struct RecipeBatch: Codable, Identifiable {
+    struct Failure: Codable, Hashable { let page: Int; let error: String }
+    let id: String
+    let pages: Int
+    let read: Int
+    let reading: Bool
+    let failed: [Failure]
+    let saved: Int
+    let drafts: [RecipeDraft]
+}
+
+struct RecipeDraft: Codable, Identifiable {
+    let id: String
+    /// Page numbers in the scan, from 1.
+    let pages: [Int]
+    let recipe: Recipe
+}
+
+struct SavedCount: Codable { let saved: Int }
+
 extension APIClient {
     func recipes() async throws -> [Recipe] { try await get("/api/recipes") }
     func recipe(_ id: String) async throws -> Recipe { try await get("/api/recipes/\(id)") }
@@ -99,6 +120,25 @@ extension APIClient {
     func importRecipe(_ body: [String: Any]) async throws -> Recipe { try await send("POST", "/api/recipes/import", body) }
     func previewRecipe(_ body: [String: Any]) async throws -> Recipe { try await send("POST", "/api/recipes/preview", body) }
     func recipeReader() async throws -> RecipeReader { try await get("/api/recipes-reader") }
+
+    func recipeBatches() async throws -> [RecipeBatch] { try await get("/api/recipes-batches") }
+    func scanCookbook(images: [String]) async throws -> RecipeBatch { try await send("POST", "/api/recipes-batches", ["images": images]) }
+    func retryBatch(_ id: String) async throws -> RecipeBatch { try await send("POST", "/api/recipes-batches/\(id)/retry", [:]) }
+    func deleteBatch(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/recipes-batches/\(id)")
+    }
+    func saveAllDrafts(_ batchId: String) async throws -> Int {
+        let r: SavedCount = try await send("POST", "/api/recipes-batches/\(batchId)/save-all", [:])
+        return r.saved
+    }
+    /// Save a recipe found in a scan: as read (empty body) or as changed in the editor.
+    @discardableResult
+    func saveDraft(_ id: String, _ body: [String: Any] = [:]) async throws -> Recipe {
+        try await send("POST", "/api/recipe-drafts/\(id)/save", body)
+    }
+    func dismissDraft(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/recipe-drafts/\(id)")
+    }
 
     /// A picture as the raw request body (`POST /api/images`).
     func uploadImage(_ jpeg: Data) async throws -> UploadedImage {

@@ -136,6 +136,11 @@ or photos. The iPhone app reads photos on the phone. To read photos on the wall 
 let Claude read handwriting and pages without a recipe layout, add an Anthropic API key in Settings > Recipes (from
 console.anthropic.com; the photos and text are then sent to Anthropic). Pictures are kept in Moonlight's database.
 
+To bring in a whole cookbook, choose Add > A whole cookbook (or Scan a whole cookbook on the iPhone) and scan or
+choose every page, in order, up to 200 at a time. Claude reads them a few at a time while you carry on, joining
+recipes that run over two pages, and the recipes found wait at the top of Recipes: check each one in the editor, or
+Save all. Pages that couldn't be read can be tried again. Each page is one request to Anthropic.
+
 ## Photo screensaver
 
 The screensaver shows photos from Immich. In Moonlight go to Settings > Photo screensaver > Connect Immich, enter

@@ -134,6 +134,33 @@ RECIPE_EXTRA_COLUMNS = {
     "created_at": "TEXT",
     "updated_at": "TEXT",
 }
+# Scanning a whole cookbook (recipe_batch.py): the pages of a scan, each read by Claude on its own, and the recipes
+# found in them waiting for the family to check and save. Rows go once a scan has been read and gone through.
+BATCH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS recipe_batches (
+    id         TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recipe_batch_pages (
+    batch_id TEXT NOT NULL,
+    page     INTEGER NOT NULL,
+    image    TEXT NOT NULL,
+    status   TEXT NOT NULL DEFAULT 'waiting',
+    result   TEXT,
+    error    TEXT,
+    PRIMARY KEY (batch_id, page)
+);
+CREATE TABLE IF NOT EXISTS recipe_drafts (
+    id       TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    piece    TEXT NOT NULL,
+    pages    TEXT NOT NULL,
+    draft    TEXT NOT NULL,
+    status   TEXT NOT NULL DEFAULT 'ready',
+    UNIQUE (batch_id, piece)
+);
+"""
+
 # Pictures uploaded from the screens and apps (recipe and step photos). Kept in the database so a backup has them.
 IMAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS images (
@@ -283,6 +310,7 @@ def init_db() -> None:
         c.executescript(SYNC_SCHEMA)
         c.executescript(IMMICH_SCHEMA)
         c.executescript(IMAGES_SCHEMA)
+        c.executescript(BATCH_SCHEMA)
         have = {r[1] for r in c.execute("PRAGMA table_info(recipes)")}
         for col, decl in RECIPE_EXTRA_COLUMNS.items():
             if col not in have:
