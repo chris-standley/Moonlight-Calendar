@@ -126,6 +126,8 @@ export interface RecipeDraft { id: string; pages: number[]; recipe: Recipe }
 /** A whole cookbook being read by Claude, page by page (see API.md "Scanning a cookbook"). */
 export interface RecipeBatch {
   id: string; pages: number; read: number; reading: boolean; saved: number;
+  /** Sent as an Anthropic Message Batch: half price, usually read within the hour, at most a day. */
+  cheaper: boolean;
   failed: { page: number; error: string }[]; drafts: RecipeDraft[];
 }
 
@@ -313,7 +315,7 @@ export interface Api {
   /** Cookbook scans still being read or with recipes to check. */
   recipeBatches(): Promise<RecipeBatch[]>;
   /** Start reading a cookbook: page pictures in order (uploaded first). 409 when there's no Claude key. */
-  scanCookbook(images: string[]): Promise<RecipeBatch>;
+  scanCookbook(images: string[], cheaper?: boolean): Promise<RecipeBatch>;
   retryBatch(id: string): Promise<RecipeBatch>;
   /** Stop reading and drop the recipes not checked yet. */
   deleteBatch(id: string): Promise<void>;

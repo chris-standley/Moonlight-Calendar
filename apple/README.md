@@ -41,6 +41,7 @@ for the shopping list, with everyday staples and things already on the list left
 - **Scanning a whole cookbook** (+ › Scan a whole cookbook, needs the Anthropic key): scan or choose up to 200 pages;
   they're sent to the add-on, where Claude reads them in the background. A Cookbook scan card at the top of Recipes
   shows progress and the recipes found: tap one to check it in the editor, tick to save it as read, or Save all.
+  **Cheaper, slower** sends them as an Anthropic batch at half the price, back within a day (usually the hour).
 - **Cook mode** shows one step at a time, large, with the amounts of the ingredients it mentions and its timer
   buttons; swipe or tap Next. The screen stays on. **Hands-free** (the microphone button) listens for "next",
   "back", "repeat", "start the timer", "stop" and "ingredients", recognised on the phone, and reads each step aloud.

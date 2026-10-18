@@ -20,6 +20,7 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
   const [useReader, setUseReader] = useState(true);
+  const [cheaper, setCheaper] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
           setBusy(`Sending page ${i + 1} of ${files.length}…`);
           ids.push((await api.uploadImage(await shrinkImage(f, 2000, 0.85))).id);
         }
-        await api.scanCookbook(ids);
+        await api.scanCookbook(ids, cheaper);
         onScanning?.();
         return;
       } else {
@@ -93,6 +94,11 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
               .sort((a, b) => (mode === "book" ? a.name.localeCompare(b.name, undefined, { numeric: true }) : 0))
               .slice(0, mode === "book" ? MAX_BOOK_PAGES : 6))} />
           </label>
+          {mode === "book" && (
+            <div className="set-row"><span>Cheaper, slower<br /><small className="muted" style={{ fontWeight: 400 }}>Half the price. Anthropic reads the pages when it has room: usually within the hour, at most a day.</small></span>
+              <button type="button" className={"toggle" + (cheaper ? " on" : "")} onClick={() => setCheaper(!cheaper)} aria-pressed={cheaper} aria-label="Cheaper, slower"><span /></button>
+            </div>
+          )}
           {files.length > 0 && <div className="import-thumbs">{files.slice(0, 24).map((f, i) => <img key={i} src={URL.createObjectURL(f)} alt={`Page ${i + 1}`} />)}
             {files.length > 24 && <span className="muted">+{files.length - 24} more</span>}</div>}
         </> : (

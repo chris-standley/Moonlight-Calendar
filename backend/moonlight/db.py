@@ -138,8 +138,10 @@ RECIPE_EXTRA_COLUMNS = {
 # found in them waiting for the family to check and save. Rows go once a scan has been read and gone through.
 BATCH_SCHEMA = """
 CREATE TABLE IF NOT EXISTS recipe_batches (
-    id         TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL
+    id           TEXT PRIMARY KEY,
+    created_at   TEXT NOT NULL,
+    cheaper      INTEGER NOT NULL DEFAULT 0,  -- sent as an Anthropic Message Batch: half price, within a day
+    anthropic_id TEXT                         -- that batch, while Anthropic is reading it
 );
 CREATE TABLE IF NOT EXISTS recipe_batch_pages (
     batch_id TEXT NOT NULL,
@@ -311,6 +313,10 @@ def init_db() -> None:
         c.executescript(IMMICH_SCHEMA)
         c.executescript(IMAGES_SCHEMA)
         c.executescript(BATCH_SCHEMA)
+        have = {r[1] for r in c.execute("PRAGMA table_info(recipe_batches)")}
+        for col, decl in (("cheaper", "INTEGER NOT NULL DEFAULT 0"), ("anthropic_id", "TEXT")):
+            if col not in have:
+                c.execute(f"ALTER TABLE recipe_batches ADD COLUMN {col} {decl}")
         have = {r[1] for r in c.execute("PRAGMA table_info(recipes)")}
         for col, decl in RECIPE_EXTRA_COLUMNS.items():
             if col not in have:

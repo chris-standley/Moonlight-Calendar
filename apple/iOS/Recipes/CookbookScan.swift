@@ -15,6 +15,7 @@ struct CookbookScanView: View {
     @State private var uploaded = 0
     @State private var sending = false
     @State private var error: String?
+    @State private var cheaper = false
 
     static let maxPages = 200
 
@@ -55,6 +56,12 @@ struct CookbookScanView: View {
                 } footer: {
                     Text("Scan every page you want, in order: the scanner keeps going until you tap Save. Recipes that "
                          + "run over two pages are joined up. Up to \(Self.maxPages) pages at a time.")
+                }
+                Section {
+                    Toggle("Cheaper, slower", isOn: $cheaper).disabled(sending)
+                } footer: {
+                    Text("Half the price. Anthropic reads the pages when it has room: usually within the hour, at most a day. "
+                         + "The recipes all turn up together when it's done.")
                 }
                 if reader?.configured == false {
                     Section {
@@ -128,7 +135,7 @@ struct CookbookScanView: View {
                 ids.append(try await api.uploadImage(jpeg).id)
                 uploaded += 1
             }
-            _ = try await api.scanCookbook(images: ids)
+            _ = try await api.scanCookbook(images: ids, cheaper: cheaper)
             model.bump("recipes")
             dismiss()
         } catch {
@@ -171,7 +178,7 @@ struct CookbookBatchCard: View {
             }
             if batch.reading {
                 ProgressView(value: Double(batch.read), total: Double(max(batch.pages, 1))) {
-                    Text("Claude has read \(batch.read) of \(batch.pages) pages").font(Theme.text(.subheadline, .semibold))
+                    Text(progressLine).font(Theme.text(.subheadline, .semibold))
                 }
                 .tint(Theme.accent)
             }
@@ -179,7 +186,9 @@ struct CookbookBatchCard: View {
                 Text(failedLine).font(Theme.text(.footnote, .semibold)).foregroundStyle(Theme.danger)
             }
             if batch.drafts.isEmpty {
-                Text(batch.reading ? "Recipes will appear here as they're read." : "Nothing left to check.")
+                Text(!batch.reading ? "Nothing left to check."
+                     : batch.cheaper == true ? "The recipes will appear here when Anthropic sends them back."
+                     : "Recipes will appear here as they're read.")
                     .font(Theme.text(.subheadline)).foregroundStyle(Theme.muted)
             } else {
                 Text("\(batch.drafts.count) to check" + (batch.saved > 0 ? " · \(batch.saved) saved" : ""))
@@ -217,6 +226,14 @@ struct CookbookBatchCard: View {
         } message: {
             Text("Recipes already saved stay in the recipe box. The \(batch.drafts.count) not checked yet are dropped.")
         }
+    }
+
+    private var progressLine: String {
+        if batch.cheaper == true && batch.read < batch.pages {
+            return "Cheaper scan: with Anthropic, usually back within the hour (at most a day). "
+                + "\(batch.read) of \(batch.pages) pages read."
+        }
+        return "Claude has read \(batch.read) of \(batch.pages) pages"
     }
 
     private var failedLine: String {

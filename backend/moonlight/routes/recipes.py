@@ -423,8 +423,9 @@ def batch_out(c, bid: str) -> dict:
         drafts.append({"id": d["id"], "pages": [p + 1 for p in json.loads(d["pages"])],
                        "recipe": recipe_out({"id": None, **fields})})
     drafts.sort(key=lambda d: d["pages"][0])
+    b = db.row(c, "SELECT cheaper FROM recipe_batches WHERE id = ?", (bid,))
     return {
-        "id": bid, "pages": len(pages),
+        "id": bid, "pages": len(pages), "cheaper": bool(b and b["cheaper"]),
         "read": sum(p["status"] in ("read", "failed") for p in pages),
         "reading": any(p["status"] in ("waiting", "reading") for p in pages),
         "failed": [{"page": p["page"] + 1, "error": p["error"] or ""} for p in pages if p["status"] == "failed"],
@@ -446,8 +447,9 @@ def list_batches():
 
 @router.post("/recipes-batches")
 async def create_batch(body: dict = Body(...)):
-    """{images: [ids]}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads them in the
-    background; the recipes found turn up in GET /api/recipes-batches to check and save."""
+    """{images: [ids], cheaper?: bool}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads
+    them in the background; the recipes found turn up in GET /api/recipes-batches to check and save. `cheaper` sends
+    them as an Anthropic Message Batch: half the price, usually done within the hour, at most a day."""
     body = body_dict(body)
     ids = body.get("images")
     if not isinstance(ids, list) or not ids:
@@ -461,7 +463,7 @@ async def create_batch(body: dict = Body(...)):
         for iid in ids:
             if not isinstance(iid, str) or not c.execute("SELECT 1 FROM images WHERE id = ?", (iid,)).fetchone():
                 raise bad("images must be uploaded pictures (POST /api/images)")
-    bid = recipe_batch.create(ids)
+    bid = recipe_batch.create(ids, cheaper=body.get("cheaper") is True)
     with db.connect() as c:
         out = batch_out(c, bid)
     await hub.broadcast("recipes")

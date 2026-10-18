@@ -303,3 +303,124 @@ def test_scanning_a_cookbook(client, monkeypatch):
     assert client.post(f"/api/recipes-batches/{b['id']}/save-all").json() == {"saved": 2}
     assert client.get("/api/recipes-batches").json() == []
     assert sorted(r["title"] for r in client.get("/api/recipes").json()) == ["Cake", "Onion soup", "Pancakes"]
+
+
+def test_scanning_a_cookbook_cheaper(client, monkeypatch):
+    """Sent as one Anthropic Message Batch: checked on until it ends, failed pages sent again as a new batch."""
+    import asyncio
+    import time
+
+    from moonlight import recipe_batch
+
+    def piece(title):
+        return {"title": title, "description": "", "servings": None, "prep_minutes": None, "cook_minutes": None,
+                "minutes": None, "ingredients": ["1 egg"], "steps": [{"text": "Cook.", "minutes": None}], "tags": [],
+                "notes": "", "continues": False}
+
+    sent, checks, cancelled = [], [], []
+
+    async def submit(key, model, pages):
+        sent.append([p for p, _ in pages])
+        return f"msgbatch_{len(sent)}"
+
+    async def results(key, aid):
+        checks.append(aid)
+        if len(checks) == 1 or aid == "msgbatch_3":
+            return None  # still reading
+        if aid == "msgbatch_1":
+            return {0: ([piece("Omelette")], None), 1: (None, "Anthropic couldn't read this page. Try again.")}
+        return {1: ([piece("Frittata")], None)}
+
+    async def cancel(key, aid):
+        cancelled.append(aid)
+
+    async def no_wait(_):
+        await asyncio.sleep(0.005)
+
+    monkeypatch.setattr(recipe_import, "submit_pages", submit)
+    monkeypatch.setattr(recipe_import, "batch_results", results)
+    monkeypatch.setattr(recipe_import, "cancel_batch", cancel)
+    monkeypatch.setattr(recipe_batch, "_wait", no_wait)
+    client.put("/api/recipes-reader", json={"pin": PIN, "api_key": "sk-ant-test-abcd"})
+    imgs = [client.post("/api/images", content=PNG + bytes([48 + i])).json()["id"] for i in range(2)]
+
+    def settled():
+        for _ in range(100):
+            [b] = client.get("/api/recipes-batches").json()
+            if not b["reading"]:
+                return b
+            time.sleep(0.02)
+        raise AssertionError("still reading")
+
+    b = client.post("/api/recipes-batches", json={"images": imgs, "cheaper": True}).json()
+    assert b["cheaper"] is True
+    b = settled()
+    assert sent == [[0, 1]] and checks[:2] == ["msgbatch_1", "msgbatch_1"]
+    assert b["failed"] == [{"page": 2, "error": "Anthropic couldn't read this page. Try again."}]
+    assert [d["recipe"]["title"] for d in b["drafts"]] == ["Omelette"]
+
+    client.post(f"/api/recipes-batches/{b['id']}/retry")
+    b = settled()
+    assert sent[1] == [1] and b["failed"] == [] and [d["recipe"]["title"] for d in b["drafts"]] == ["Omelette", "Frittata"]
+
+    # Clearing a scan while Anthropic still has it cancels the Anthropic batch.
+    b = client.post("/api/recipes-batches", json={"images": imgs[:1], "cheaper": True}).json()
+    for _ in range(100):
+        if "msgbatch_3" in checks:
+            break
+        time.sleep(0.02)
+    client.delete(f"/api/recipes-batches/{b['id']}")
+    for _ in range(100):
+        if cancelled:
+            break
+        time.sleep(0.02)
+    assert cancelled == ["msgbatch_3"]
+
+
+def test_reading_anthropic_batch_results(monkeypatch):
+    """batch_results against the SDK's shapes: pages matched by custom_id, each kind of result explained."""
+    import asyncio
+    from types import SimpleNamespace as NS
+
+    import anthropic
+
+    page = json.dumps({"recipes": [{"continues_previous_page": False, "title": "Scones", "description": "",
+                                     "servings": 8, "prep_minutes": None, "cook_minutes": 12,
+                                     "ingredients": ["225g flour"], "steps": [{"text": "Bake.", "minutes": 12}],
+                                     "tags": [], "notes": ""}]})
+    lines = [
+        NS(custom_id="page-3", result=NS(type="succeeded", message=NS(stop_reason="end_turn",
+                                                                      content=[NS(type="text", text=page)]))),
+        NS(custom_id="page-4", result=NS(type="succeeded", message=NS(stop_reason="refusal", content=[]))),
+        NS(custom_id="page-5", result=NS(type="errored", error=NS(type="error"))),
+        NS(custom_id="page-6", result=NS(type="expired")),
+    ]
+
+    class Results:
+        def __aiter__(self):
+            async def gen():
+                for line in lines:
+                    yield line
+            return gen()
+
+    status = {"now": "in_progress"}
+
+    class Batches:
+        async def retrieve(self, aid):
+            return NS(processing_status=status["now"])
+
+        async def results(self, aid):
+            return Results()
+
+    class Client:
+        def __init__(self, **_):
+            self.messages = NS(batches=Batches())
+
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", Client)
+    assert asyncio.run(recipe_import.batch_results("k", "b")) is None
+    status["now"] = "ended"
+    out = asyncio.run(recipe_import.batch_results("k", "b"))
+    assert out[3][0][0]["title"] == "Scones" and out[3][0][0]["continues"] is False
+    assert out[4][0] is None and "declined" in out[4][1]
+    assert out[5] == (None, "Anthropic couldn't read this page. Try again.")
+    assert "within a day" in out[6][1]

@@ -72,13 +72,15 @@ function BatchPanel({ batch, onCheck }: { batch: RecipeBatch; onCheck: (d: Recip
       </div>
       {batch.reading && <div className="batch-progress">
         <div className="batch-bar"><span style={{ width: `${(100 * batch.read) / Math.max(1, batch.pages)}%` }} /></div>
-        <span className="muted">Claude has read {batch.read} of {batch.pages} pages</span>
+        <span className="muted">{batch.cheaper && batch.read < batch.pages
+          ? `Cheaper scan: with Anthropic, usually back within the hour (at most a day). ${batch.read} of ${batch.pages} pages read.`
+          : `Claude has read ${batch.read} of ${batch.pages} pages`}</span>
       </div>}
       {batch.failed.length > 0 && <p className="connect-error">
         Couldn't read page{batch.failed.length === 1 ? "" : "s"} {batch.failed.map((f) => f.page).join(", ")}. {batch.failed[0].error}
       </p>}
       {batch.drafts.length === 0
-        ? <p className="muted">{batch.reading ? "Recipes will appear here as they're read." : "Nothing left to check."}</p>
+        ? <p className="muted">{batch.reading ? (batch.cheaper ? "The recipes will appear here when Anthropic sends them back." : "Recipes will appear here as they're read.") : "Nothing left to check."}</p>
         : <>
           <p className="muted">{batch.drafts.length} to check{batch.saved ? ` · ${batch.saved} saved` : ""}</p>
           <ul className="batch-drafts">
