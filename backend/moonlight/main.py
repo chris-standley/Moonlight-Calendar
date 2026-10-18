@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, ha_discovery, media, security
+from . import __version__, auth, caldav_sync, db, ha_discovery, media, recipe_batch, security
 from . import immich as immich_source
 from .common import hub, log
 from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals, recipes
@@ -125,6 +125,13 @@ def create_app(
 
     app.router.on_startup.append(start_discovery)
     app.router.on_shutdown.append(stop_discovery)
+
+    # Cookbook scans left part-read by a restart carry on.
+    async def start_batches():
+        recipe_batch.resume_all()
+
+    app.router.on_startup.append(start_batches)
+    app.router.on_shutdown.append(recipe_batch.stop_all)
 
     if sync:
         async def start_sync():

@@ -1,4 +1,4 @@
-import { Api, ApiError, Display, NowPlaying, Recipe, ScreensaverPhotos, Topic, UploadedImage } from "./types";
+import { Api, ApiError, Display, NowPlaying, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -32,6 +32,7 @@ export function httpApi(base = ""): Api {
   const pic = (u: string | null) => (u ? base + u : null);
   const rec = (r: Recipe): Recipe => ({ ...r, photo_url: pic(r.photo_url), steps: r.steps.map((s) => ({ ...s, photo_url: pic(s.photo_url) })) });
   const recipe = async (p: Promise<Recipe>) => rec(await p);
+  const batch = (b: RecipeBatch): RecipeBatch => ({ ...b, drafts: b.drafts.map((d) => ({ ...d, recipe: rec(d.recipe) })) });
   const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;
@@ -114,6 +115,13 @@ export function httpApi(base = ""): Api {
     importRecipe: (from) => recipe(req("POST", "/api/recipes/import", from)),
     async uploadImage(data) { const r = await req<UploadedImage>("POST", "/api/images", data); return { ...r, url: base + r.url }; },
     recipeReader: () => get("/api/recipes-reader"),
+    recipeBatches: async () => (await get<RecipeBatch[]>("/api/recipes-batches")).map(batch),
+    scanCookbook: async (images) => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images })),
+    retryBatch: async (id) => batch(await req<RecipeBatch>("POST", `/api/recipes-batches/${id}/retry`, {})),
+    deleteBatch: async (id) => { await req("DELETE", `/api/recipes-batches/${id}`); },
+    saveAllDrafts: async (id) => (await req<{ saved: number }>("POST", `/api/recipes-batches/${id}/save-all`, {})).saved,
+    saveDraft: (id, r) => recipe(req("POST", `/api/recipe-drafts/${id}/save`, r ?? {})),
+    dismissDraft: async (id) => { await req("DELETE", `/api/recipe-drafts/${id}`); },
     saveRecipeReader: (r) => req("PUT", "/api/recipes-reader", r),
     removeRecipeReader: (pin) => req("DELETE", "/api/recipes-reader", { pin }),
     sampleData: () => get("/api/sample-data"),

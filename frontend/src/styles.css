@@ -1013,6 +1013,20 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .import-pick { align-self: flex-start; cursor: pointer; }
 .import-thumbs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .import-thumbs img { width: 5.5rem; height: 7rem; object-fit: cover; border-radius: 0.6rem; box-shadow: var(--shadow); }
+.import-thumbs > span { align-self: center; }
+/* A cookbook being read (Recipes): progress, then the recipes found to check. */
+.batch-panel { margin: 0 1.6rem 1rem; flex-shrink: 0; max-height: 45%; overflow-y: auto; }
+.batch-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.batch-head .panel-title { margin: 0; }
+.batch-progress { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.6rem; }
+.batch-bar { height: 0.55rem; border-radius: 1rem; background: var(--surface-2); overflow: hidden; }
+.batch-bar span { display: block; height: 100%; background: var(--accent); border-radius: 1rem; transition: width 0.4s; }
+.batch-drafts { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.batch-drafts li { display: flex; align-items: center; gap: 0.5rem; }
+.batch-draft { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; text-align: left;
+  padding: 0.55rem 0.8rem; border-radius: 0.8rem; background: var(--surface-2); color: var(--text); }
+.batch-draft b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.layout-phone .batch-panel { margin: 0 0.8rem 0.8rem; }
 .import-noreader { padding: 0.8rem 1rem; border-radius: 0.8rem; background: var(--surface-2); font-weight: 700; line-height: 1.45; }
 .import-noreader p { margin: 0.2rem 0; }
 

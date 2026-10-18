@@ -121,6 +121,13 @@ export interface RecipeIn {
 export type RecipeImport = { url: string } | { text: string; use_reader?: boolean } | { images: string[] };
 export interface RecipeReader { configured: boolean; model: string; key_hint: string | null }
 export interface UploadedImage { id: string; url: string }
+/** A recipe found in a cookbook scan, waiting to be checked. `pages` are page numbers in the scan, from 1. */
+export interface RecipeDraft { id: string; pages: number[]; recipe: Recipe }
+/** A whole cookbook being read by Claude, page by page (see API.md "Scanning a cookbook"). */
+export interface RecipeBatch {
+  id: string; pages: number; read: number; reading: boolean; saved: number;
+  failed: { page: number; error: string }[]; drafts: RecipeDraft[];
+}
 
 export interface WeatherEntity {
   entity_id: string; name: string; available: boolean;
@@ -303,6 +310,17 @@ export interface Api {
   /** Upload a picture (already shrunk); use the id as a recipe's or step's photo. */
   uploadImage(data: Blob): Promise<UploadedImage>;
   recipeReader(): Promise<RecipeReader>;
+  /** Cookbook scans still being read or with recipes to check. */
+  recipeBatches(): Promise<RecipeBatch[]>;
+  /** Start reading a cookbook: page pictures in order (uploaded first). 409 when there's no Claude key. */
+  scanCookbook(images: string[]): Promise<RecipeBatch>;
+  retryBatch(id: string): Promise<RecipeBatch>;
+  /** Stop reading and drop the recipes not checked yet. */
+  deleteBatch(id: string): Promise<void>;
+  saveAllDrafts(batchId: string): Promise<number>;
+  /** Save a recipe found in a scan, as read or with the editor's changes. */
+  saveDraft(id: string, r?: RecipeIn): Promise<Recipe>;
+  dismissDraft(id: string): Promise<void>;
   saveRecipeReader(r: { api_key?: string; model?: string | null; pin: string }): Promise<RecipeReader>;
   removeRecipeReader(pin: string): Promise<RecipeReader>;
   /** Rows of the demo family seeded on first start that are still present (see API.md "Settings"). */

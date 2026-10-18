@@ -11,7 +11,8 @@ interface StepDraft { key: number; text: string; minutes: string; photo: { id: s
 let keys = 0;
 
 /** Add or change a recipe, or check one that was just imported (`recipe.id` null) before saving it. */
-export function RecipeEditor({ recipe, onSaved, onClose }: { recipe?: Recipe; onSaved?: (r: Recipe) => void; onClose: () => void }) {
+/** `draftId`: checking a recipe found in a cookbook scan; saving keeps it and takes it off the list to check. */
+export function RecipeEditor({ recipe, draftId, onSaved, onClose }: { recipe?: Recipe; draftId?: string; onSaved?: (r: Recipe) => void; onClose: () => void }) {
   const { api, toast } = useApp();
   const saved = !!recipe?.id;
   const [title, setTitle] = useState(recipe?.title ?? "");
@@ -75,7 +76,8 @@ export function RecipeEditor({ recipe, onSaved, onClose }: { recipe?: Recipe; on
     setBusy(true);
     setError(null);
     try {
-      const r = saved ? await api.updateRecipe(recipe!.id, body()) : await api.createRecipe(body());
+      const r = saved ? await api.updateRecipe(recipe!.id, body())
+        : draftId ? await api.saveDraft(draftId, body()) : await api.createRecipe(body());
       toast(saved ? "Recipe saved" : "Recipe added");
       onSaved?.(r);
       onClose();

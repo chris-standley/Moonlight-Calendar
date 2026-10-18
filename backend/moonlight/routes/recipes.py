@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response
 
-from .. import db, recipe_import, recipe_text
+from .. import db, recipe_batch, recipe_import, recipe_text
 from ..common import as_date, as_int, bad, body_dict, hub, not_found, opt_str, req_str, require_pin
 from .lists import insert_item
 
@@ -60,7 +60,8 @@ def tidy_images(c) -> None:
     """Forget pictures nothing uses any more (a day's grace for ones uploaded to a recipe not saved yet)."""
     cutoff = (datetime.now() - timedelta(days=1)).replace(microsecond=0).isoformat()
     for (iid,) in c.execute("SELECT id FROM images WHERE created_at < ?", (cutoff,)).fetchall():
-        used = c.execute("SELECT 1 FROM recipes WHERE photo = ? OR steps LIKE ? LIMIT 1", (iid, f'%"{iid}"%')).fetchone()
+        used = c.execute("SELECT 1 FROM recipes WHERE photo = ? OR steps LIKE ? UNION ALL "
+                         "SELECT 1 FROM recipe_batch_pages WHERE image = ? LIMIT 1", (iid, f'%"{iid}"%', iid)).fetchone()
         if not used:
             c.execute("DELETE FROM images WHERE id = ?", (iid,))
 
@@ -408,6 +409,150 @@ async def import_recipe(body: dict = Body(...)):
     with db.connect() as c:
         fields = recipe_fields(c, {**draft, "title": draft["title"] or "Untitled recipe"}, partial=False, check_images=False)
     return recipe_out({"id": None, **fields})
+
+
+# ---------------------------------------------------------------- a whole cookbook (recipe_batch.py)
+
+def batch_out(c, bid: str) -> dict:
+    pages = db.rows(c, "SELECT page, status, error FROM recipe_batch_pages WHERE batch_id = ? ORDER BY page", (bid,))
+    drafts = []
+    for d in db.rows(c, "SELECT id, pages, draft FROM recipe_drafts WHERE batch_id = ? AND status = 'ready'", (bid,)):
+        draft = json.loads(d["draft"])
+        fields = recipe_fields(c, {**draft, "title": draft.get("title") or "Untitled recipe", "photo": None},
+                               partial=False, check_images=False)
+        drafts.append({"id": d["id"], "pages": [p + 1 for p in json.loads(d["pages"])],
+                       "recipe": recipe_out({"id": None, **fields})})
+    drafts.sort(key=lambda d: d["pages"][0])
+    return {
+        "id": bid, "pages": len(pages),
+        "read": sum(p["status"] in ("read", "failed") for p in pages),
+        "reading": any(p["status"] in ("waiting", "reading") for p in pages),
+        "failed": [{"page": p["page"] + 1, "error": p["error"] or ""} for p in pages if p["status"] == "failed"],
+        "saved": c.execute("SELECT COUNT(*) FROM recipe_drafts WHERE batch_id = ? AND status = 'saved'", (bid,)).fetchone()[0],
+        "drafts": drafts,
+    }
+
+
+def _batches(c) -> list[dict]:
+    return [batch_out(c, r["id"]) for r in c.execute("SELECT id FROM recipe_batches ORDER BY created_at")]
+
+
+@router.get("/recipes-batches")
+def list_batches():
+    """Cookbook scans still being read or with recipes waiting to be checked."""
+    with db.connect() as c:
+        return _batches(c)
+
+
+@router.post("/recipes-batches")
+async def create_batch(body: dict = Body(...)):
+    """{images: [ids]}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads them in the
+    background; the recipes found turn up in GET /api/recipes-batches to check and save."""
+    body = body_dict(body)
+    ids = body.get("images")
+    if not isinstance(ids, list) or not ids:
+        raise bad("images must be a list of uploaded pictures")
+    if len(ids) > recipe_batch.MAX_PAGES:
+        raise bad(f"at most {recipe_batch.MAX_PAGES} pages at a time")
+    with db.connect() as c:
+        if not reader(c)[0]:
+            raise HTTPException(status_code=409, detail="Scanning a cookbook needs Claude: add an Anthropic API key in "
+                                                        "Settings › Recipes.")
+        for iid in ids:
+            if not isinstance(iid, str) or not c.execute("SELECT 1 FROM images WHERE id = ?", (iid,)).fetchone():
+                raise bad("images must be uploaded pictures (POST /api/images)")
+    bid = recipe_batch.create(ids)
+    with db.connect() as c:
+        out = batch_out(c, bid)
+    await hub.broadcast("recipes")
+    return out
+
+
+def _batch_id(c, bid: str) -> str:
+    if not db.row(c, "SELECT 1 FROM recipe_batches WHERE id = ?", (bid,)):
+        raise not_found("That scan is finished or was cancelled")
+    return bid
+
+
+@router.post("/recipes-batches/{batch_id}/retry")
+async def retry_batch(batch_id: str):
+    """Read the pages that failed again."""
+    with db.connect() as c:
+        _batch_id(c, batch_id)
+        c.execute("UPDATE recipe_batch_pages SET status = 'waiting', error = NULL WHERE batch_id = ? AND status = 'failed'",
+                  (batch_id,))
+        out = batch_out(c, batch_id)
+    recipe_batch.start(batch_id)
+    await hub.broadcast("recipes")
+    return out
+
+
+@router.delete("/recipes-batches/{batch_id}")
+async def delete_batch(batch_id: str):
+    """Stop reading and put aside the recipes not saved yet (saved ones stay in the recipe box)."""
+    with db.connect() as c:
+        _batch_id(c, batch_id)
+        recipe_batch.remove(c, batch_id)
+        tidy_images(c)
+    await hub.broadcast("recipes")
+    return {"ok": True}
+
+
+def _draft_row(c, draft_id: str) -> dict:
+    d = db.row(c, "SELECT * FROM recipe_drafts WHERE id = ? AND status = 'ready'", (draft_id,))
+    if not d:
+        raise not_found("That recipe was already saved or put aside")
+    return d
+
+
+def _done_with(c, d: dict, status: str) -> None:
+    c.execute("UPDATE recipe_drafts SET status = ? WHERE id = ?", (status, d["id"]))
+    if recipe_batch.finished(c, d["batch_id"]):
+        recipe_batch.remove(c, d["batch_id"])
+
+
+def _save(c, d: dict, body: dict) -> dict:
+    if not body:
+        draft = json.loads(d["draft"])
+        body = {**draft, "title": draft.get("title") or "Untitled recipe"}
+    fields = recipe_fields(c, body, partial=False)
+    now = db.now_iso()
+    row = {"id": db.new_id("rc"), **_store(fields), "created_at": now, "updated_at": now}
+    c.execute(f"INSERT INTO recipes({', '.join(row)}) VALUES({', '.join('?' * len(row))})", tuple(row.values()))
+    _done_with(c, d, "saved")
+    return recipe_out(_get(c, row["id"]))
+
+
+@router.post("/recipe-drafts/{draft_id}/save")
+async def save_draft(draft_id: str, body: dict | None = Body(None)):
+    """Save a recipe found in a scan, as read or with the changes made in the editor (a full recipe body)."""
+    with db.connect() as c:
+        out = _save(c, _draft_row(c, draft_id), body_dict(body) if body else {})
+        tidy_images(c)
+    await hub.broadcast("recipes")
+    return out
+
+
+@router.delete("/recipe-drafts/{draft_id}")
+async def dismiss_draft(draft_id: str):
+    with db.connect() as c:
+        _done_with(c, _draft_row(c, draft_id), "dismissed")
+        tidy_images(c)
+    await hub.broadcast("recipes")
+    return {"ok": True}
+
+
+@router.post("/recipes-batches/{batch_id}/save-all")
+async def save_all(batch_id: str):
+    """Save every recipe found so far in a scan, as read."""
+    with db.connect() as c:
+        _batch_id(c, batch_id)
+        ready = db.rows(c, "SELECT * FROM recipe_drafts WHERE batch_id = ? AND status = 'ready'", (batch_id,))
+        for d in ready:
+            _save(c, d, {})
+        tidy_images(c)
+    await hub.broadcast("recipes")
+    return {"saved": len(ready)}
 
 
 # ---------------------------------------------------------------- Claude, for reading photos (Settings › Recipes)

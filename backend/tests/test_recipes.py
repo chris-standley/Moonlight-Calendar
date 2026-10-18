@@ -243,3 +243,63 @@ def test_step_uses_names_the_ingredients_a_step_mentions():
     assert uses("Fry the onion.") == []                                   # two kinds of onion: not guessed
     assert uses("Scatter over the spring onions and a blueberry.") == [3, 5]
     assert uses("Season with salt and pepper.") == []                     # not the peppers, no amount for the salt
+
+
+def test_scanning_a_cookbook(client, monkeypatch):
+    import time
+
+    from moonlight import recipe_batch
+
+    def piece(title, ings, steps, continues=False):
+        return {"title": title, "description": "", "servings": None, "prep_minutes": None, "cook_minutes": None,
+                "minutes": None, "ingredients": ings, "steps": [{"text": s, "minutes": None} for s in steps],
+                "tags": [], "notes": "", "continues": continues}
+
+    book = {  # page bytes end in their number; page 2 is a photo; soup runs over onto page 4; page 5 fails once
+        b"0": [piece("Pancakes", ["100g flour"], ["Whisk."]), piece("Toast", ["1 slice bread"], ["Toast it."])],
+        b"1": [],
+        b"2": [piece("Soup", ["1 onion"], ["Chop."])],
+        b"3": [piece("", ["1 litre stock"], ["Simmer for 20 minutes."], continues=True)],
+        b"4": "busy",
+    }
+    calls = []
+
+    async def fake_page(key, model, image):
+        n = image[1][-1:]
+        calls.append(n)
+        if book[n] == "busy":
+            book[n] = [piece("Cake", ["2 eggs"], ["Bake."])]
+            raise recipe_import.Busy("busy")
+        return book[n]
+
+    async def no_wait(_):
+        return None
+
+    monkeypatch.setattr(recipe_import, "read_cookbook_page", fake_page)
+    monkeypatch.setattr(recipe_batch, "_wait", no_wait)
+    imgs = [client.post("/api/images", content=PNG + bytes([48 + i])).json()["id"] for i in range(5)]
+    assert client.post("/api/recipes-batches", json={"images": imgs}).status_code == 409  # needs the reader
+    client.put("/api/recipes-reader", json={"pin": PIN, "api_key": "sk-ant-test-abcd"})
+    b = client.post("/api/recipes-batches", json={"images": imgs}).json()
+    assert b["pages"] == 5
+    for _ in range(100):
+        [b] = client.get("/api/recipes-batches").json()
+        if not b["reading"]:
+            break
+        time.sleep(0.02)
+    assert b["read"] == 5 and b["failed"] == [] and calls.count(b"4") == 2
+    found = {d["recipe"]["title"]: d for d in b["drafts"]}
+    assert list(found) == ["Pancakes", "Toast", "Soup", "Cake"]
+    soup = found["Soup"]
+    assert soup["pages"] == [3, 4] and [i["text"] for i in soup["recipe"]["ingredients"]] == ["1 onion", "1 litre stock"]
+    assert soup["recipe"]["steps"][1]["timers"]
+
+    # Save one as edited, put one aside, then save the rest; the scan is gone once all are dealt with.
+    body = {**{k: soup["recipe"][k] for k in ("description", "servings", "tags", "notes")}, "title": "Onion soup",
+            "ingredients": ["1 onion", "1 litre stock"], "steps": [{"text": "Simmer."}]}
+    assert client.post(f"/api/recipe-drafts/{soup['id']}/save", json=body).json()["title"] == "Onion soup"
+    assert client.post(f"/api/recipe-drafts/{soup['id']}/save").status_code == 404
+    assert client.delete(f"/api/recipe-drafts/{found['Toast']['id']}").status_code == 200
+    assert client.post(f"/api/recipes-batches/{b['id']}/save-all").json() == {"saved": 2}
+    assert client.get("/api/recipes-batches").json() == []
+    assert sorted(r["title"] for r in client.get("/api/recipes").json()) == ["Cake", "Onion soup", "Pancakes"]

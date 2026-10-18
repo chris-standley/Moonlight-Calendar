@@ -13,16 +13,22 @@ struct RecipesScreen: View {
     @State private var draft: Recipe?
     @State private var pendingDraft: Recipe?
     @State private var newRecipe = false
+    @State private var batches: [RecipeBatch] = []
+    @State private var scanningBook = false
+    @State private var checking: RecipeDraft?
 
     var body: some View {
         NavigationStack(path: $path) {
             Adaptive { room, _ in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        ForEach(batches) { b in
+                            CookbookBatchCard(batch: b) { checking = $0 }
+                        }
                         chips
-                        if recipes.isEmpty && loaded {
-                            EmptyHint(text: "No recipes yet. Tap + to type one in, scan a cookbook page or bring one in from a link.")
-                        } else if shown.isEmpty && loaded {
+                        if recipes.isEmpty && loaded && batches.isEmpty {
+                            EmptyHint(text: "No recipes yet. Tap + to type one in, scan a cookbook or bring one in from a link.")
+                        } else if shown.isEmpty && loaded && !recipes.isEmpty {
                             EmptyHint(text: "Nothing matches. Try another word or filter.")
                         }
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: room == .narrow ? 2 : room == .medium ? 3 : 5),
@@ -57,6 +63,7 @@ struct RecipesScreen: View {
                         if DocumentScanner.isAvailable {
                             Button { importing = .scan } label: { Label("Scan a cookbook page", systemImage: "doc.viewfinder") }
                         }
+                        Button { scanningBook = true } label: { Label("Scan a whole cookbook", systemImage: "books.vertical") }
                         Button { importing = .photos } label: { Label("From photos", systemImage: "photo.on.rectangle") }
                         Button { importing = .link } label: { Label("From a link", systemImage: "link") }
                         Button { importing = .text } label: { Label("Paste text", systemImage: "doc.on.clipboard") }
@@ -68,6 +75,7 @@ struct RecipesScreen: View {
         }
         .task(id: model.rev("recipes")) {
             if let r = await model.call({ try await $0.recipes() }) { recipes = r }
+            if let b = await model.call({ try await $0.recipeBatches() }) { batches = b }
             loaded = true
         }
         .sheet(item: $importing, onDismiss: {
@@ -78,6 +86,10 @@ struct RecipesScreen: View {
         }
         .sheet(item: $draft) { d in
             RecipeEditor(recipe: d) { saved in if let id = saved.id { path = [id] } }
+        }
+        .sheet(isPresented: $scanningBook) { CookbookScanView() }
+        .sheet(item: $checking) { d in
+            RecipeEditor(recipe: d.recipe, draftId: d.id)
         }
         .sheet(isPresented: $newRecipe) {
             RecipeEditor { saved in if let id = saved.id { path = [id] } }

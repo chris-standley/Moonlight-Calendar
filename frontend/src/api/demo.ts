@@ -660,6 +660,13 @@ export function demoApi(): Api {
       return { id, url };
     },
     recipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
+    recipeBatches: async () => [],
+    async scanCookbook() { throw new ApiError(409, "Scanning a cookbook needs Claude: add an Anthropic API key in Settings › Recipes."); },
+    async retryBatch() { throw new ApiError(404, "That scan is finished or was cancelled"); },
+    async deleteBatch() { throw new ApiError(404, "That scan is finished or was cancelled"); },
+    async saveAllDrafts() { throw new ApiError(404, "That scan is finished or was cancelled"); },
+    async saveDraft() { throw new ApiError(404, "That recipe was already saved or put aside"); },
+    async dismissDraft() { throw new ApiError(404, "That recipe was already saved or put aside"); },
     async saveRecipeReader() { throw new ApiError(400, "The preview can't use an API key. Add it on your Moonlight."); },
     removeRecipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
     async weather() {

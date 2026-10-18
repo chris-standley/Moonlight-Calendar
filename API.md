@@ -240,6 +240,18 @@ last_cooked: date|null, created_at, updated_at}`
 - Claude for reading photos (Settings › Recipes): `GET /api/recipes-reader` -> `{configured, model, key_hint}`;
   `PUT /api/recipes-reader` `{pin, api_key?, model?}` (an Anthropic API key, `sk-ant-...`, never returned; model
   defaults to `claude-opus-5-5`); `DELETE /api/recipes-reader` `{pin}`.
+- Scanning a whole cookbook: each page photo is read by Claude on its own, four at a time, in the background (and
+  after a restart) until every page is done; pages Anthropic is too busy for are tried 3 times. A recipe that carries
+  on from the page before is joined to it, so a recipe is offered once the page after it is read (or it's the last).
+  Batch = `{id, pages, read, reading: bool, failed: [{page, error}], saved, drafts: [{id, pages: [int] (from 1),
+  recipe: Recipe (id null)}]}`. Every change sends `recipes`.
+  - `GET /api/recipes-batches` -> [Batch]; `POST /api/recipes-batches` `{images: [image ids], in page order, up to 200}`
+    -> Batch (409 when no key is set).
+  - `POST /api/recipes-batches/{id}/retry` -> Batch: read the failed pages again.
+  - `POST /api/recipe-drafts/{id}/save` (optionally a full recipe body, as checked in the editor) -> Recipe;
+    `DELETE /api/recipe-drafts/{id}`: don't keep it. `POST /api/recipes-batches/{id}/save-all` -> `{saved}`.
+  - `DELETE /api/recipes-batches/{id}`: stop reading and drop the recipes not saved yet. A batch goes by itself once
+    every page is read and every recipe found is saved or dropped.
 
 ## Pictures
 - `POST /api/images` with the picture as the raw request body (JPEG, PNG, WebP or GIF, 10 MB at most; screens shrink
