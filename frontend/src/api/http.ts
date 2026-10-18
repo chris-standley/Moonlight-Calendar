@@ -27,6 +27,14 @@ export function httpApi(base = ""): Api {
     return res.json() as Promise<T>;
   }
   const get = <T>(p: string) => req<T>("GET", p);
+  async function download(path: string): Promise<{ file: Blob; name: string }> {
+    const token = getToken();
+    const res = await fetch(base + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (res.status === 401) notifyUnpaired();
+    if (!res.ok) throw new ApiError(res.status, `Couldn't make the file (error ${res.status})`);
+    const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "Moonlight recipes";
+    return { file: await res.blob(), name };
+  }
   const q = (o: Record<string, string>) => "?" + new URLSearchParams(o).toString();
   // Picture urls are absolute API paths; under Home Assistant ingress they need the ingress prefix.
   const pic = (u: string | null) => (u ? base + u : null);
@@ -116,12 +124,14 @@ export function httpApi(base = ""): Api {
     async uploadImage(data) { const r = await req<UploadedImage>("POST", "/api/images", data); return { ...r, url: base + r.url }; },
     recipeReader: () => get("/api/recipes-reader"),
     recipeBatches: async () => (await get<RecipeBatch[]>("/api/recipes-batches")).map(batch),
-    scanCookbook: async (images) => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images })),
+    scanCookbook: async (images, cheaper = false) => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images, cheaper })),
     retryBatch: async (id) => batch(await req<RecipeBatch>("POST", `/api/recipes-batches/${id}/retry`, {})),
     deleteBatch: async (id) => { await req("DELETE", `/api/recipes-batches/${id}`); },
     saveAllDrafts: async (id) => (await req<{ saved: number }>("POST", `/api/recipes-batches/${id}/save-all`, {})).saved,
     saveDraft: (id, r) => recipe(req("POST", `/api/recipe-drafts/${id}/save`, r ?? {})),
     dismissDraft: async (id) => { await req("DELETE", `/api/recipe-drafts/${id}`); },
+    exportRecipes: (format) => download("/api/recipes/export" + q({ format })),
+    importRecipes: (file) => req("POST", "/api/recipes/collection", file),
     saveRecipeReader: (r) => req("PUT", "/api/recipes-reader", r),
     removeRecipeReader: (pin) => req("DELETE", "/api/recipes-reader", { pin }),
     sampleData: () => get("/api/sample-data"),

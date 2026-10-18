@@ -667,6 +667,8 @@ export function demoApi(): Api {
     async saveAllDrafts() { throw new ApiError(404, "That scan is finished or was cancelled"); },
     async saveDraft() { throw new ApiError(404, "That recipe was already saved or put aside"); },
     async dismissDraft() { throw new ApiError(404, "That recipe was already saved or put aside"); },
+    async exportRecipes() { throw new ApiError(409, "Exporting works with Moonlight running in Home Assistant."); },
+    async importRecipes() { throw new ApiError(409, "Importing works with Moonlight running in Home Assistant."); },
     async saveRecipeReader() { throw new ApiError(400, "The preview can't use an API key. Add it on your Moonlight."); },
     removeRecipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
     async weather() {

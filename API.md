@@ -237,16 +237,25 @@ last_cooked: date|null, created_at, updated_at}`
     and cook times), or by Claude with `use_reader: true` when a key is set.
   - `{images: [image ids]}` (up to 6 pages of one recipe): read by Claude; 409 when no key is set.
   422 with a `detail` to show when nothing could be read. Pictures on the web page are saved and set as `photo`.
+- Other recipe apps: `GET /api/recipes/export?format=mela|paprika|schema` -> the whole recipe box as a file to
+  download, pictures included: Mela `.melarecipes` (a zip of `.melarecipe` JSON, ingredient headings as `# ...`),
+  Paprika `.paprikarecipes` (a zip of gzipped JSON) or a JSON list of schema.org Recipe objects (pictures as data URLs).
+  `POST /api/recipes/collection` with a recipe file as the raw request body (500 MB at most) saves every recipe in it,
+  skipping titles already in the box -> `{added, skipped: [titles], failed: [titles]}`. The kind of file is worked
+  out from its contents: a Mela or Paprika collection or single recipe, schema.org JSON (a list, `@graph` or one
+  Recipe), a zip of any of those, or a saved recipe web page; 422 when there are no recipes in it.
 - Claude for reading photos (Settings › Recipes): `GET /api/recipes-reader` -> `{configured, model, key_hint}`;
   `PUT /api/recipes-reader` `{pin, api_key?, model?}` (an Anthropic API key, `sk-ant-...`, never returned; model
   defaults to `claude-opus-5-5`); `DELETE /api/recipes-reader` `{pin}`.
 - Scanning a whole cookbook: each page photo is read by Claude on its own, four at a time, in the background (and
   after a restart) until every page is done; pages Anthropic is too busy for are tried 3 times. A recipe that carries
   on from the page before is joined to it, so a recipe is offered once the page after it is read (or it's the last).
-  Batch = `{id, pages, read, reading: bool, failed: [{page, error}], saved, drafts: [{id, pages: [int] (from 1),
+  Batch = `{id, pages, read, reading: bool, cheaper: bool, failed: [{page, error}], saved, drafts: [{id, pages: [int] (from 1),
   recipe: Recipe (id null)}]}`. Every change sends `recipes`.
-  - `GET /api/recipes-batches` -> [Batch]; `POST /api/recipes-batches` `{images: [image ids], in page order, up to 200}`
-    -> Batch (409 when no key is set).
+  - `GET /api/recipes-batches` -> [Batch]; `POST /api/recipes-batches` `{images: [image ids], in page order, up to 200,
+    cheaper?: bool}` -> Batch (409 when no key is set). `cheaper` sends the pages as one Anthropic Message Batch: half
+    the price, read when Anthropic has room (usually within the hour, at most a day); Moonlight checks on it every two
+    minutes, cancels it when the scan is cleared, and failed pages tried again go as a new batch.
   - `POST /api/recipes-batches/{id}/retry` -> Batch: read the failed pages again.
   - `POST /api/recipe-drafts/{id}/save` (optionally a full recipe body, as checked in the editor) -> Recipe;
     `DELETE /api/recipe-drafts/{id}`: don't keep it. `POST /api/recipes-batches/{id}/save-all` -> `{saved}`.

@@ -121,11 +121,16 @@ export interface RecipeIn {
 export type RecipeImport = { url: string } | { text: string; use_reader?: boolean } | { images: string[] };
 export interface RecipeReader { configured: boolean; model: string; key_hint: string | null }
 export interface UploadedImage { id: string; url: string }
+/** Files for other recipe apps: Mela (.melarecipes), Paprika (.paprikarecipes) or schema.org Recipe JSON. */
+export type RecipeExportFormat = "mela" | "paprika" | "schema";
+export interface RecipeImportResult { added: number; skipped: string[]; failed: string[] }
 /** A recipe found in a cookbook scan, waiting to be checked. `pages` are page numbers in the scan, from 1. */
 export interface RecipeDraft { id: string; pages: number[]; recipe: Recipe }
 /** A whole cookbook being read by Claude, page by page (see API.md "Scanning a cookbook"). */
 export interface RecipeBatch {
   id: string; pages: number; read: number; reading: boolean; saved: number;
+  /** Sent as an Anthropic Message Batch: half price, usually read within the hour, at most a day. */
+  cheaper: boolean;
   failed: { page: number; error: string }[]; drafts: RecipeDraft[];
 }
 
@@ -313,7 +318,7 @@ export interface Api {
   /** Cookbook scans still being read or with recipes to check. */
   recipeBatches(): Promise<RecipeBatch[]>;
   /** Start reading a cookbook: page pictures in order (uploaded first). 409 when there's no Claude key. */
-  scanCookbook(images: string[]): Promise<RecipeBatch>;
+  scanCookbook(images: string[], cheaper?: boolean): Promise<RecipeBatch>;
   retryBatch(id: string): Promise<RecipeBatch>;
   /** Stop reading and drop the recipes not checked yet. */
   deleteBatch(id: string): Promise<void>;
@@ -321,6 +326,10 @@ export interface Api {
   /** Save a recipe found in a scan, as read or with the editor's changes. */
   saveDraft(id: string, r?: RecipeIn): Promise<Recipe>;
   dismissDraft(id: string): Promise<void>;
+  /** The whole recipe box as a file for another app, pictures included. */
+  exportRecipes(format: RecipeExportFormat): Promise<{ file: Blob; name: string }>;
+  /** A recipe file from another app (any kind Moonlight reads, worked out from its contents), saved straight in. */
+  importRecipes(file: Blob): Promise<RecipeImportResult>;
   saveRecipeReader(r: { api_key?: string; model?: string | null; pin: string }): Promise<RecipeReader>;
   removeRecipeReader(pin: string): Promise<RecipeReader>;
   /** Rows of the demo family seeded on first start that are still present (see API.md "Settings"). */

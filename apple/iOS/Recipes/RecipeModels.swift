@@ -86,6 +86,8 @@ struct RecipeBatch: Codable, Identifiable {
     let pages: Int
     let read: Int
     let reading: Bool
+    /// Sent as an Anthropic Message Batch: half price, usually read within the hour, at most a day.
+    let cheaper: Bool?
     let failed: [Failure]
     let saved: Int
     let drafts: [RecipeDraft]
@@ -122,7 +124,9 @@ extension APIClient {
     func recipeReader() async throws -> RecipeReader { try await get("/api/recipes-reader") }
 
     func recipeBatches() async throws -> [RecipeBatch] { try await get("/api/recipes-batches") }
-    func scanCookbook(images: [String]) async throws -> RecipeBatch { try await send("POST", "/api/recipes-batches", ["images": images]) }
+    func scanCookbook(images: [String], cheaper: Bool = false) async throws -> RecipeBatch {
+        try await send("POST", "/api/recipes-batches", ["images": images, "cheaper": cheaper])
+    }
     func retryBatch(_ id: String) async throws -> RecipeBatch { try await send("POST", "/api/recipes-batches/\(id)/retry", [:]) }
     func deleteBatch(_ id: String) async throws {
         let _: Ignored = try await send("DELETE", "/api/recipes-batches/\(id)")

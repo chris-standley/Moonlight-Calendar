@@ -9,6 +9,7 @@ import html
 import json
 import logging
 import re
+from contextlib import contextmanager
 from html.parser import HTMLParser
 
 import httpx
@@ -288,13 +289,77 @@ Pages with no recipe (a contents page, an introduction, a full-page photo) give 
 
 async def read_cookbook_page(api_key: str, model: str, image: tuple[str, bytes]) -> list[dict]:
     """The recipes, or parts of recipes, on one cookbook page, in order. Each is draft fields plus `continues`."""
-    content = _images([image]) + [{"type": "text", "text": PAGE_PROMPT}]
-    data = await _ask(api_key, model, content, PAGE_SCHEMA)
+    return _page_drafts(await _ask(api_key, model, _page_content(image), PAGE_SCHEMA))
+
+
+def _page_content(image: tuple[str, bytes]) -> list[dict]:
+    return _images([image]) + [{"type": "text", "text": PAGE_PROMPT}]
+
+
+def _page_drafts(data: dict) -> list[dict]:
     out = []
     for r in data.get("recipes") or []:
         if isinstance(r, dict) and (r.get("ingredients") or r.get("steps")):
             out.append({**_draft(r), "continues": bool(r.get("continues_previous_page"))})
     return out
+
+
+# Anthropic's Message Batches: half the price, read when Anthropic has room (usually within the hour, at most a day).
+
+async def submit_pages(api_key: str, model: str, pages: list[tuple[int, tuple[str, bytes]]]) -> str:
+    """Send cookbook pages as one Anthropic batch; returns its id. Results come from `batch_results`."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=api_key, timeout=600, max_retries=1)
+    with _errors(anthropic):
+        batch = await client.messages.batches.create(requests=[{
+            "custom_id": f"page-{page}",
+            "params": {
+                "model": model or READER_MODEL, "max_tokens": 16000,
+                "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": PAGE_SCHEMA}},
+                "messages": [{"role": "user", "content": _page_content(image)}],
+            },
+        } for page, image in pages])
+    return batch.id
+
+
+async def batch_results(api_key: str, batch_id: str) -> dict[int, tuple[list[dict] | None, str | None]] | None:
+    """None while Anthropic is still reading; then {page: (drafts, None) or (None, error)}."""
+    import anthropic
+
+    client = anthropic.AsyncAnthropic(api_key=api_key, timeout=120, max_retries=1)
+    with _errors(anthropic):
+        batch = await client.messages.batches.retrieve(batch_id)
+        if batch.processing_status != "ended":
+            return None
+        out: dict[int, tuple[list[dict] | None, str | None]] = {}
+        async for r in await client.messages.batches.results(batch_id):
+            try:
+                page = int(r.custom_id.removeprefix("page-"))
+            except ValueError:
+                continue
+            res = r.result
+            if res.type == "succeeded":
+                try:
+                    out[page] = (_page_drafts(_answer(res.message)), None)
+                except ImportError_ as e:
+                    out[page] = (None, str(e))
+            elif res.type == "expired":
+                out[page] = (None, "Anthropic didn't get to this page within a day. Try again.")
+            elif res.type == "canceled":
+                out[page] = (None, "This page was cancelled.")
+            else:
+                out[page] = (None, "Anthropic couldn't read this page. Try again.")
+        return out
+
+
+async def cancel_batch(api_key: str, batch_id: str) -> None:
+    import anthropic
+
+    try:
+        await anthropic.AsyncAnthropic(api_key=api_key, timeout=30, max_retries=1).messages.batches.cancel(batch_id)
+    except Exception:
+        pass  # already ended, or out of reach: it ends by itself within a day
 
 
 def _images(images: list[tuple[str, bytes]] | None) -> list[dict]:
@@ -311,7 +376,7 @@ async def _ask(api_key: str, model: str, content: list[dict], schema: dict) -> d
     import anthropic
 
     client = anthropic.AsyncAnthropic(api_key=api_key, timeout=120, max_retries=1)
-    try:
+    with _errors(anthropic):
         resp = await client.beta.messages.create(
             model=model or READER_MODEL,
             max_tokens=16000,
@@ -320,6 +385,14 @@ async def _ask(api_key: str, model: str, content: list[dict], schema: dict) -> d
             messages=[{"role": "user", "content": content}],
             extra_body={"fallbacks": "default"},
         )
+    return _answer(resp)
+
+
+@contextmanager
+def _errors(anthropic):
+    """Anthropic's errors as messages for the family; Busy for the ones worth trying again later."""
+    try:
+        yield
     except anthropic.AuthenticationError:
         raise ImportError_("The Anthropic API key in Settings › Recipes was turned down. Check it or paste a new one.")
     except anthropic.PermissionDeniedError as e:
@@ -332,6 +405,9 @@ async def _ask(api_key: str, model: str, content: list[dict], schema: dict) -> d
         raise Busy(f"Anthropic answered with error {e.status_code}. Try again in a minute.")
     except anthropic.APIConnectionError:
         raise Busy("Couldn't reach Anthropic from Home Assistant. Check the internet connection.")
+
+
+def _answer(resp) -> dict:
     if resp.stop_reason == "refusal":
         raise ImportError_("Claude declined to read that. Try another photo, or type the recipe in.")
     if resp.stop_reason == "max_tokens":

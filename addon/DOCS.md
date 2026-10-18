@@ -139,7 +139,14 @@ console.anthropic.com; the photos and text are then sent to Anthropic). Pictures
 To bring in a whole cookbook, choose Add > A whole cookbook (or Scan a whole cookbook on the iPhone) and scan or
 choose every page, in order, up to 200 at a time. Claude reads them a few at a time while you carry on, joining
 recipes that run over two pages, and the recipes found wait at the top of Recipes: check each one in the editor, or
-Save all. Pages that couldn't be read can be tried again. Each page is one request to Anthropic.
+Save all. Pages that couldn't be read can be tried again. Each page is one request to Anthropic. Turn on **Cheaper,
+slower** to pay half: Anthropic then reads the pages when it has room (usually within the hour, at most a day) and
+the recipes all turn up together.
+
+To move recipes to or from another app, use Settings > Recipes on a wall screen or in the browser (or the sort menu
+and + on the iPhone's Recipes). Send to another app makes a file of the whole recipe box, pictures included, for Mela,
+Paprika or any app that reads schema.org recipes. Bring in from another app takes a Mela, Paprika or schema.org file
+(or a saved recipe web page), works out which it is, and adds every recipe not already in the box.
 
 ## Photo screensaver
 
