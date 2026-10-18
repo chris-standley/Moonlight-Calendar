@@ -1,13 +1,14 @@
 """Recipes: the recipe box, importing (link, text, photos), adding ingredients to a list, and uploaded pictures."""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response
 
-from .. import db, recipe_batch, recipe_import, recipe_text
+from .. import db, recipe_batch, recipe_exchange, recipe_import, recipe_text
 from ..common import as_date, as_int, bad, body_dict, hub, not_found, opt_str, req_str, require_pin
 from .lists import insert_item
 
@@ -235,6 +236,85 @@ def _get(c, recipe_id: str) -> dict:
 def list_recipes():
     with db.connect() as c:
         return [recipe_out(r) for r in db.rows(c, "SELECT * FROM recipes ORDER BY title COLLATE NOCASE")]
+
+
+@router.get("/recipes/export")
+def export_recipes(format: str = "mela"):
+    """The whole recipe box as a file for another app, pictures included: format=mela (.melarecipes), paprika
+    (.paprikarecipes) or schema (schema.org Recipe JSON)."""
+    if format not in recipe_exchange.FORMATS:
+        raise bad("format must be mela, paprika or schema")
+    with db.connect() as c:
+        rows = db.rows(c, "SELECT * FROM recipes ORDER BY title COLLATE NOCASE")
+        recipes = [recipe_out(r) for r in rows]
+        ids = {r["photo"] for r in recipes if r["photo"]} | {s["photo"] for r in recipes for s in r["steps"] if s["photo"]}
+        pictures = {}
+        for iid in ids:
+            p = db.row(c, "SELECT mime, data FROM images WHERE id = ?", (iid,))
+            if p:
+                pictures[iid] = (p["mime"], p["data"])
+    data, name, mime = recipe_exchange.export(recipes, pictures, format)
+    return Response(content=data, media_type=mime,
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+MAX_COLLECTION_BYTES = 500_000_000
+
+
+@router.post("/recipes/collection")
+async def import_collection(request: Request):
+    """A recipe file from another app as the raw request body, whatever kind it is (Mela, Paprika, schema.org JSON or
+    a saved web page; worked out from the contents). Saves every recipe straight into the box, skipping titles
+    already there. -> {added, skipped: [titles], failed: [titles]}"""
+    data = await request.body()
+    if len(data) > MAX_COLLECTION_BYTES:
+        raise HTTPException(status_code=413, detail="That file is too big (500 MB at most)")
+    try:
+        drafts = recipe_exchange.parse(data)
+    except recipe_import.ImportError_ as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    with db.connect() as c:
+        have = {r["t"] for r in db.rows(c, "SELECT lower(title) AS t FROM recipes")}
+    gate = asyncio.Semaphore(6)
+
+    async def picture(p) -> str | None:
+        if isinstance(p, tuple):
+            if len(p[1]) > MAX_IMAGE_BYTES:
+                return None
+            with db.connect() as c:
+                return store_image(c, p[1])["id"]
+        async with gate:
+            img = await _download_image(p) if isinstance(p, str) else None
+        return img["id"] if img else None
+
+    added, skipped, failed = 0, [], []
+    for d in drafts:
+        if d["title"].lower() in have:
+            skipped.append(d["title"])
+            continue
+        have.add(d["title"].lower())
+        photos = await asyncio.gather(picture(d.get("photo")), *(picture(s.get("photo")) for s in d["steps"][:MAX_STEPS]))
+        body = {
+            **d, "photo": photos[0],
+            "description": (d.get("description") or "")[:4000], "notes": (d.get("notes") or "")[:8000],
+            "ingredients": [i[:300] for i in d.get("ingredients") or []][:MAX_INGREDIENTS],
+            "steps": [{**s, "text": s["text"][:3000], "photo": ph} for s, ph in zip(d["steps"][:MAX_STEPS], photos[1:])],
+            "tags": [t[:30] for t in d.get("tags") or []],
+            "url": (d.get("url") or "")[:2000] or None,
+        }
+        try:
+            with db.connect() as c:
+                fields = recipe_fields(c, body, partial=False, check_images=False)
+                now = db.now_iso()
+                row = {"id": db.new_id("rc"), **_store(fields), "created_at": now, "updated_at": now}
+                c.execute(f"INSERT INTO recipes({', '.join(row)}) VALUES({', '.join('?' * len(row))})",
+                          tuple(row.values()))
+            added += 1
+        except HTTPException:
+            failed.append(d["title"])
+    if added:
+        await hub.broadcast("recipes")
+    return {"added": added, "skipped": skipped, "failed": failed}
 
 
 @router.get("/recipes/{recipe_id}")

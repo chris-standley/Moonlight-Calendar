@@ -121,6 +121,9 @@ export interface RecipeIn {
 export type RecipeImport = { url: string } | { text: string; use_reader?: boolean } | { images: string[] };
 export interface RecipeReader { configured: boolean; model: string; key_hint: string | null }
 export interface UploadedImage { id: string; url: string }
+/** Files for other recipe apps: Mela (.melarecipes), Paprika (.paprikarecipes) or schema.org Recipe JSON. */
+export type RecipeExportFormat = "mela" | "paprika" | "schema";
+export interface RecipeImportResult { added: number; skipped: string[]; failed: string[] }
 /** A recipe found in a cookbook scan, waiting to be checked. `pages` are page numbers in the scan, from 1. */
 export interface RecipeDraft { id: string; pages: number[]; recipe: Recipe }
 /** A whole cookbook being read by Claude, page by page (see API.md "Scanning a cookbook"). */
@@ -323,6 +326,10 @@ export interface Api {
   /** Save a recipe found in a scan, as read or with the editor's changes. */
   saveDraft(id: string, r?: RecipeIn): Promise<Recipe>;
   dismissDraft(id: string): Promise<void>;
+  /** The whole recipe box as a file for another app, pictures included. */
+  exportRecipes(format: RecipeExportFormat): Promise<{ file: Blob; name: string }>;
+  /** A recipe file from another app (any kind Moonlight reads, worked out from its contents), saved straight in. */
+  importRecipes(file: Blob): Promise<RecipeImportResult>;
   saveRecipeReader(r: { api_key?: string; model?: string | null; pin: string }): Promise<RecipeReader>;
   removeRecipeReader(pin: string): Promise<RecipeReader>;
   /** Rows of the demo family seeded on first start that are still present (see API.md "Settings"). */

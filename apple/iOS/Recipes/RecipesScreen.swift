@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The recipe box: search, quick filters (favourites, quick, tags), sorting, and a card per recipe.
 struct RecipesScreen: View {
@@ -16,6 +17,10 @@ struct RecipesScreen: View {
     @State private var batches: [RecipeBatch] = []
     @State private var scanningBook = false
     @State private var checking: RecipeDraft?
+    @State private var pickingFile = false
+    @State private var exchanging = false
+    @State private var exportFile: ExportedFile?
+    @State private var exchangeMessage: String?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -54,8 +59,15 @@ struct RecipesScreen: View {
                             Text("Best rated").tag("rated")
                             Text("Recently made").tag("recent")
                         }
-                    } label: { Image(systemName: "arrow.up.arrow.down") }
-                    .accessibilityLabel("Sort")
+                        Divider()
+                        Menu {
+                            ForEach(RecipeExportFormat.allCases) { f in
+                                Button(f.name) { Task { await export(f) } }
+                            }
+                        } label: { Label("Send to another app", systemImage: "square.and.arrow.up") }
+                        .disabled(recipes.isEmpty || exchanging)
+                    } label: { Image(systemName: exchanging ? "hourglass" : "arrow.up.arrow.down") }
+                    .accessibilityLabel("Sort or send to another app")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -67,6 +79,10 @@ struct RecipesScreen: View {
                         Button { importing = .photos } label: { Label("From photos", systemImage: "photo.on.rectangle") }
                         Button { importing = .link } label: { Label("From a link", systemImage: "link") }
                         Button { importing = .text } label: { Label("Paste text", systemImage: "doc.on.clipboard") }
+                        Button { pickingFile = true } label: {
+                            Label("From another app's file", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(exchanging)
                     } label: { Image(systemName: "plus") }
                     .accessibilityLabel("Add a recipe")
                 }
@@ -93,6 +109,46 @@ struct RecipesScreen: View {
         }
         .sheet(isPresented: $newRecipe) {
             RecipeEditor { saved in if let id = saved.id { path = [id] } }
+        }
+        .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.item]) { result in
+            if case .success(let url) = result { Task { await importFile(url) } }
+        }
+        .sheet(item: $exportFile) { f in ShareSheet(items: [f.url]) }
+        .alert("Recipes", isPresented: Binding(get: { exchangeMessage != nil }, set: { if !$0 { exchangeMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exchangeMessage ?? "")
+        }
+    }
+
+    private func export(_ format: RecipeExportFormat) async {
+        guard let api = model.api else { return }
+        exchanging = true
+        defer { exchanging = false }
+        do {
+            exportFile = ExportedFile(url: try await api.exportRecipes(format))
+        } catch {
+            exchangeMessage = error.localizedDescription
+        }
+    }
+
+    /// Any recipe file: Mela, Paprika, schema.org JSON or a saved web page. The add-on works out which.
+    private func importFile(_ url: URL) async {
+        guard let api = model.api else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        let file = try? Data(contentsOf: url)
+        if scoped { url.stopAccessingSecurityScopedResource() }
+        guard let file else {
+            exchangeMessage = "Couldn't open that file."
+            return
+        }
+        exchanging = true
+        defer { exchanging = false }
+        do {
+            exchangeMessage = try await api.importRecipes(file).summary
+            model.bump("recipes")
+        } catch {
+            exchangeMessage = error.localizedDescription
         }
     }
 

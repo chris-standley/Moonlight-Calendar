@@ -42,6 +42,8 @@ for the shopping list, with everyday staples and things already on the list left
   they're sent to the add-on, where Claude reads them in the background. A Cookbook scan card at the top of Recipes
   shows progress and the recipes found: tap one to check it in the editor, tick to save it as read, or Save all.
   **Cheaper, slower** sends them as an Anthropic batch at half the price, back within a day (usually the hour).
+- **Other recipe apps**: the sort menu's Send to another app shares the whole recipe box as a Mela, Paprika or
+  schema.org file (open it in Mela or Paprika, or save it to Files); + › From another app's file brings any of those in.
 - **Cook mode** shows one step at a time, large, with the amounts of the ingredients it mentions and its timer
   buttons; swipe or tap Next. The screen stays on. **Hands-free** (the microphone button) listens for "next",
   "back", "repeat", "start the timer", "stop" and "ingredients", recognised on the phone, and reads each step aloud.
