@@ -14,7 +14,8 @@ implementation of the same contract, used for the published preview). Keep them 
 ## Settings
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
-  media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv}}`
+  media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv},
+  security: {alarm_entity?, cameras?, popup: {large, compact, phone}}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
@@ -26,15 +27,19 @@ implementation of the same contract, used for the published preview). Keep them 
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
   `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
-  chores, rewards, meals, recipes, lists` (Settings is always shown), and the one it opens on (default large
-  `{start: "calendar", sections: all but today}`, compact and phone `{start: "today", sections: all}`).
+  chores, rewards, meals, recipes, lists, security` (Settings is always shown), and the one it opens on (default large
+  `{start: "calendar", sections: all but today}`, compact `{start: "today", sections: all}`, phone the same without
+  security). Upgrading to 0.6.0 adds `security` once to the large and compact menus.
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
   `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
   code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
   (otherwise none). Dates come from the `holidays` package (see Public holidays).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, theme, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays`, plus `pin` (required) -> settings.
+  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security`, plus `pin` (required) -> settings.
+  `security` (merged, see Security): `alarm_entity` an `alarm_control_panel.*` id, `""` none, null automatic;
+  `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
+  `popup: {large?, compact?, phone?: bool}` (default large and compact on). Broadcasts `security` and `security_alert`.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
@@ -322,6 +327,37 @@ Live updates: the backend keeps one WebSocket to HA (`ws://supervisor/core/webso
 with `subscribe_trigger` (state trigger on the configured entities). Every change broadcasts the `media` topic.
 While that socket is down (HA restarting) it polls the entities' states every 5 s and retries with back-off
 (5, 10, 20, 30, 60 s).
+
+## Security (alarm, sensors and cameras from Home Assistant)
+Read-only. The alarm is an `alarm_control_panel` entity: the Alarmo one by default (its state has `arm_mode` and
+`open_sensors`), else the first panel. Sensors are the enabled ones set up in Alarmo, read with Alarmo's
+`alarmo/sensors` WebSocket command (no Alarmo = no sensor list). Cameras are HA `camera` entities: UniFi Protect ones
+are shown by default, one per camera (its best channel); each camera's person sensor is the "Person detected"
+`binary_sensor` on the same device (entity registry `list_for_display`), else one named after the camera. What HA
+offers is read again every 5 minutes (or with `refresh`). Screens only ever name a shown camera.
+- `GET /api/security` -> `{configured, reachable, error, sensors_source: "alarmo"|"none",
+  alarm: {entity_id, name, state, label, armed, alarmo, available, changed_by, last_changed, next_state, delay,
+  open_sensors: [names]} | null,
+  sensors: [{entity_id, name, group: "doors"|"windows"|"motion"|"environment"|"other", state, label ("Open",
+  "Closed", "Motion", "Clear", "Detected", "Unavailable"...), active, available, armed (guarded in the current mode),
+  last_changed}], cameras: [{entity_id, name, available, person: bool, snapshot_url, live_url}], alerts: [Alert]}`.
+  `configured: false` without Home Assistant. Sensor names drop a device prefix most of them share ("Alarm Panel").
+- `GET /api/security/alerts` -> `[{camera, name, since, test, live_url, snapshot_url}]`: shown cameras whose person
+  sensor is on now (or a test). Screens pop these up.
+- `GET /api/security/options?refresh=false` -> `{alarm_entity, panels: [{entity_id, name, alarmo, state}],
+  cameras: [{entity_id, name, show, person, auto_person, default_person, available}], person_sensors: [{entity_id,
+  name}], sensors_source, sensor_count, popup}` for Settings > Security. 409 without HA, 502 HA unreachable.
+- `GET /api/security/cameras/{entity}/snapshot?width=` -> a JPEG from HA's `/api/camera_proxy` (resized by HA to
+  `width` and the camera's aspect; 160..1920). 404 for a camera that isn't shown.
+- `GET /api/security/cameras/{entity}/live?width=` -> `multipart/x-mixed-replace` MJPEG for an `<img>`, made from
+  snapshots about twice a second (the Supervisor proxy buffers whole answers, so HA's own MJPEG stream can't pass
+  through). Screens watching the same camera share snapshots; a feed ends after 15 minutes; at most 8 at once (503).
+- `POST /api/security/test-alert` `{camera, pin}` -> `{ok, seconds: 20}`: pops the camera up on the screens as if a
+  person were there.
+
+Live updates: the panel, the sensors and the shown cameras' person sensors are followed over HA's WebSocket like the
+speakers (polling `/api/states` while it's down). Any change broadcasts `security`; a change in which cameras have a
+person broadcasts `security_alert`.
 
 ## Summary (for the Home Assistant integration)
 - `GET /api/summary?date=YYYY-MM-DD&now=YYYY-MM-DDTHH:MM` (both optional; default today / now) ->

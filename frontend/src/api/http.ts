@@ -1,4 +1,4 @@
-import { Api, ApiError, Display, NowPlaying, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
+import { Api, ApiError, Display, NowPlaying, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -41,6 +41,7 @@ export function httpApi(base = ""): Api {
   const rec = (r: Recipe): Recipe => ({ ...r, photo_url: pic(r.photo_url), steps: r.steps.map((s) => ({ ...s, photo_url: pic(s.photo_url) })) });
   const recipe = async (p: Promise<Recipe>) => rec(await p);
   const batch = (b: RecipeBatch): RecipeBatch => ({ ...b, drafts: b.drafts.map((d) => ({ ...d, recipe: rec(d.recipe) })) });
+  const cam = <T extends { live_url: string; snapshot_url: string }>(c: T): T => ({ ...c, live_url: base + c.live_url, snapshot_url: base + c.snapshot_url });
   const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;
@@ -174,5 +175,12 @@ export function httpApi(base = ""): Api {
     mediaPlayers: () => get("/api/media/players"),
     mediaFavourites: (layout) => get("/api/media/favourites" + q({ layout })),
     playFavourite: (layout, uri) => artUrl(req("POST", "/api/media/play", { layout, uri })),
+    async security() {
+      const r = await get<SecurityOverview>("/api/security");
+      return { ...r, cameras: r.cameras.map(cam), alerts: r.alerts.map(cam) };
+    },
+    securityAlerts: async () => (await get<SecurityAlert[]>("/api/security/alerts")).map(cam),
+    securityOptions: (refresh = false) => get("/api/security/options" + (refresh ? "?refresh=true" : "")),
+    testSecurityAlert: async (camera, pin) => { await req("POST", "/api/security/test-alert", { camera, pin }); },
   };
 }

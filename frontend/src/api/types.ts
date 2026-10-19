@@ -25,17 +25,19 @@ export interface Settings {
   screens?: Partial<Record<Layout, ScreenSetup>>;
   /** Public holidays that repeats can skip: ISO country code and optional region ("" = whole country). */
   holidays?: HolidayRegion;
+  /** Settings > Security: the alarm panel ("" = none, absent = automatic), per-camera choices, pop-up per style. */
+  security?: SecuritySettings;
 }
 export interface HolidayRegion { country: string; subdiv: string }
 export interface Holiday { date: string; name: string }
 export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
-export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists";
-export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"];
+export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "security";
+export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "security"];
 export interface ScreenSetup { start: Section; sections: Section[] }
 export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
-  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists"] },
+  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "security"] },
   compact: { start: "today", sections: [...SECTIONS] },
-  phone: { start: "today", sections: [...SECTIONS] },
+  phone: { start: "today", sections: SECTIONS.filter((s) => s !== "security") },
 };
 
 export type Freq = "daily" | "weekly" | "monthly";
@@ -192,7 +194,53 @@ export interface PhotoAlbum { id: string; name: string; updated_at: string | nul
 /** `albums` (newest first) is what the screensaver plays, one whole album at a time; older servers send only `photos`. */
 export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[]; albums?: PhotoAlbum[] }
 
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media";
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert";
+
+// Security (see API.md "Security"): the alarm, Alarmo's sensors and the cameras, from Home Assistant.
+export interface SecuritySettings {
+  alarm_entity?: string;
+  /** null person = automatic (the camera's own "Person detected" sensor); "" = never pop up. */
+  cameras?: Record<string, { show?: boolean; person?: string | null }>;
+  popup?: Record<Layout, boolean>;
+}
+export interface SecuritySettingsPatch {
+  alarm_entity?: string | null;
+  cameras?: Record<string, { show?: boolean; person?: string | null } | null>;
+  popup?: Partial<Record<Layout, boolean>>;
+}
+export interface AlarmState {
+  entity_id: string; name: string;
+  /** HA alarm state: disarmed, armed_home, armed_away, armed_night, arming, pending, triggered... */
+  state: string; label: string; armed: boolean; alarmo: boolean; available: boolean;
+  changed_by: string | null; last_changed: string | null; next_state: string | null; delay: number | null;
+  /** Sensors keeping it from arming (Alarmo), by name. */
+  open_sensors: string[];
+}
+export type SensorGroup = "doors" | "windows" | "motion" | "environment" | "other";
+export interface SecuritySensor {
+  entity_id: string; name: string; group: SensorGroup; state: string;
+  /** "Open", "Closed", "Motion", "Clear", "Unavailable"... */
+  label: string; active: boolean; available: boolean;
+  /** Guarded in the alarm's current mode. */
+  armed: boolean; last_changed: string | null;
+}
+/** `snapshot_url` / `live_url` are ready for <img src> (live is MJPEG, about two pictures a second). */
+export interface SecurityCamera { entity_id: string; name: string; available: boolean; person: boolean; snapshot_url: string; live_url: string }
+export interface SecurityAlert { camera: string; name: string; since: string | null; test: boolean; live_url: string; snapshot_url: string }
+export interface SecurityOverview {
+  configured: boolean; reachable: boolean; error: string | null;
+  /** "alarmo" when the sensor list came from Alarmo, "none" when there is no sensor list. */
+  sensors_source: "alarmo" | "none";
+  alarm: AlarmState | null; sensors: SecuritySensor[]; cameras: SecurityCamera[]; alerts: SecurityAlert[];
+}
+export interface SecurityOptions {
+  alarm_entity: string;
+  panels: { entity_id: string; name: string; alarmo: boolean; state: string }[];
+  cameras: { entity_id: string; name: string; show: boolean; person: string; auto_person: boolean; default_person: string; available: boolean }[];
+  person_sensors: { entity_id: string; name: string }[];
+  sensors_source: "alarmo" | "none"; sensor_count: number;
+  popup: Record<Layout, boolean>;
+}
 
 /** GET /api/media/now-playing: the speaker set for this screen's layout (see API.md "Music"). */
 export interface NowPlaying {
@@ -262,7 +310,7 @@ export interface Api {
   subscribe(fn: (topic: Topic) => void): () => void;
   settings(): Promise<Settings>;
   /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
-  updateSettings(patch: Partial<Omit<Settings, "screens">> & { screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
+  updateSettings(patch: Partial<Omit<Settings, "screens" | "security">> & { security?: SecuritySettingsPatch; screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
   verifyPin(pin: string): Promise<boolean>;
   people(): Promise<Person[]>;
   createPerson(p: PersonIn): Promise<Person>;
@@ -383,5 +431,12 @@ export interface Api {
   mediaPlayers(): Promise<MediaPlayerOption[]>;
   mediaFavourites(layout: Layout): Promise<MediaFavourite[]>;
   playFavourite(layout: Layout, uri: string): Promise<NowPlaying>;
+  // Security (see API.md "Security")
+  security(): Promise<SecurityOverview>;
+  securityAlerts(): Promise<SecurityAlert[]>;
+  /** For Settings > Security; `refresh` asks Home Assistant again instead of using what it said a few minutes ago. */
+  securityOptions(refresh?: boolean): Promise<SecurityOptions>;
+  /** Pop a camera up on the screens for a few seconds, as if someone were there. */
+  testSecurityAlert(camera: string, pin: string): Promise<void>;
   resetDemo?(): Promise<void>;
 }

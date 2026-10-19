@@ -98,6 +98,22 @@ Moonlight follows the speaker over Home Assistant's WebSocket API, so changes ma
 apps appear straight away; while Home Assistant restarts it falls back to checking every few seconds. Album art is
 fetched by the add-on and passed on to the screens, which never see a Home Assistant token.
 
+## Security
+
+The Security section shows your alarm, its sensors and your cameras from Home Assistant, live:
+
+- **Alarm**: the Alarmo alarm if you use Alarmo (otherwise the first alarm panel); choose another, or none, in
+  Settings > Security. It shows armed or disarmed, who changed it and when, and which sensors stop it arming.
+- **Sensors**: the ones you set up in Alarmo, grouped into doors, windows, motion and smoke or leaks, with a lock on
+  the ones guarded in the current mode.
+- **Cameras**: UniFi Protect cameras appear on their own (through the UniFi Protect integration); other cameras can be
+  turned on in Settings > Security. Tap one to watch it full size.
+
+When a camera's "Person detected" sensor turns on, the camera pops up live in the corner of the wall screens (over the
+screensaver too) and goes away 15 seconds after the person has gone; tap it to watch full size or the cross to close
+it. Settings > Security chooses which styles of screen pop up (large and compact by default), which sensor each camera
+uses, and has a **Test pop-up** button. The live picture is made from camera snapshots about twice a second.
+
 ## Calendars
 
 Settings > Calendars > Connect iCloud with an Apple ID and an app-specific password
