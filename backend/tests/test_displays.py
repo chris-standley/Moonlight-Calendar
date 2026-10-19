@@ -207,7 +207,8 @@ def test_one_address_and_per_screen_setup(app_on, ha):
     assert s.get("/display").status_code == 200
     token, d = pair(ha, s, name="Landing", layout="large")
     assert d["layout"] == "large" and d["own_setup"] is False
-    assert d["setup"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists"],
+    assert d["setup"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists",
+                                                         "nursery"],
                           "speaker": "", "idle_minutes": 5}
     auth = {"Authorization": f"Bearer {token}"}
     me = s.get("/api/auth/status", headers=auth).json()["display"]

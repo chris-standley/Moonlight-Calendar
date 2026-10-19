@@ -9,6 +9,7 @@ import { FamilyPanel } from "./FamilySettings";
 import { WeatherPicker } from "./WeatherSettings";
 import { HolidayPicker } from "./HolidaySettings";
 import { RecipesPanel } from "./RecipeSettings";
+import { NurseryPanel } from "./NurserySettings";
 import { useHolidayRegionName } from "../components/holidays";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
@@ -80,6 +81,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
         {pickWx && <WeatherPicker onClose={() => setPickWx(false)} />}
         {pickHols && <HolidayPicker onClose={() => setPickHols(false)} />}
         <RecipesPanel />
+        <NurseryPanel />
         <SampleDataPanel />
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />

@@ -4,7 +4,7 @@ import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
-  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconRecipes, IconSettings, IconStar, Logo, WeatherIcon,
+  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconNursery, IconRecipes, IconSettings, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -18,8 +18,9 @@ import { SyncBanner } from "./views/SyncBanner";
 import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
 import { TimerTray } from "./views/recipes/TimerTray";
 import { RecipesView } from "./views/RecipesView";
+import { NurseryButton, NurseryFeed, NurseryView, useNurseryFeed } from "./views/NurseryView";
 
-type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "settings";
+type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { key: "today", label: "Today", icon: IconHome },
   { key: "calendar", label: "Calendar", icon: IconCalendar },
@@ -28,6 +29,7 @@ const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode 
   { key: "meals", label: "Meals", icon: IconMeals },
   { key: "recipes", label: "Recipes", icon: IconRecipes },
   { key: "lists", label: "Lists", icon: IconLists },
+  { key: "nursery", label: "Nursery", icon: IconNursery },
   { key: "settings", label: "Settings", icon: IconSettings },
 ];
 const THEME_KEY = "moonlight-theme";
@@ -66,6 +68,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [saver, setSaver] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const nursery = useNurseryFeed(api);
 
   useEffect(() => {
     const load = () => {
@@ -125,7 +128,9 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   const personById = useCallback((id: string | null | undefined) => people.find((p) => p.id === id), [people]);
 
   // Sections chosen for this screen, else for its style (Settings > Screens); Settings itself is always there.
-  const setup = screen?.setup ?? settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+  const chosen = screen?.setup ?? settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
+  // Nursery only once Tapestry is connected (Settings › Nursery).
+  const setup = { ...chosen, sections: chosen.sections.filter((x) => x !== "nursery" || nursery.config?.configured) };
   const nav = NAV.filter((n) => n.key === "settings" || setup.sections.includes(n.key as Section));
   // Open on the chosen start section once settings arrive, and leave a section that was just hidden.
   const opened = useRef(false);
@@ -165,13 +170,15 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
           {nav.map((n) => (
             <button key={n.key} className={"rail-item" + (tab === n.key ? " on" : "")} onClick={() => setTab(n.key)}>
               <n.icon size={layout === "large" ? 30 : layout === "phone" ? 21 : 24} />
+              {n.key === "nursery" && nursery.unread > 0 && tab !== "nursery" && <i className="rail-dot" aria-label="New" />}
               <span>{n.label}</span>
             </button>
           ))}
         </nav>
         <main className="main">
           {/* A compact screen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
-          <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")} />
+          <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")}
+            nursery={setup.sections.includes("nursery") ? null : nursery} />
           {ready && <SyncBanner onOpen={() => setTab("settings")} />}
           <div className={"content" + (lift > 0 ? " lifted" : "")} ref={content} style={lift ? { marginTop: -lift } : undefined}>
             {ready && <>
@@ -182,6 +189,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
               {tab === "meals" && <MealsView />}
               {tab === "recipes" && <RecipesView />}
               {tab === "lists" && <ListsView />}
+              {tab === "nursery" && <NurseryView feed={nursery} />}
               {tab === "settings" && <SettingsView onScreensaver={() => setSaver(true)} />}
             </>}
           </div>
@@ -197,7 +205,8 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   );
 }
 
-function TopBar({ familyName, music }: { familyName: string; music: boolean }) {
+/** `nursery`: a button for the updates, on screens whose menu has no Nursery section. */
+function TopBar({ familyName, music, nursery }: { familyName: string; music: boolean; nursery: NurseryFeed | null }) {
   const now = useNow(10_000);
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
   const { api, settings } = useApp();
@@ -209,6 +218,7 @@ function TopBar({ familyName, music }: { familyName: string; music: boolean }) {
       <div className="tb-date">{fmtFull(today())}</div>
       {wx && <div className="tb-wx"><WeatherIcon condition={wx.condition} size={34} /> {wx.temp}°</div>}
       {music && <NowPlayingPill />}
+      {nursery && <NurseryButton feed={nursery} />}
       <div className="tb-family">{familyName}</div>
     </header>
   );

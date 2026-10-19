@@ -26,6 +26,9 @@ iPhone, a phone that unfolds, iPad Split View and Slide Over, Stage Manager wind
 
 Text uses the system's text styles in the rounded design, so Dynamic Type works.
 
+Once Tapestry is connected (Settings › Nursery on a wall screen), Today has a nursery button at the top left with
+the number of new updates; it opens the updates with their photos.
+
 ### Recipes
 
 The Recipes tab is the family recipe box: search, favourites, tags, and a page per recipe with its picture, rating,
@@ -89,6 +92,7 @@ Assistant's address: Home Assistant's login page opens in a sign-in sheet and th
 | Rewards | Each child's stars, rewards with progress, recent stars | Redeem a reward (parent PIN on a number pad) |
 | Meals | The week's meal plan | Previous / next week |
 | Lists | Shopping and to-do lists | Select an item to tick it off |
+| Nursery | Nursery updates from Tapestry, once connected (Settings › Nursery on a wall screen) | Pick an update; open its photos full screen |
 | Photos | The Immich screensaver photos | Full-screen slideshow with the clock |
 | Settings | What this Apple TV is paired with | Forget it and pair again |
 

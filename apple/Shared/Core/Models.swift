@@ -199,6 +199,52 @@ struct Photo: Codable, Identifiable, Hashable {
     }
 }
 
+/// Nursery updates from Tapestry (GET /api/nursery and /api/nursery/updates).
+struct NurseryConfig: Codable {
+    let configured: Bool
+    var school_name: String? = nil
+    var status: String = "unconfigured"
+}
+
+struct NurseryUpdate: Codable, Identifiable, Hashable {
+    struct Child: Codable, Hashable { let name: String; var person_id: String? = nil; var color: String? = nil }
+    struct Picture: Codable, Hashable { let url: String; var video: Bool = false }
+    struct Comment: Codable, Hashable { var author: String = ""; let text: String }
+    let id: String
+    let title: String
+    var notes: String = ""
+    var author: String = ""
+    /// When the nursery wrote it, local time: YYYY-MM-DDTHH:MM:SS (or a bare date).
+    let date: String
+    var children: [Child] = []
+    var photos: [Picture] = []
+    var comments: [Comment] = []
+
+    /// "Today, 11:20am", "Yesterday", "Fri 16 Oct, 10:15am".
+    func whenText(today: String) -> String {
+        let p = DateFormatter()
+        p.locale = Locale(identifier: "en_US_POSIX")
+        p.dateFormat = "yyyy-MM-dd"
+        guard let day = p.date(from: String(date.prefix(10))), let now = p.date(from: today) else { return date }
+        let ago = Calendar.current.dateComponents([.day], from: day, to: now).day ?? 99
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_GB")
+        f.dateFormat = "EEE d MMM"
+        var text = ago == 0 ? "Today" : ago == 1 ? "Yesterday" : f.string(from: day)
+        if date.count >= 16 {
+            p.dateFormat = "yyyy-MM-dd'T'HH:mm"
+            let t = String(date.prefix(16))
+            if !t.hasSuffix("00:00"), let d = p.date(from: t) {
+                f.dateFormat = Calendar.current.component(.minute, from: d) == 0 ? "ha" : "h:mma"
+                f.amSymbol = "am"
+                f.pmSymbol = "pm"
+                text += ", " + f.string(from: d)
+            }
+        }
+        return text
+    }
+}
+
 struct PhotoList: Codable {
     let source: String
     let photos: [Photo]

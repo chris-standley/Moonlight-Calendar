@@ -81,6 +81,14 @@ Turn on the add-on's `ssl` option to serve Moonlight over HTTPS on its own port 
 Let's Encrypt app, set `external_url`, and forward that port on the router. Pairing is always required there, devices
 can also "Sign in with Home Assistant", and port 8091 then only answers the home network. Steps: [addon/DOCS.md](addon/DOCS.md#access-from-the-internet).
 
+## Nursery updates (Tapestry)
+
+Updates from nursery on [Tapestry](https://tapestry.info): Settings > Nursery > Connect with your Tapestry email and
+password. Large screens and the Apple TV get a Nursery section (the updates down the side, the chosen one in full,
+photos full screen); compact screens, phones and the iPhone app's Today get a button with the number of new updates.
+Moonlight checks every 30 minutes and keeps the newest 40 with their photos. Tapestry has no public API, so this uses
+the website's own sign-in and data, unofficially.
+
 ## Photo screensaver (Immich)
 
 The idle screensaver shows photos from your [Immich](https://immich.app) server (for example the Immich add-on on the

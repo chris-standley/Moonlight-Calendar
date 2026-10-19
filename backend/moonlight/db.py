@@ -218,6 +218,33 @@ CREATE TABLE IF NOT EXISTS immich (
     updated_at   TEXT NOT NULL
 );
 """
+# Nursery updates from Tapestry (see tapestry.py): the family's login (one row; the password never leaves this file)
+# and a copy of the newest updates. Their photos are files in a "nursery" folder beside this database.
+TAPESTRY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS tapestry (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    email       TEXT NOT NULL,
+    password    TEXT NOT NULL,              -- never returned by the API
+    school      TEXT NOT NULL DEFAULT '',   -- which setting to open, for accounts at more than one ('' = the first)
+    school_name TEXT,                       -- the one opened at the last check
+    status      TEXT NOT NULL DEFAULT 'pending',  -- pending | ok | auth_failed | error
+    last_error  TEXT,
+    last_sync   TEXT,
+    updated_at  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS nursery_updates (
+    id         TEXT PRIMARY KEY,            -- Tapestry's observation id
+    title      TEXT NOT NULL,
+    notes      TEXT NOT NULL DEFAULT '',
+    author     TEXT NOT NULL DEFAULT '',
+    date       TEXT NOT NULL,               -- YYYY-MM-DDTHH:MM:SS, when the nursery wrote it
+    children   TEXT NOT NULL DEFAULT '[]',  -- names as Tapestry has them
+    photos     TEXT NOT NULL DEFAULT '[]',  -- [{mime, video}], file n in the nursery folder
+    comments   TEXT NOT NULL DEFAULT '[]',  -- [{author, date, text}]
+    signature  TEXT NOT NULL,               -- of Tapestry's list entry: read again when it changes
+    fetched_at TEXT NOT NULL
+);
+"""
 IMMICH_EXTRA_COLUMNS = {
     "skip_cert_check": "INTEGER NOT NULL DEFAULT 0",
     "mode": "TEXT NOT NULL DEFAULT 'albums'",
@@ -250,7 +277,7 @@ DEFAULT_SETTINGS = {
     # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
     # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
     "screens": {
-        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists"]},
+        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery"]},
         "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
         "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
     },
@@ -313,6 +340,7 @@ def init_db() -> None:
         c.executescript(IMMICH_SCHEMA)
         c.executescript(IMAGES_SCHEMA)
         c.executescript(BATCH_SCHEMA)
+        c.executescript(TAPESTRY_SCHEMA)
         have = {r[1] for r in c.execute("PRAGMA table_info(recipe_batches)")}
         for col, decl in (("cheaper", "INTEGER NOT NULL DEFAULT 0"), ("anthropic_id", "TEXT")):
             if col not in have:
@@ -339,6 +367,7 @@ def init_db() -> None:
                 c.execute(f"ALTER TABLE immich ADD COLUMN {col} {decl}")
         _rename_layouts(c)
         _add_recipes_section(c)
+        _add_nursery_section(c)
 
 
 # Screen styles were named after rooms until 0.3.8.
@@ -386,11 +415,36 @@ def _add_recipes_section(c: sqlite3.Connection) -> None:
     set_setting(c, RECIPES_MARKER, True)
 
 
+# Nursery (Tapestry updates) became a menu section in 0.5.7. Once, add it to the large screens' menus (it only shows
+# once Tapestry is connected); the marker keeps a later choice to hide it.
+NURSERY_MARKER = "nursery_section_added"
+
+
+def _add_nursery_section(c: sqlite3.Connection) -> None:
+    if get_setting(c, NURSERY_MARKER):
+        return
+    screens = get_setting(c, "screens")
+    if isinstance(screens, dict) and isinstance(screens.get("large"), dict):
+        secs = screens["large"].get("sections")
+        if isinstance(secs, list) and "nursery" not in secs:
+            screens["large"]["sections"] = secs + ["nursery"]
+            set_setting(c, "screens", screens)
+    for d in c.execute("SELECT id, setup FROM displays WHERE setup IS NOT NULL AND layout = 'large'").fetchall():
+        try:
+            setup = json.loads(d["setup"])
+        except ValueError:
+            continue
+        if isinstance(setup, dict) and isinstance(setup.get("sections"), list) and "nursery" not in setup["sections"]:
+            setup["sections"].append("nursery")
+            c.execute("UPDATE displays SET setup = ? WHERE id = ?", (json.dumps(setup), d["id"]))
+    set_setting(c, NURSERY_MARKER, True)
+
+
 def is_empty() -> bool:
     with connect() as c:
         n = c.execute(
-            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings WHERE key NOT IN ('instance_id', ?))",
-            (RECIPES_MARKER,),
+            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings WHERE key NOT IN ('instance_id', ?, ?))",
+            (RECIPES_MARKER, NURSERY_MARKER),
         ).fetchone()[0]
     return n == 0
 

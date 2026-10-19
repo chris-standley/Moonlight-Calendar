@@ -61,6 +61,7 @@ struct TodayScreen: View {
                 }
             }
         } tools: {
+            ToolbarItem(placement: .topBarLeading) { NurseryButton() }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { adding = .event } label: { Label("Event", systemImage: "calendar.badge.plus") }
