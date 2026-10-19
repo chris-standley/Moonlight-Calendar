@@ -33,6 +33,11 @@ LOGIN_PAGE = f"""<!doctype html><html><head><title>Tapestry - Log In</title>
   <button type="submit">Log in</button>
 </form></body></html>"""
 
+# Today's page: no form in the HTML (a script builds it), the token only in the JSON config.
+SCRIPT_LOGIN_PAGE = f"""<!doctype html><html><head><title>Tapestry - Log In</title></head><body>
+<div class="hidden">{{"csrf_token":"{TOKEN}","site_url":"https:\\/\\/tapestryjournal.com","school_id":null}}</div>
+<div id="root"></div></body></html>"""
+
 JOURNAL_PAGE = """<!doctype html><html><head><title>Tapestry</title></head><body>
 <div class="hidden">{"csrfToken":"api-token-xyz","user":{"id":5}}</div><div id="root"></div></body></html>"""
 
@@ -60,6 +65,7 @@ class FakeTapestry:
         self.expired = False
         self.blocked = False
         self.land_on_404 = False
+        self.script_login = False
         self.chosen: str | None = None
         self.observations = [obs(12), obs(11, notes="Painted a <b>rainbow</b>&nbsp;today!<br>Very proud.")]
         self.details = {
@@ -87,11 +93,21 @@ class FakeTapestry:
             return httpx.Response(403, html="<title>Just a moment...</title>",
                                   headers={"server": "cloudflare", "cf-mitigated": "challenge"})
         signed_in = req.headers.get("cookie", "").find("tapestry_session=good") >= 0
-        if path == "/login" and req.method == "GET":
-            return httpx.Response(200, html=LOGIN_PAGE, headers={"set-cookie": "tapestry_session=anon; Path=/; Secure"})
+        if path in ("/login", "/") and req.method == "GET" and (self.script_login or path == "/login") and not signed_in:
+            return httpx.Response(200, html=SCRIPT_LOGIN_PAGE if self.script_login else LOGIN_PAGE, headers={"set-cookie": "tapestry_session=anon; Path=/; Secure"})
         if path == "/login" and req.method == "POST":
             form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
             assert form["_token"] == TOKEN and "anon" in req.headers.get("cookie", "")
+            if self.script_login:
+                # Like the real site: a plain form post gets sent to "/1"; the script's JSON request signs in.
+                if "json" not in req.headers.get("accept", "") or req.headers.get("x-csrf-token") != TOKEN:
+                    return httpx.Response(302, headers={"location": "https://tapestryjournal.com/1"})
+                if form.get("email") != EMAIL or form.get("password") != PASSWORD:
+                    return httpx.Response(422, json={"message": "The given data was invalid.",
+                                                     "errors": {"email": ["These credentials do not match our records."]}})
+                self.logins += 1
+                return httpx.Response(200, json={"redirect": "https://tapestryjournal.com/"},
+                                      headers={"set-cookie": "tapestry_session=good; Path=/; Secure; HttpOnly"})
             if form.get("email") != EMAIL or form.get("password") != PASSWORD:
                 return httpx.Response(302, headers={"location": "https://tapestryjournal.com/login"})
             self.logins += 1
@@ -208,6 +224,14 @@ def test_blocked_sign_in_says_so_and_is_logged(client, fake, caplog):
 
 def test_landing_on_a_missing_page_after_signing_in_is_fine(client, fake):
     fake.land_on_404 = True  # the page after sign-in only exists in Tapestry's browser app
+    assert connect(client)["status"] == "ok"
+    assert len(client.get("/api/nursery/updates").json()) == 2
+
+
+def test_script_built_sign_in_page(client, fake):
+    fake.script_login = True
+    r = client.put("/api/nursery", json={"pin": PIN, "email": EMAIL, "password": "nope"})
+    assert r.status_code == 400 and "These credentials do not match our records" in r.json()["detail"]
     assert connect(client)["status"] == "ok"
     assert len(client.get("/api/nursery/updates").json()) == 2
 
