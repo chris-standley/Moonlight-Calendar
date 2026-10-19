@@ -73,7 +73,7 @@ class FakeHA:
         self.states = {s["entity_id"]: s for s in ha_states()}
         self.requests: list[httpx.Request] = []
         self.down = False
-        self.hls_tokens = {"camera.driveway_medium": "abc123", "camera.front_doorbell": "bell456"}
+        self.hls_tokens = {"camera.driveway_medium": "abc123", "camera.driveway": "hd999", "camera.front_doorbell": "bell456"}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -439,6 +439,18 @@ def test_video_passes_through_without_the_token(client, fake):
     assert any("/hls/abc123/" in q.url.path for q in fake.requests)
 
 
+def test_full_resolution_video_for_big_screens(client, fake):
+    cams = {c["entity_id"]: c for c in client.get("/api/security").json()["cameras"]}
+    url = cams["camera.driveway"]["video_hd_url"]
+    assert url == "/api/security/cameras/camera.driveway/hd/hls/master_playlist.m3u8"
+    assert client.get(url).status_code == 200
+    assert any("/hls/hd999/" in q.url.path for q in fake.requests)
+    assert not any("/hls/abc123/" in q.url.path for q in fake.requests)
+    # A camera with no lighter channel has one stream for both.
+    assert cams["camera.front_doorbell"]["video_hd_url"] == cams["camera.front_doorbell"]["video_url"]
+    assert client.get("/api/security/cameras/camera.driveway/hd/hls/../states").status_code == 404
+
+
 def test_video_token_renewed_when_the_stream_restarts(client, fake):
     assert client.get("/api/security/cameras/camera.front_doorbell/hls/master_playlist.m3u8").status_code == 200
     fake.hls_tokens["camera.front_doorbell"] = "new789"
@@ -456,5 +468,5 @@ def test_no_video_for_hidden_or_streamless_cameras(client, fake):
     svc = home_security.service()
     asyncio.run(svc.discover(force=True))
     cams = {c["entity_id"]: c for c in client.get("/api/security").json()["cameras"]}
-    assert cams["camera.front_doorbell"]["video_url"] is None
+    assert cams["camera.front_doorbell"]["video_url"] is None and cams["camera.front_doorbell"]["video_hd_url"] is None
     assert client.get("/api/security/cameras/camera.front_doorbell/hls/master_playlist.m3u8").status_code == 404

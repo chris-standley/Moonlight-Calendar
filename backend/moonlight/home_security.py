@@ -495,7 +495,9 @@ class SecurityService(media.MediaService):
         for cam in cameras:
             c = by_id.get(cam)
             if c and c.get("stream"):
-                asyncio.get_running_loop().create_task(self.hls_token(c["stream_entity"]))
+                # Both channels: the compact screens play the lighter one, large screens and the TV the full one.
+                for entity in {c["stream_entity"], c["entity_id"]}:
+                    asyncio.get_running_loop().create_task(self.hls_token(entity))
 
     # ---- pictures
     async def snapshot(self, entity: str, width: int | None = None) -> tuple[bytes, str] | None:
@@ -577,22 +579,26 @@ async def overview(svc: SecurityService) -> dict:
     sensors = [sensor_out(e, meta, states.get(e), names[e], panel_state) for e, meta in eff["sensors"].items()]
     sensors.sort(key=lambda s: (order.get(s["group"], 9), not s["active"], s["name"].lower()))
     cams = [{"entity_id": c["entity_id"], "name": c["name"], "available": c["available"], "person": bool(c["person"]),
-             **_urls(c["entity_id"], c.get("stream", False))}
+             **_urls(c)}
             for c in eff["cameras"] if c["show"]]
     return {"configured": True, "reachable": svc.last_error is None, "error": svc.found_error,
             "sensors_source": svc.sensors_source, "alarm": alarm, "sensors": sensors, "cameras": cams,
             "alerts": [_alert_out(a, eff) for a in svc.alerts_from(eff, states)]}
 
 
-def _urls(cam: str, stream: bool) -> dict:
-    base = f"/api/security/cameras/{cam}"
-    return {"snapshot_url": f"{base}/snapshot", "live_url": f"{base}/live",
-            "video_url": f"{base}/hls/master_playlist.m3u8" if stream else None}
+def _urls(cam: dict) -> dict:
+    """Picture and video URLs of a camera. `video_url` is the lighter medium channel when there is one;
+    `video_hd_url` is always the camera's own (full resolution) stream, for big screens."""
+    base = f"/api/security/cameras/{cam['entity_id']}"
+    stream = cam.get("stream", False)
+    video = f"{base}/hls/master_playlist.m3u8" if stream else None
+    hd = f"{base}/hd/hls/master_playlist.m3u8" if stream and cam.get("stream_entity", cam["entity_id"]) != cam["entity_id"] else video
+    return {"snapshot_url": f"{base}/snapshot", "live_url": f"{base}/live", "video_url": video, "video_hd_url": hd}
 
 
 def _alert_out(a: dict, eff: dict) -> dict:
-    stream = any(c["entity_id"] == a["camera"] and c.get("stream") for c in eff["cameras"])
-    return {**a, **_urls(a["camera"], stream)}
+    cam = next((c for c in eff["cameras"] if c["entity_id"] == a["camera"]), {"entity_id": a["camera"]})
+    return {**a, **_urls(cam)}
 
 
 async def alerts(svc: SecurityService) -> list[dict]:

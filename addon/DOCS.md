@@ -114,8 +114,8 @@ screensaver is showing, the camera takes the photo's place full screen instead) 
 it. Settings > Security chooses which styles of screen pop up (large and compact by default), which sensor each camera
 uses, and has a **Test pop-up** button. The live picture is Home Assistant's own video
 stream of the camera. For a lighter stream on a Raspberry Pi, enable each camera's "Medium resolution channel" entity in
-Home Assistant (Moonlight uses it when it's there); turning on "Preload stream" in the camera's settings makes the video
-start faster. Cameras that can't stream fall back to snapshots about twice a second.
+Home Assistant: compact screens then play it, while large screens and the Apple TV keep the full resolution. Turning on
+"Preload stream" in each camera entity's settings makes the video start faster. Cameras that can't stream fall back to snapshots about twice a second.
 
 ## Calendars
 

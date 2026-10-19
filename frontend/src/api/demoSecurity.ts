@@ -54,10 +54,10 @@ export function demoSecurity(emit: (...t: Topic[]) => void, settings: () => Secu
   };
   const shown = (): SecurityCamera[] => cams().filter((c) => c.show).map((c) => ({
     entity_id: c.entity_id, name: c.name, available: true, person: !!c.personSensor,
-    snapshot_url: scene(c, false), live_url: scene(c, true), video_url: null,
+    snapshot_url: scene(c, false), live_url: scene(c, true), video_url: null, video_hd_url: null,
   }));
   const alerts = (): SecurityAlert[] => cams().filter((c) => c.show && (tests.get(c.entity_id) ?? 0) > Date.now()).map((c) => ({
-    camera: c.entity_id, name: c.name, since: new Date().toISOString(), test: true, live_url: scene(c, true), snapshot_url: scene(c, false), video_url: null,
+    camera: c.entity_id, name: c.name, since: new Date().toISOString(), test: true, live_url: scene(c, true), snapshot_url: scene(c, false), video_url: null, video_hd_url: null,
   }));
   const alarmEntity = () => settings()?.alarm_entity ?? PANEL.entity_id;
   return {

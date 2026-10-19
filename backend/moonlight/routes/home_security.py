@@ -107,14 +107,25 @@ async def live(entity: str, width: int | None = None):
 
 @router.get("/cameras/{entity}/hls/{path:path}")
 async def hls(entity: str, path: str, request: Request):
-    """Home Assistant's HLS video of the camera (playlists and segments), passed through without its token."""
+    """Home Assistant's HLS video of the camera (playlists and segments), passed through without its token.
+    Plays the lighter medium-resolution channel when it's enabled in Home Assistant."""
+    return await _hls(entity, path, request, hd=False)
+
+
+@router.get("/cameras/{entity}/hd/hls/{path:path}")
+async def hls_hd(entity: str, path: str, request: Request):
+    """The camera's own full-resolution video, for large screens and the TV."""
+    return await _hls(entity, path, request, hd=True)
+
+
+async def _hls(entity: str, path: str, request: Request, hd: bool):
     svc = _svc()
     if svc.found is None:
         await svc.config()
     cam = _camera(entity, svc)
     if not cam.get("stream") or not home_security.HLS_PATH_RE.match(path) or ".." in path:
         raise HTTPException(status_code=404, detail="No video")
-    status, body, ctype = await svc.hls(cam["stream_entity"], path, request.url.query)
+    status, body, ctype = await svc.hls(entity if hd else cam["stream_entity"], path, request.url.query)
     if status != 200:
         return Response(status_code=404 if status == 404 else 502)
     return Response(body, media_type=ctype, headers={"Cache-Control": "no-cache"})

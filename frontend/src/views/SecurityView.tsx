@@ -141,17 +141,19 @@ function CameraTile({ cam, person, onOpen }: { cam: SecurityCamera; person: bool
   );
 }
 
-type CamUrls = { live_url: string; snapshot_url: string; video_url: string | null };
+type CamUrls = { live_url: string; snapshot_url: string; video_url: string | null; video_hd_url: string | null };
 
 /** A camera, live: Home Assistant's HLS video when the camera has it (hls.js, or the browser itself on Apple
- * devices), else, or if the video fails, the snapshot MJPEG feed. The snapshot shows while the video starts. */
+ * devices), else, or if the video fails, the snapshot MJPEG feed. The snapshot shows while the video starts.
+ * Large screens play the camera's full resolution; the others its lighter medium channel when there is one. */
 export function CameraVideo({ cam, width, fit = "cover" }: { cam: CamUrls; width: number; fit?: "cover" | "contain" }) {
+  const { layout } = useApp();
   const ref = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
   // The MJPEG feed ends after a quarter of an hour; open a new one before that if it's still showing.
   const [round, setRound] = useState(0);
   useEffect(() => { const t = setInterval(() => setRound((r) => r + 1), 10 * 60_000); return () => clearInterval(t); }, []);
-  const video = failed ? null : cam.video_url;
+  const video = failed ? null : (layout === "large" ? cam.video_hd_url : null) ?? cam.video_url;
   useEffect(() => {
     const el = ref.current;
     if (!video || !el) return;

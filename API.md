@@ -342,7 +342,7 @@ offers is read again every 5 minutes (or with `refresh`). Screens only ever name
   "Closed", "Motion", "Clear", "Detected", "Unavailable"...), active, available, armed (guarded in the current mode),
   last_changed}], cameras: [{entity_id, name, available, person: bool, snapshot_url, live_url}], alerts: [Alert]}`.
   `configured: false` without Home Assistant. Sensor names drop a device prefix most of them share ("Alarm Panel").
-- `GET /api/security/alerts` -> `[{camera, name, since, test, live_url, snapshot_url, video_url}]`: shown cameras whose person
+- `GET /api/security/alerts` -> `[{camera, name, since, test, live_url, snapshot_url, video_url, video_hd_url}]`: shown cameras whose person
   sensor is on now (or a test). Screens pop these up.
 - `GET /api/security/options?refresh=false` -> `{alarm_entity, panels: [{entity_id, name, alarmo, state}],
   cameras: [{entity_id, name, show, person, auto_person, default_person, available}], person_sensors: [{entity_id,
@@ -357,6 +357,9 @@ offers is read again every 5 minutes (or with `refresh`). Screens only ever name
   HLS video of the camera, passed through so HA's stream token stays on the add-on. Cameras and alerts carry it as
   `video_url` (null when the camera can't stream). Uses the camera's medium-resolution channel when it's enabled in
   HA (lighter for the screens); a stale token is renewed once. The stream is started as soon as a person is seen.
+- `GET /api/security/cameras/{entity}/hd/hls/master_playlist.m3u8` -> the same, always from the camera's own
+  full-resolution stream: `video_hd_url` (equal to `video_url` when HA has no lighter channel). Large screens and the
+  Apple TV play this one.
 - `POST /api/security/test-alert` `{camera, pin}` -> `{ok, seconds: 20}`: pops the camera up on the screens as if a
   person were there.
 

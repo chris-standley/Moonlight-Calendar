@@ -225,9 +225,10 @@ export interface SecuritySensor {
   armed: boolean; last_changed: string | null;
 }
 /** `snapshot_url` / `live_url` are ready for <img src> (live is MJPEG, about two pictures a second). `video_url` is
- * Home Assistant's HLS video of the camera (smooth; hls.js or Safari), null when the camera has none. */
-export interface SecurityCamera { entity_id: string; name: string; available: boolean; person: boolean; snapshot_url: string; live_url: string; video_url: string | null }
-export interface SecurityAlert { camera: string; name: string; since: string | null; test: boolean; live_url: string; snapshot_url: string; video_url: string | null }
+ * Home Assistant's HLS video of the camera (smooth; hls.js or Safari), null when the camera has none; `video_hd_url` is its full
+ * resolution for large screens (the same as `video_url` when Home Assistant has no lighter channel). */
+export interface SecurityCamera { entity_id: string; name: string; available: boolean; person: boolean; snapshot_url: string; live_url: string; video_url: string | null; video_hd_url: string | null }
+export interface SecurityAlert { camera: string; name: string; since: string | null; test: boolean; live_url: string; snapshot_url: string; video_url: string | null; video_hd_url: string | null }
 export interface SecurityOverview {
   configured: boolean; reachable: boolean; error: string | null;
   /** "alarmo" when the sensor list came from Alarmo, "none" when there is no sensor list. */
