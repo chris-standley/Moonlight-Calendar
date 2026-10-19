@@ -136,6 +136,7 @@ struct APIClient: Sendable {
         try await send("POST", "/api/media/command", ["layout": layout, "action": action])
     }
     func photos() async throws -> PhotoList { try await get("/api/screensaver/photos") }
+    func securityAlerts() async throws -> [SecurityAlert] { try await get("/api/security/alerts") }
 
     // MARK: Editing (phone and tablet; the TV only ticks things off)
 

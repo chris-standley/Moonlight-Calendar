@@ -3,10 +3,11 @@
 import seed from "../../../seed/demo.json";
 import {
   Account, Api, ApiError, Balance, BusyStatus, SyncCalendar, pickCalendar, CalEvent, Chore, ChoreDay, Item, LedgerEntry, Meal, Occurrence,
-  DEFAULT_IDLE, DEFAULT_SCREENS, HolidayCountry, HolidayRegion, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, Settings, TaskList, Topic, Weather,
+  DEFAULT_IDLE, DEFAULT_SCREENS, HolidayCountry, HolidayRegion, Layout, Person, PersonIn, Recipe, RecipeIn, Reward, SECTIONS, ScreenSetup, SecuritySettings, Settings, TaskList, Topic, Weather,
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
+import { demoSecurity } from "./demoSecurity";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 
@@ -405,7 +406,7 @@ export function demoApi(): Api {
     async updateSettings({ pin, new_pin, ...patch }) {
       checkPin(pin);
       if (new_pin != null && new_pin !== "" && !/^\d{4}$/.test(new_pin)) throw new ApiError(400, "new_pin must be 4 digits");
-      const { media_players, idle_minutes, screens, ...rest } = patch;
+      const { media_players, idle_minutes, screens, security, ...rest } = patch;
       if (rest.weather_entity != null && rest.weather_entity !== "" && !/^weather\.[a-z0-9_]+$/.test(rest.weather_entity))
         throw new ApiError(400, "weather_entity must be a weather entity id like weather.home, or empty for demo weather");
       if (rest.weather_entity === null) rest.weather_entity = "";
@@ -423,6 +424,19 @@ export function demoApi(): Api {
           throw new ApiError(400, "media_players must map large/compact/phone to a media_player entity id or empty");
         st.settings.media_players = { ...st.settings.media_players, ...media_players };
       }
+      if (security) {
+        const cur = st.settings.security ?? {};
+        const next: SecuritySettings = { ...cur, cameras: { ...cur.cameras }, popup: { large: true, compact: true, phone: false, tv: false, ...cur.popup, ...security.popup } };
+        if (security.alarm_entity === null) delete next.alarm_entity;
+        else if (security.alarm_entity !== undefined) next.alarm_entity = security.alarm_entity;
+        for (const [k, v] of Object.entries(security.cameras ?? {})) {
+          if (v === null) { delete next.cameras![k]; continue; }
+          const cam = { ...next.cameras![k], ...v };
+          if (v.person === null) delete cam.person;
+          next.cameras![k] = cam;
+        }
+        st.settings.security = next;
+      }
       if (idle_minutes) st.settings.idle_minutes = { ...st.settings.idle_minutes, ...idle_minutes };
       if (screens) {
         const cur = { ...DEFAULT_SCREENS, ...st.settings.screens };
@@ -439,7 +453,7 @@ export function demoApi(): Api {
         st.settings.screens = cur;
       }
       if (new_pin) st.settings.pin = new_pin;
-      emit("settings", "media", ...(patch.holidays ? (["events", "chores"] as const) : []));
+      emit("settings", "media", ...(security ? (["security", "security_alert"] as const) : []), ...(patch.holidays ? (["events", "chores"] as const) : []));
       return settingsOut();
     },
     verifyPin: async (pin) => pin === st.settings.pin,
@@ -698,6 +712,7 @@ export function demoApi(): Api {
       return { ...(s.screens?.[l] ?? DEFAULT_SCREENS[l]), speaker: s.media_players?.[l] ?? "", idle_minutes: s.idle_minutes?.[l] ?? DEFAULT_IDLE[l] };
     }),
     ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
+    ...demoSecurity(emit, () => st.settings.security, checkPin), // a pretend alarm and cameras
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {
       checkPin(a.pin);

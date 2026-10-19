@@ -4,6 +4,8 @@ import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { IconCamera, IconDrop, IconPhotos, WeatherIcon } from "../components/icons";
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
+import { alertTitle, useSaverCamera } from "./SecurityAlerts";
+import { CameraVideo } from "./SecurityView";
 
 // Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
 const SCENES = [
@@ -56,15 +58,18 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const { np } = useMedia();
   const music = !!np?.show && np.state === "playing";
   const day = weather?.daily.find((d) => d.date === t);
+  const cam = useSaverCamera(); // someone at a camera: its video takes the photo's place until they've gone
   return (
     <div className="screensaver" onClick={onWake}>
       {data && (usePhotos
         ? <PhotoShow key={listKey} albums={albums} seconds={seconds} onFail={() => setBroken(listKey)} onShow={setShown}
             onAlbum={(name) => setAlbum({ name, at: Date.now() })} />
         : <SceneShow seconds={seconds} />)}
+      {cam && <div className="ss-cam"><CameraVideo key={cam.camera} cam={cam} width={1920} fit="contain" /></div>}
       <div className="ss-shade" />
-      {usePhotos && shown && settings?.photo_details !== false && <PhotoCaption photo={shown} />}
-      {usePhotos && album && <AlbumToast key={album.at} name={album.name} />}
+      {cam && <div className="ss-cam-label"><span className="sec-live-dot" />{alertTitle(cam)}</div>}
+      {!cam && usePhotos && shown && settings?.photo_details !== false && <PhotoCaption photo={shown} />}
+      {!cam && usePhotos && album && <AlbumToast key={album.at} name={album.name} />}
       <div className="ss-info">
         {weather && <div className="ss-wx">
           <WeatherIcon condition={weather.current.condition} size={44} /> {weather.current.temp}°

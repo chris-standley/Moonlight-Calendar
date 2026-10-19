@@ -4,7 +4,7 @@ import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
-  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconRecipes, IconSettings, IconStar, Logo, WeatherIcon,
+  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -18,8 +18,10 @@ import { SyncBanner } from "./views/SyncBanner";
 import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
 import { TimerTray } from "./views/recipes/TimerTray";
 import { RecipesView } from "./views/RecipesView";
+import { SecurityView } from "./views/SecurityView";
+import { SecurityAlerts } from "./views/SecurityAlerts";
 
-type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "settings";
+type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "security" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { key: "today", label: "Today", icon: IconHome },
   { key: "calendar", label: "Calendar", icon: IconCalendar },
@@ -28,6 +30,7 @@ const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode 
   { key: "meals", label: "Meals", icon: IconMeals },
   { key: "recipes", label: "Recipes", icon: IconRecipes },
   { key: "lists", label: "Lists", icon: IconLists },
+  { key: "security", label: "Security", icon: IconShield },
   { key: "settings", label: "Settings", icon: IconSettings },
 ];
 const THEME_KEY = "moonlight-theme";
@@ -182,6 +185,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
               {tab === "meals" && <MealsView />}
               {tab === "recipes" && <RecipesView />}
               {tab === "lists" && <ListsView />}
+              {tab === "security" && <SecurityView />}
               {tab === "settings" && <SettingsView onScreensaver={() => setSaver(true)} />}
             </>}
           </div>
@@ -190,7 +194,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
         <TimerTray />
         <div className="toasts">{toasts.map((t) => <div key={t.id} className="toast">{t.msg}</div>)}</div>
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
-        {saver && ready && <Screensaver onWake={() => setSaver(false)} />}
+        {ready && <SecurityAlerts saver={saver}>{saver && <Screensaver onWake={() => setSaver(false)} />}</SecurityAlerts>}
        </MediaProvider>
       </div>
     </AppProvider>
