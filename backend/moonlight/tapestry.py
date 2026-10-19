@@ -296,6 +296,26 @@ def signature(o: dict) -> str:
 
 # ---------------------------------------------------------------- client
 
+def _json(r: httpx.Response) -> Any:
+    try:
+        return r.json()
+    except ValueError:
+        return None
+
+
+def _said(reply: Any) -> str:
+    """The message in a Laravel-style JSON error ({message, errors: {field: [..]}}), short and without the password."""
+    if not isinstance(reply, dict):
+        return ""
+    errors = reply.get("errors")
+    if isinstance(errors, dict):
+        for v in errors.values():
+            if isinstance(v, list) and v and isinstance(v[0], str):
+                return v[0][:200]
+    msg = reply.get("message") or reply.get("error")
+    return msg[:200] if isinstance(msg, str) else ""
+
+
 class Client:
     def __init__(self, email: str, password: str, school: str = "", base_url: str = BASE_URL) -> None:
         self.email, self._password, self.school = email.strip(), password, school.strip()
@@ -362,6 +382,8 @@ class Client:
             elif kind in ("hidden",) or (kind in ("checkbox", "radio") and name.startswith("remember")):
                 fields[name] = i["value"] or "1"
         fields.setdefault("_token", token)
+        if not form:
+            fields.setdefault("remember", "1")  # what the script-built sign-in sends alongside email and password
         if not any(v == self.email for v in fields.values()):
             fields["email"] = self.email
         if not any(v == self._password for v in fields.values()):
@@ -369,25 +391,43 @@ class Client:
         action = str(r.url.join((form or {}).get("action") or "/login"))
         if httpx.URL(action).host != httpx.URL(self.base).host:
             raise TapestryError("Tapestry's sign-in form points somewhere unexpected, so Moonlight didn't send the password")
+        log.info("Tapestry sign-in page: form %s, fields %s", (form or {}).get("action") or "(none, built by script)",
+                 ", ".join(fields))  # names only, never values
         try:
-            # Not following the redirect here: the sign-in itself is judged by this answer, and the page it sends
-            # us on to may well be a 404 (Tapestry's web app routes some pages in the browser) without that
-            # meaning anything went wrong.
-            r = await http.post(action, data=fields, headers={"Referer": str(r.url), "Origin": self.base},
-                                follow_redirects=False)
+            # Sent the way Tapestry's own sign-in page sends it (a script, asking for JSON), and without following
+            # a redirect: the sign-in is judged by this answer, not by whatever page it points at next.
+            r = await http.post(action, data=fields, follow_redirects=False, headers={
+                "Referer": str(r.url), "Origin": self.base, "Accept": "application/json, text/plain, */*",
+                "X-Requested-With": "XMLHttpRequest", "X-CSRF-TOKEN": token})
         except httpx.HTTPError as e:
             raise self._unreachable(e) from None
+        kind = r.headers.get("content-type", "").split(";")[0]
+        log.info("Tapestry sign-in answered %s %s%s", r.status_code, kind,
+                 f" -> {r.headers.get('location')}" if r.is_redirect else "")
         if r.status_code == 419:
             raise TapestryError("Tapestry turned the sign-in down (the page expired). Moonlight will try again")
         if r.status_code == 429:
             raise TapestryError("Tapestry has had too many sign-in attempts. Wait a while before trying again")
+        reply = _json(r) if kind.endswith("json") else None
+        if r.status_code in (401, 403, 422) and reply is not None:
+            said = _said(reply)
+            log.info("Tapestry sign-in reply: %s", said or "-")
+            raise AuthFailed("Tapestry didn't accept that email and password" + (f" (\"{said}\")" if said else "")
+                             + ". Check they work at tapestryjournal.com (accounts that sign in with Google or Microsoft "
+                             "can't be used)")
         if r.status_code >= 400:
             raise self._refused(r, f"signing in at {httpx.URL(action).path}")
-        if r.is_redirect and r.headers.get("location"):
-            r = await self._get(http, str(r.url.join(r.headers["location"])))
-        log.info("Tapestry sign-in landed on %s (%s)", r.url.path, r.status_code)
-        if r.status_code >= 400:
-            # Signed in but sent somewhere that doesn't exist: the home page takes us into the journal instead.
+        if isinstance(reply, dict):
+            log.info("Tapestry sign-in reply fields: %s", ", ".join(sorted(reply)) or "-")
+        nxt = r.headers.get("location") if r.is_redirect else None
+        if not nxt and isinstance(reply, dict):
+            nxt = next((v for k in ("redirect", "redirect_url", "redirectUrl", "url", "intended", "location")
+                        if isinstance(v := reply.get(k), str) and v), None)
+        if nxt:
+            r = await self._get(http, str(r.url.join(nxt)))
+            log.info("Tapestry sign-in went on to %s (%s)", r.url.path, r.status_code)
+        if not nxt or r.status_code >= 400:
+            # Nowhere useful to go next: the home page takes a signed-in account into its journal.
             r = await self._get(http, "/")
             log.info("Tapestry home page: %s (%s)", r.url.path, r.status_code)
         body = r.text
@@ -396,7 +436,8 @@ class Client:
             raise AuthFailed("This Tapestry account asks for a verification code when signing in, which Moonlight "
                              "can't do. Turn off two-step sign-in for this account, or use another carer's login")
         landed = parse_page(body)
-        if path == "/login" or any(i["type"] == "password" for f in landed.forms for i in f["inputs"]):
+        on_login = path in ("", "/login") and re.search(r"<title>[^<]*log\s*in", body, re.I)
+        if path == "/login" or on_login or any(i["type"] == "password" for f in landed.forms for i in f["inputs"]):
             raise AuthFailed("Tapestry didn't accept that email and password. Check they work at tapestryjournal.com "
                              "(accounts that sign in with Google or Microsoft can't be used)")
         if "select-school" in path:
