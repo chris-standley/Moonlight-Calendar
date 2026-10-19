@@ -14,9 +14,15 @@ Live: the panel, sensors and person sensors are followed over the WebSocket (Med
 broadcasts `security`; a change in who is at which camera also broadcasts `security_alert`, which the screens
 use to pop up that camera in a corner.
 
+Video: Home Assistant serves a camera as (low-latency) HLS once asked over the WebSocket (`camera/stream`, which
+also starts the stream). Moonlight keeps the stream's token and passes the playlists and segments through at
+/api/security/cameras/<camera>/hls/..., so the screens play real video (hls.js) without seeing any token. A
+Protect camera's medium channel is used when it's enabled in HA. The stream is asked for as soon as someone is
+seen, so it's warm when the pop-up opens.
+
 Pictures: the Supervisor proxy reads a whole answer before passing it on, so HA's endless MJPEG stream can't be
-proxied. A live feed is made here instead from HA's camera snapshots (/api/camera_proxy, resized by HA) about
-twice a second, served as MJPEG, which an <img> plays. Screens only ever name a camera that is shown, never any
+proxied. For cameras without HLS (and as the fallback) a live feed is made here from HA's camera snapshots
+(/api/camera_proxy, resized by HA) about twice a second, served as MJPEG, which an <img> plays. Screens only ever name a camera that is shown, never any
 other entity, and never see Home Assistant's token.
 """
 from __future__ import annotations
@@ -49,6 +55,9 @@ STREAM_MAX_SECONDS = 15 * 60  # a live feed ends after this; the screen opens a 
 MAX_STREAMS = 8
 TEST_ALERT_SECONDS = 20
 SNAPSHOT_MAX_BYTES = 5 * 1024 * 1024
+STREAM_FEATURE = 2            # CameraEntityFeature.STREAM: Home Assistant can serve the camera as HLS video
+HLS_PATH_RE = re.compile(r"^[A-Za-z0-9_\-][A-Za-z0-9_.\-]*(/[A-Za-z0-9_.\-]+)*$")
+HLS_TIMEOUT = 20.0            # low-latency HLS holds a playlist request until the next part is ready
 
 # Protect names each camera entity after its channel; the camera's own name is the device's.
 CHANNEL_SUFFIX = re.compile(r"\s+(high|medium|low) resolution channel(\s+\(insecure\))?$", re.I)
@@ -218,8 +227,10 @@ def discover(states: list[dict], registry: list[dict] | None, alarmo: dict | Non
             continue
         r = reg.get(eid, {})
         protect = r.get("pl") == "unifiprotect" or "unifi protect" in str(_attrs(st).get("attribution") or "").lower()
+        feats = _attrs(st).get("supported_features")
         cams.append({"entity_id": eid, "name": camera_name(st, eid), "device": r.get("di"), "protect": protect,
-                     "rank": _channel_rank(st), "available": st.get("state") not in ("unavailable", "unknown", None)})
+                     "rank": _channel_rank(st), "available": st.get("state") not in ("unavailable", "unknown", None),
+                     "stream": isinstance(feats, int) and bool(feats & STREAM_FEATURE)})
     # One per Protect camera: its best channel (the others are usually disabled anyway).
     same = lambda c: c["device"] or "name:" + _norm(c["name"])  # noqa: E731  (no registry: same name)
     best: dict[str, str] = {}
@@ -227,6 +238,11 @@ def discover(states: list[dict], registry: list[dict] | None, alarmo: dict | Non
         best.setdefault(same(cam), cam["entity_id"])
     used: set[str] = set()
     for cam in cams:
+        # Video comes from the camera's medium channel when Home Assistant has it (easier for a Pi to play than
+        # 2.7K), else from the camera itself.
+        lighter = [c for c in cams if c is not cam and c["device"] and same(c) == same(cam) and c["available"]
+                   and c["stream"] and c["rank"] == CHANNEL_RANK["medium"]]
+        cam["stream_entity"] = lighter[0]["entity_id"] if lighter and cam["rank"] == 0 else cam["entity_id"]
         cam["default_show"] = bool(cam["protect"] and cam["available"] and best[same(cam)] == cam["entity_id"])
         same_device = [p for p in person_sensors if cam["device"] and p["device"] == cam["device"]]
         by_name = [p for p in person_sensors if p["entity_id"] not in used
@@ -269,7 +285,8 @@ def effective(found: dict, conf: dict) -> dict:
         person = mine.get("person", cam["default_person"])
         cams.append({"entity_id": cam["entity_id"], "name": cam["name"], "show": bool(show), "person": person or "",
                      "auto_person": "person" not in mine, "default_person": cam["default_person"],
-                     "available": cam["available"]})
+                     "available": cam["available"], "stream_entity": cam.get("stream_entity", cam["entity_id"]),
+                     "stream": cam.get("stream", False)})
     sensors = found["alarmo_sensors"] or {}
     return {"alarm_entity": alarm, "sensors": sensors, "cameras": cams}
 
@@ -321,6 +338,8 @@ class SecurityService(media.MediaService):
         self._frames: dict[tuple, tuple[float, bytes, str]] = {}
         self._frame_locks: dict[tuple, asyncio.Lock] = {}
         self.streams = 0
+        self._hls: dict[str, str] = {}        # stream entity -> HLS token (HA keeps it for the stream's life)
+        self._hls_locks: dict[str, asyncio.Lock] = {}
 
     # ---- discovery
     async def _ws_commands(self, *commands: dict) -> list[Any]:
@@ -426,11 +445,57 @@ class SecurityService(media.MediaService):
                             "since": (st or {}).get("last_changed") if not test else media.utc_now_iso()})
         return out
 
-    def test_alert(self, camera: str) -> None:
+    def test_alert(self, camera: str, eff: dict) -> None:
         self.tests[camera] = self.clock() + TEST_ALERT_SECONDS
+        self.warm(eff, [camera])
         loop = asyncio.get_running_loop()
         loop.create_task(_broadcast_alerts())
         loop.call_later(TEST_ALERT_SECONDS + 0.2, lambda: loop.create_task(_broadcast_alerts()))
+
+    # ---- video
+    async def hls_token(self, entity: str, force: bool = False) -> str | None:
+        """The token of Home Assistant's HLS stream for `entity`, starting the stream if needed."""
+        lock = self._hls_locks.setdefault(entity, asyncio.Lock())
+        async with lock:
+            if entity in self._hls and not force:
+                return self._hls[entity]
+            try:
+                got, = await self._ws_commands({"type": "camera/stream", "entity_id": entity, "format": "hls"})
+            except Exception as e:
+                log.info("Couldn't start video for %s: %s", entity, media._describe(e))
+                return None
+            m = re.match(r"^/api/hls/([^/]+)/", str((got or {}).get("url") or ""))
+            if not m:
+                self._hls.pop(entity, None)
+                return None
+            self._hls[entity] = m.group(1)
+            return self._hls[entity]
+
+    async def hls(self, entity: str, path: str, query: str) -> tuple[int, bytes, str]:
+        """One HLS file (playlist, init or segment) of `entity`'s stream: (status, body, content type)."""
+        for attempt in (0, 1):
+            token = await self.hls_token(entity, force=attempt == 1)
+            if token is None:
+                return 404, b"", "text/plain"
+            url = f"/hls/{token}/{path}" + (f"?{query}" if query else "")
+            try:
+                async with self._client() as client:
+                    r = await client.get(url, timeout=HLS_TIMEOUT)
+            except Exception as e:
+                log.info("Video from %s: %s", entity, media._describe(e))
+                return 502, b"", "text/plain"
+            if r.status_code == 404 and attempt == 0:
+                continue  # the stream was restarted with a new token
+            return r.status_code, r.content, r.headers.get("content-type", "application/octet-stream")
+        return 404, b"", "text/plain"
+
+    def warm(self, eff: dict, cameras: list[str]) -> None:
+        """Start the video of cameras that just saw someone, so the pop-up plays straight away."""
+        by_id = {c["entity_id"]: c for c in eff["cameras"]}
+        for cam in cameras:
+            c = by_id.get(cam)
+            if c and c.get("stream"):
+                asyncio.get_running_loop().create_task(self.hls_token(c["stream_entity"]))
 
     # ---- pictures
     async def snapshot(self, entity: str, width: int | None = None) -> tuple[bytes, str] | None:
@@ -467,8 +532,9 @@ class SecurityService(media.MediaService):
                 self._frames[key] = (self.clock(), *got)
             return got
 
-    async def mjpeg(self, entity: str, width: int | None, max_seconds: float = STREAM_MAX_SECONDS,
+    async def mjpeg(self, entity: str, width: int | None, max_seconds: float | None = None,
                     frame_seconds: float = FRAME_SECONDS) -> AsyncIterator[bytes]:
+        max_seconds = STREAM_MAX_SECONDS if max_seconds is None else max_seconds
         self.streams += 1
         start = time.monotonic()
         misses = 0
@@ -511,24 +577,29 @@ async def overview(svc: SecurityService) -> dict:
     sensors = [sensor_out(e, meta, states.get(e), names[e], panel_state) for e, meta in eff["sensors"].items()]
     sensors.sort(key=lambda s: (order.get(s["group"], 9), not s["active"], s["name"].lower()))
     cams = [{"entity_id": c["entity_id"], "name": c["name"], "available": c["available"], "person": bool(c["person"]),
-             "snapshot_url": f"/api/security/cameras/{c['entity_id']}/snapshot",
-             "live_url": f"/api/security/cameras/{c['entity_id']}/live"}
+             **_urls(c["entity_id"], c.get("stream", False))}
             for c in eff["cameras"] if c["show"]]
     return {"configured": True, "reachable": svc.last_error is None, "error": svc.found_error,
             "sensors_source": svc.sensors_source, "alarm": alarm, "sensors": sensors, "cameras": cams,
-            "alerts": [_alert_out(a) for a in svc.alerts_from(eff, states)]}
+            "alerts": [_alert_out(a, eff) for a in svc.alerts_from(eff, states)]}
 
 
-def _alert_out(a: dict) -> dict:
-    cam = a["camera"]
-    return {**a, "live_url": f"/api/security/cameras/{cam}/live", "snapshot_url": f"/api/security/cameras/{cam}/snapshot"}
+def _urls(cam: str, stream: bool) -> dict:
+    base = f"/api/security/cameras/{cam}"
+    return {"snapshot_url": f"{base}/snapshot", "live_url": f"{base}/live",
+            "video_url": f"{base}/hls/master_playlist.m3u8" if stream else None}
+
+
+def _alert_out(a: dict, eff: dict) -> dict:
+    stream = any(c["entity_id"] == a["camera"] and c.get("stream") for c in eff["cameras"])
+    return {**a, **_urls(a["camera"], stream)}
 
 
 async def alerts(svc: SecurityService) -> list[dict]:
     eff = await svc.config()
     people = [c["person"] for c in eff["cameras"] if c["show"] and c["person"]]
     states = await svc.states_for(people)
-    return [_alert_out(a) for a in svc.alerts_from(eff, states)]
+    return [_alert_out(a, eff) for a in svc.alerts_from(eff, states)]
 
 
 # ---------------------------------------------------------------- module-level service
@@ -556,6 +627,7 @@ async def _changed() -> None:
         with contextlib.suppress(Exception):
             now = tuple(a["camera"] for a in await alerts(svc))
             if now != svc.last_alerts:
+                svc.warm(await svc.config(), [c for c in now if c not in svc.last_alerts])
                 svc.last_alerts = now
                 await hub.broadcast("security_alert")
 

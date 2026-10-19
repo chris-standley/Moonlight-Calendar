@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getToken } from "../api/pairing";
 import { AlarmState, SecurityCamera, SecuritySensor, SensorGroup } from "../api/types";
 import { useApp, useData, useNow } from "../state";
 import { Empty } from "../components/ui";
@@ -86,7 +87,7 @@ export function SecurityView() {
           {data.cameras.map((c) => <CameraTile key={c.entity_id} cam={c} person={people.has(c.entity_id)} onOpen={() => setLive(c)} />)}
         </div>
       </div>
-      {live && <LiveCamera name={live.name} url={live.live_url} onClose={() => setLive(null)} />}
+      {live && <LiveCamera name={live.name} cam={live} onClose={() => setLive(null)} />}
     </div>
   );
 }
@@ -140,20 +141,70 @@ function CameraTile({ cam, person, onOpen }: { cam: SecurityCamera; person: bool
   );
 }
 
-/** The camera full size, live. */
-export function LiveCamera({ name, url, onClose }: { name: string; url: string; onClose: () => void }) {
-  // The live feed ends after a quarter of an hour; open a new one before that if it's still showing.
+type CamUrls = { live_url: string; snapshot_url: string; video_url: string | null };
+
+/** A camera, live: Home Assistant's HLS video when the camera has it (hls.js, or the browser itself on Apple
+ * devices), else, or if the video fails, the snapshot MJPEG feed. The snapshot shows while the video starts. */
+export function CameraVideo({ cam, width, fit = "cover" }: { cam: CamUrls; width: number; fit?: "cover" | "contain" }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [failed, setFailed] = useState(false);
+  // The MJPEG feed ends after a quarter of an hour; open a new one before that if it's still showing.
   const [round, setRound] = useState(0);
+  useEffect(() => { const t = setInterval(() => setRound((r) => r + 1), 10 * 60_000); return () => clearInterval(t); }, []);
+  const video = failed ? null : cam.video_url;
   useEffect(() => {
-    const t = setInterval(() => setRound((r) => r + 1), 10 * 60_000);
+    const el = ref.current;
+    if (!video || !el) return;
+    let gone = false;
+    let hls: { destroy(): void } | null = null;
+    const fail = () => { if (!gone) setFailed(true); };
+    const play = () => { el.play().catch(() => { /* autoplay of a muted video is allowed; ignore a race */ }); };
+    if (el.canPlayType("application/vnd.apple.mpegurl")) {
+      el.src = video;
+      el.addEventListener("error", fail);
+      play();
+    } else {
+      import("hls.js").then(({ default: Hls }) => {
+        if (gone) return;
+        if (!Hls.isSupported()) { fail(); return; }
+        const h = new Hls({
+          lowLatencyMode: true, backBufferLength: 10, manifestLoadingTimeOut: 25_000, manifestLoadingMaxRetry: 2,
+          xhrSetup: (xhr) => { const t = getToken(); if (t) xhr.setRequestHeader("Authorization", `Bearer ${t}`); },
+        });
+        let recovered = false;
+        h.on(Hls.Events.ERROR, (_e, d) => {
+          if (!d.fatal) return;
+          if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !recovered) { recovered = true; h.recoverMediaError(); } else fail();
+        });
+        h.on(Hls.Events.MANIFEST_PARSED, play);
+        h.loadSource(video);
+        h.attachMedia(el);
+        hls = h;
+      }).catch(fail);
+    }
+    return () => {
+      gone = true;
+      hls?.destroy();
+      el.removeEventListener("error", fail);
+      el.removeAttribute("src");
+      el.load();
+    };
+  }, [video]);
+  if (!video) return <img className={"cam-media " + fit} key={round} src={sized(cam.live_url, width)} alt="" />;
+  return <video ref={ref} className={"cam-media " + fit} muted autoPlay playsInline poster={sized(cam.snapshot_url, width)} />;
+}
+
+/** The camera full size, live. */
+export function LiveCamera({ name, cam, onClose }: { name: string; cam: CamUrls; onClose: () => void }) {
+  useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
-    return () => { clearInterval(t); window.removeEventListener("keydown", k); };
+    return () => window.removeEventListener("keydown", k);
   }, [onClose]);
   return (
     <div className="sec-live" onClick={onClose}>
       <div className="sec-live-frame" onClick={(e) => e.stopPropagation()}>
-        <img key={round} src={sized(url, 1280)} alt={name} />
+        <CameraVideo cam={cam} width={1280} fit="contain" />
         <div className="sec-live-bar"><span className="sec-live-dot" />{name}
           <button className="icon-btn" onClick={onClose} aria-label="Close"><IconClose /></button></div>
       </div>

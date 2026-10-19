@@ -1145,6 +1145,11 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .sec-when { width: 6.2rem; text-align: right; color: var(--muted); font-size: 0.85rem; }
 .sec-cams { min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr)); gap: 1rem; align-content: start; }
 .sec-cam { position: relative; display: block; width: 100%; height: 0; padding-top: 56.25%; border-radius: calc(var(--radius) * 1.2); overflow: hidden; background: #1b1d24; box-shadow: var(--shadow); }
+.cam-media { display: block; width: 100%; height: 100%; background: #000; }
+.cam-media.cover { object-fit: cover; }
+.cam-media.contain { object-fit: contain; }
+.ss-cam { position: absolute; inset: 0; background: #000; animation: fade 0.4s; }
+.ss-cam-label { position: absolute; top: 1.4rem; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 0.6rem; padding: 0.5rem 1.3rem 0.5rem 1rem; border-radius: 999px; background: rgba(0, 0, 0, 0.55); font-size: 1.4rem; font-weight: 800; white-space: nowrap; }
 .sec-cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .sec-cam-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; color: #9a9eab; font-weight: 800; }
 .sec-cam-name { position: absolute; left: 0.7rem; bottom: 0.6rem; padding: 0.2rem 0.7rem; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: #fff; font-weight: 800; }
@@ -1152,7 +1157,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .sec-cam.person { box-shadow: 0 0 0 0.25rem var(--danger), var(--shadow); }
 .sec-live { position: absolute; inset: 0; z-index: 95; background: rgba(0, 0, 0, 0.82); display: grid; place-items: center; animation: fade 0.15s; }
 .sec-live-frame { position: relative; width: min(92%, calc(82vh * 16 / 9)); border-radius: 1rem; overflow: hidden; background: #000; }
-.sec-live-frame img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; }
+.sec-live-frame .cam-media { aspect-ratio: 16 / 9; height: auto; }
 .sec-live-bar { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; background: #15171d; color: #fff; font-weight: 800; font-size: 1.15rem; }
 .sec-live-bar .icon-btn { margin-left: auto; background: #272a34; box-shadow: none; color: #fff; }
 .sec-live-dot { flex: none; width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--danger); animation: sec-blink 1.2s ease-in-out infinite; }
@@ -1162,7 +1167,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .sec-pop { border-radius: 1.1rem; overflow: hidden; background: #15171d; color: #fff; box-shadow: 0 0 0 0.22rem var(--danger), 0 0.8rem 2.4rem rgba(0, 0, 0, 0.45); animation: up 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); transition: opacity 0.6s; }
 .sec-pop.leaving { opacity: 0.75; box-shadow: 0 0.8rem 2.4rem rgba(0, 0, 0, 0.45); }
 .sec-pop-pic { display: block; width: 100%; }
-.sec-pop-pic img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
+.sec-pop-pic .cam-media { aspect-ratio: 16 / 9; height: auto; }
 .sec-pop-bar { display: flex; align-items: center; gap: 0.55rem; padding: 0.5rem 0.6rem 0.5rem 0.9rem; font-size: 1.1rem; }
 .sec-pop-bar b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sec-pop-bar .icon-btn { width: 2.4rem; height: 2.4rem; background: #272a34; box-shadow: none; color: #fff; }

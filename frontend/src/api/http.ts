@@ -41,7 +41,8 @@ export function httpApi(base = ""): Api {
   const rec = (r: Recipe): Recipe => ({ ...r, photo_url: pic(r.photo_url), steps: r.steps.map((s) => ({ ...s, photo_url: pic(s.photo_url) })) });
   const recipe = async (p: Promise<Recipe>) => rec(await p);
   const batch = (b: RecipeBatch): RecipeBatch => ({ ...b, drafts: b.drafts.map((d) => ({ ...d, recipe: rec(d.recipe) })) });
-  const cam = <T extends { live_url: string; snapshot_url: string }>(c: T): T => ({ ...c, live_url: base + c.live_url, snapshot_url: base + c.snapshot_url });
+  const cam = <T extends { live_url: string; snapshot_url: string; video_url: string | null }>(c: T): T =>
+    ({ ...c, live_url: base + c.live_url, snapshot_url: base + c.snapshot_url, video_url: c.video_url && base + c.video_url });
   const artUrl = async (p: Promise<NowPlaying>): Promise<NowPlaying> => { const np = await p; return { ...np, art_url: np.art_url && base + np.art_url }; };
 
   let ws: WebSocket | null = null;

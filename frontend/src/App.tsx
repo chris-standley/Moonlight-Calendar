@@ -194,8 +194,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
         <TimerTray />
         <div className="toasts">{toasts.map((t) => <div key={t.id} className="toast">{t.msg}</div>)}</div>
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
-        {saver && ready && <Screensaver onWake={() => setSaver(false)} />}
-        {ready && <SecurityAlerts />}
+        {ready && <SecurityAlerts saver={saver}>{saver && <Screensaver onWake={() => setSaver(false)} />}</SecurityAlerts>}
        </MediaProvider>
       </div>
     </AppProvider>

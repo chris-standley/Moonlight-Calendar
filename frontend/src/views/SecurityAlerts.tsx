@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { SecurityAlert } from "../api/types";
 import { useApp } from "../state";
 import { IconClose } from "../components/icons";
-import { LiveCamera, sized } from "./SecurityView";
+import { CameraVideo, LiveCamera } from "./SecurityView";
 
 /** After the person sensor clears, the camera stays up this long (people linger at the door). */
 const LINGER_MS = 15_000;
 
 interface Shown { alert: SecurityAlert; until: number | null }
 
-/** When a shown camera sees a person, its live picture pops up in a corner of the screen (over the screensaver
- * too), and goes away a little after the person has gone. Settings > Security turns it on or off per style. */
-export function SecurityAlerts() {
+const SaverCamera = createContext<SecurityAlert | null>(null);
+/** The camera the screensaver shows instead of its photo while someone is there (null = none). */
+export const useSaverCamera = () => useContext(SaverCamera);
+
+/** When a shown camera sees a person, its live video pops up in a corner of the screen and goes away a little after
+ * the person has gone. While the screensaver is on, the video takes the photo's place instead. Settings > Security
+ * turns it on or off per style. */
+export function SecurityAlerts({ saver, children }: { saver: boolean; children?: ReactNode }) {
   const { api, layout, settings } = useApp();
   const enabled = settings?.security?.popup?.[layout] ?? layout !== "phone";
   const [shown, setShown] = useState<Shown[]>([]);
@@ -57,27 +62,29 @@ export function SecurityAlerts() {
     setShown((cur) => cur.filter((s) => s.alert.camera !== camera));
   };
 
-  if (!enabled) return null;
-  const width = layout === "large" ? 800 : 640;
+  const width = layout === "large" ? 1280 : 800;
   return (
-    <>
-      {shown.length > 0 && (
+    <SaverCamera.Provider value={saver && enabled ? shown[0]?.alert ?? null : null}>
+      {children}
+      {enabled && !saver && shown.length > 0 && (
         <div className="sec-pop-stack">
           {shown.slice(0, 2).map(({ alert, until }) => (
             <div key={alert.camera} className={"sec-pop" + (until ? " leaving" : "")}>
               <button className="sec-pop-pic" onClick={() => setBig(alert)} aria-label={`Show ${alert.name} full size`}>
-                <img src={sized(alert.live_url, width)} alt="" />
+                <CameraVideo cam={alert} width={width} />
               </button>
               <div className="sec-pop-bar">
                 <span className="sec-live-dot" />
-                <b>{alert.test ? `Test: ${alert.name}` : `Someone at ${alert.name}`}</b>
+                <b>{alertTitle(alert)}</b>
                 <button className="icon-btn" onClick={() => close(alert.camera)} aria-label="Close"><IconClose size={20} /></button>
               </div>
             </div>
           ))}
         </div>
       )}
-      {big && <LiveCamera name={big.name} url={big.live_url} onClose={() => setBig(null)} />}
-    </>
+      {big && <LiveCamera name={big.name} cam={big} onClose={() => setBig(null)} />}
+    </SaverCamera.Provider>
   );
 }
+
+export const alertTitle = (a: SecurityAlert) => (a.test ? `Test: ${a.name}` : `Someone at ${a.name}`);

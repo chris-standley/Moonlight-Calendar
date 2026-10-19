@@ -38,11 +38,11 @@ def ha_states():
         st("binary_sensor.kitchen_window", "unavailable", friendly_name="Kitchen Window open", device_class="window"),
         st("binary_sensor.e_niro_trunk", "off", friendly_name="E-NIRO Trunk", device_class="door"),
         st("camera.driveway", "recording", friendly_name="Driveway High resolution channel", width=3840, height=2160,
-           attribution="Powered by UniFi Protect Server"),
+           attribution="Powered by UniFi Protect Server", supported_features=2),
         st("camera.driveway_medium", "recording", friendly_name="Driveway Medium resolution channel",
-           attribution="Powered by UniFi Protect Server"),
+           attribution="Powered by UniFi Protect Server", supported_features=2),
         st("camera.front_doorbell", "recording", friendly_name="Doorbell", width=1600, height=1200,
-           attribution="Powered by UniFi Protect Server"),
+           attribution="Powered by UniFi Protect Server", supported_features=2),
         st("camera.printer", "unavailable", friendly_name="P1S Camera"),
         st("binary_sensor.driveway_person_detected", "off", friendly_name="Driveway Person detected"),
         st("binary_sensor.front_door_person_detected", "off", friendly_name="Front Doorbell Person detected"),
@@ -73,6 +73,7 @@ class FakeHA:
         self.states = {s["entity_id"]: s for s in ha_states()}
         self.requests: list[httpx.Request] = []
         self.down = False
+        self.hls_tokens = {"camera.driveway_medium": "abc123", "camera.front_doorbell": "bell456"}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -83,6 +84,15 @@ class FakeHA:
         path = request.url.path
         if path == "/core/api/states":
             return httpx.Response(200, json=list(self.states.values()))
+        if path.startswith("/core/api/hls/"):
+            token, rest = path[len("/core/api/hls/"):].split("/", 1)
+            if token not in self.hls_tokens.values():
+                return httpx.Response(404)
+            if rest == "master_playlist.m3u8":
+                return httpx.Response(200, text="#EXTM3U\nplaylist.m3u8\n",
+                                      headers={"content-type": "application/vnd.apple.mpegurl"})
+            return httpx.Response(200, content=b"m4s:" + rest.encode() + b"?" + request.url.query,
+                                  headers={"content-type": "video/iso.segment"})
         if path.startswith("/core/api/camera_proxy/"):
             if path.rsplit("/", 1)[1] not in self.states:
                 return httpx.Response(404)
@@ -93,7 +103,8 @@ class FakeHA:
 class FakeWS:
     """Answers auth and the registry / Alarmo commands; `alarmo=None` = Alarmo isn't installed."""
 
-    def __init__(self, alarmo=ALARMO, fail=False):
+    def __init__(self, alarmo=ALARMO, fail=False, ha=None):
+        self.ha = ha
         self.alarmo = alarmo
         self.fail = fail
         self.sent: list[dict] = []
@@ -128,6 +139,14 @@ class FakeWS:
                                              "error": {"code": "unknown_command", "message": "Unknown command."}})
                     else:
                         self.out.put_nowait({"id": msg["id"], "type": "result", "success": True, "result": fake.alarmo})
+                elif msg["type"] == "camera/stream":
+                    token = (fake.ha.hls_tokens if fake.ha else {}).get(msg["entity_id"])
+                    if token:
+                        self.out.put_nowait({"id": msg["id"], "type": "result", "success": True,
+                                             "result": {"url": f"/api/hls/{token}/master_playlist.m3u8"}})
+                    else:
+                        self.out.put_nowait({"id": msg["id"], "type": "result", "success": False,
+                                             "error": {"code": "start_stream_failed", "message": "no stream"}})
                 elif msg["type"] == "subscribe_trigger":
                     self.out.put_nowait({"id": msg["id"], "type": "result", "success": True})
 
@@ -142,7 +161,7 @@ class FakeWS:
 
 def make_service(fake, ws=None):
     return home_security.SecurityService("http://supervisor/core/api", TOKEN, transport=httpx.MockTransport(fake.handler),
-                                         ws_connect=ws or FakeWS())
+                                         ws_connect=ws or FakeWS(ha=fake))
 
 
 @pytest.fixture
@@ -340,7 +359,9 @@ def test_live_feed_is_mjpeg(fake):
     assert len(fetches) <= len(frames)
 
 
-def test_live_route_streams(client):
+def test_live_route_streams(client, monkeypatch):
+    # The test client reads the whole answer, so keep the feed short.
+    monkeypatch.setattr(home_security, "STREAM_MAX_SECONDS", 1)
     with client.stream("GET", "/api/security/cameras/camera.driveway/live?width=480") as r:
         assert r.status_code == 200 and r.headers["content-type"].startswith("multipart/x-mixed-replace")
         first = next(r.iter_bytes())
@@ -401,3 +422,39 @@ def test_person_change_broadcasts_an_alert(client, fake, monkeypatch):
     sent.clear()
     asyncio.run(home_security._changed())  # still there: no new pop-up
     assert sent == ["security"]
+
+
+# ---------------------------------------------------------------- video
+
+def test_video_passes_through_without_the_token(client, fake):
+    cams = {c["entity_id"]: c for c in client.get("/api/security").json()["cameras"]}
+    url = cams["camera.driveway"]["video_url"]
+    assert url == "/api/security/cameras/camera.driveway/hls/master_playlist.m3u8"
+    r = client.get(url)
+    assert r.status_code == 200 and "playlist.m3u8" in r.text and "abc123" not in r.text
+    assert r.headers["content-type"].startswith("application/vnd.apple.mpegurl")
+    # From the lighter medium channel (token abc123), with low-latency HLS's query passed on.
+    r = client.get("/api/security/cameras/camera.driveway/hls/segment/12.3.m4s?_HLS_msn=12&_HLS_part=3")
+    assert r.content == b"m4s:segment/12.3.m4s?_HLS_msn=12&_HLS_part=3"
+    assert any("/hls/abc123/" in q.url.path for q in fake.requests)
+
+
+def test_video_token_renewed_when_the_stream_restarts(client, fake):
+    assert client.get("/api/security/cameras/camera.front_doorbell/hls/master_playlist.m3u8").status_code == 200
+    fake.hls_tokens["camera.front_doorbell"] = "new789"
+    assert client.get("/api/security/cameras/camera.front_doorbell/hls/playlist.m3u8").status_code == 200
+
+
+@pytest.mark.parametrize("path", ["../states", "segment/../../states", "x%2F..%2Fstates"])
+def test_video_paths_are_checked(client, path):
+    assert client.get(f"/api/security/cameras/camera.driveway/hls/{path}").status_code == 404
+
+
+def test_no_video_for_hidden_or_streamless_cameras(client, fake):
+    assert client.get("/api/security/cameras/camera.printer/hls/master_playlist.m3u8").status_code == 404
+    fake.states["camera.front_doorbell"]["attributes"]["supported_features"] = 0
+    svc = home_security.service()
+    asyncio.run(svc.discover(force=True))
+    cams = {c["entity_id"]: c for c in client.get("/api/security").json()["cameras"]}
+    assert cams["camera.front_doorbell"]["video_url"] is None
+    assert client.get("/api/security/cameras/camera.front_doorbell/hls/master_playlist.m3u8").status_code == 404

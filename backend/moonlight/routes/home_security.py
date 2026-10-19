@@ -1,7 +1,7 @@
 """Security: alarm, Alarmo's sensors and the cameras from Home Assistant (see home_security.py)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from .. import db, home_security, media
@@ -62,15 +62,17 @@ async def options(refresh: bool = False):
             "sensors_source": svc.sensors_source, "sensor_count": len(eff["sensors"]), "popup": popup}
 
 
-def _camera(entity: str, svc: home_security.SecurityService) -> None:
+def _camera(entity: str, svc: home_security.SecurityService) -> dict:
     """Only a camera the household shows can be asked for: screens can't reach any other entity this way."""
     found = svc.found
     if found is None or not home_security.CAMERA_RE.match(entity):
         raise HTTPException(status_code=404, detail="No such camera")
     with db.connect() as c:
         eff = home_security.effective(found, home_security.saved(c))
-    if not any(cam["entity_id"] == entity and cam["show"] for cam in eff["cameras"]):
+    cam = next((c for c in eff["cameras"] if c["entity_id"] == entity and c["show"]), None)
+    if cam is None:
         raise HTTPException(status_code=404, detail="No such camera")
+    return {**cam, "eff": eff}
 
 
 def _width(width: int | None) -> int | None:
@@ -103,6 +105,21 @@ async def live(entity: str, width: int | None = None):
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
 
+@router.get("/cameras/{entity}/hls/{path:path}")
+async def hls(entity: str, path: str, request: Request):
+    """Home Assistant's HLS video of the camera (playlists and segments), passed through without its token."""
+    svc = _svc()
+    if svc.found is None:
+        await svc.config()
+    cam = _camera(entity, svc)
+    if not cam.get("stream") or not home_security.HLS_PATH_RE.match(path) or ".." in path:
+        raise HTTPException(status_code=404, detail="No video")
+    status, body, ctype = await svc.hls(cam["stream_entity"], path, request.url.query)
+    if status != 200:
+        return Response(status_code=404 if status == 404 else 502)
+    return Response(body, media_type=ctype, headers={"Cache-Control": "no-cache"})
+
+
 @router.post("/test-alert")
 async def test_alert(body: dict = Body(...)):
     """Pop up a camera on the screens for a few seconds, as if someone were there (Settings > Security)."""
@@ -115,6 +132,5 @@ async def test_alert(body: dict = Body(...)):
         raise bad("camera is required")
     if svc.found is None:
         await svc.config()
-    _camera(camera, svc)
-    svc.test_alert(camera)
+    svc.test_alert(camera, _camera(camera, svc)["eff"])
     return {"ok": True, "seconds": home_security.TEST_ALERT_SECONDS}

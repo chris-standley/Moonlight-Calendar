@@ -109,10 +109,13 @@ The Security section shows your alarm, its sensors and your cameras from Home As
 - **Cameras**: UniFi Protect cameras appear on their own (through the UniFi Protect integration); other cameras can be
   turned on in Settings > Security. Tap one to watch it full size.
 
-When a camera's "Person detected" sensor turns on, the camera pops up live in the corner of the wall screens (over the
-screensaver too) and goes away 15 seconds after the person has gone; tap it to watch full size or the cross to close
+When a camera's "Person detected" sensor turns on, the camera pops up live in the corner of the wall screens (if the
+screensaver is showing, the camera takes the photo's place full screen instead) and goes away 15 seconds after the person has gone; tap it to watch full size or the cross to close
 it. Settings > Security chooses which styles of screen pop up (large and compact by default), which sensor each camera
-uses, and has a **Test pop-up** button. The live picture is made from camera snapshots about twice a second.
+uses, and has a **Test pop-up** button. The live picture is Home Assistant's own video
+stream of the camera. For a lighter stream on a Raspberry Pi, enable each camera's "Medium resolution channel" entity in
+Home Assistant (Moonlight uses it when it's there); turning on "Preload stream" in the camera's settings makes the video
+start faster. Cameras that can't stream fall back to snapshots about twice a second.
 
 ## Calendars
 

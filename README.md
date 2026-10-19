@@ -136,7 +136,7 @@ served by `httpx.MockTransport`).
   `media_player`; Music Assistant (and its HA integration) is the intended route for Sonos. Large screens and phones
   show a small player in the top bar only if given a speaker.
 - Security: a Security section with the alarm (Alarmo), Alarmo's sensors and the cameras (UniFi Protect through
-  Home Assistant); a camera that sees a person pops up live in the corner of the wall screens.
+  Home Assistant); a camera that sees a person pops up live (smooth video from Home Assistant) in the corner of the wall screens, or in place of the screensaver photo.
 - Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
   energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.
 - Chores from automations: the integration's `moonlight.add_chore` action adds a one-off chore, for example

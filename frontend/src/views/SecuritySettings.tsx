@@ -44,7 +44,7 @@ export function SecurityPanel() {
     <section className="panel">
       <h2 className="panel-title">Security</h2>
       <p className="muted connect-note">The alarm, its sensors and the cameras, from Home Assistant. When a camera sees a person, its
-        live picture pops up in a corner of the screens until they've gone.</p>
+        live video pops up in a corner of the screens (or takes the screensaver photo's place) until they've gone.</p>
       <div className="set-row"><span>Alarm</span>
         <span className="set-pin"><b>{alarmName}</b><button className="btn ghost small" onClick={() => setPickAlarm(true)} disabled={!opts}>Change</button></span>
       </div>
