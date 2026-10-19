@@ -138,6 +138,7 @@ struct APIClient: Sendable {
     func photos() async throws -> PhotoList { try await get("/api/screensaver/photos") }
     func nursery() async throws -> NurseryConfig { try await get("/api/nursery") }
     func nurseryUpdates() async throws -> [NurseryUpdate] { try await get("/api/nursery/updates") }
+    func securityAlerts() async throws -> [SecurityAlert] { try await get("/api/security/alerts") }
 
     // MARK: Editing (phone and tablet; the TV only ticks things off)
 

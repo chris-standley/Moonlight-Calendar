@@ -25,7 +25,7 @@ const STYLES: { layout: Layout; note: string }[] = [
   { layout: "phone", note: "Held in the hand" },
 ];
 const SECTION_LABEL: Record<Section, string> = {
-  today: "Today", calendar: "Calendar", chores: "Chores", rewards: "Rewards", meals: "Meals", recipes: "Recipes", lists: "Lists", nursery: "Nursery",
+  today: "Today", calendar: "Calendar", chores: "Chores", rewards: "Rewards", meals: "Meals", recipes: "Recipes", lists: "Lists", nursery: "Nursery", security: "Security",
 };
 const SPEAKER_WHERE: Record<Layout, string> = {
   compact: "Card on Today, album art on the screensaver",

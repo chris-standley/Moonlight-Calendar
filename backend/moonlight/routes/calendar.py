@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, ha_client, media, public_holidays, security, seed
+from .. import caldav_sync, db, ha_client, home_security, media, public_holidays, security, seed
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
@@ -29,6 +29,7 @@ def settings_out(c) -> dict:
     out["pin_set"] = bool(db.get_setting(c, "pin_hash"))
     out["media_players"] = media.players_setting(c)
     out["holidays"] = public_holidays.region(c)
+    out["security"] = {**home_security.saved(c), "popup": home_security.popup_setting(c)}
     saved_wx = db.get_setting(c, "weather_entity", None)
     out["weather_entity"] = ha_client.env_entity() if saved_wx is None else saved_wx
     return out
@@ -93,6 +94,7 @@ async def patch_settings(body: dict = Body(...)):
         immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes, photo_details
         media_changed = media.apply_settings(c, body)  # media_players
         displays_routes.apply_settings(c, body)  # screens
+        security_changed = home_security.apply_settings(c, body)  # security
         if "weather_entity" in body:
             wx = "" if body["weather_entity"] is None else body["weather_entity"]
             if not isinstance(wx, str) or (wx.strip() and not ha_client.ENTITY_RE.match(wx.strip())):
@@ -120,6 +122,8 @@ async def patch_settings(body: dict = Body(...)):
     if media_changed:
         media.settings_changed()
         await hub.broadcast("media")
+    if security_changed:
+        await home_security.settings_changed()
     await hub.broadcast("settings")
     return out
 

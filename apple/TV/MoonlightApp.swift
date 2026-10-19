@@ -54,6 +54,7 @@ struct MainTabs: View {
             Tab("Photos", systemImage: "photo.on.rectangle") { PhotosView() }
             Tab("Settings", systemImage: "gearshape") { SettingsView() }
         }
+        .overlay { CameraPopUp() }
         .task { await model.refreshWeatherPeriodically() }
         .task(id: model.rev("nursery")) {
             if let c = await model.call({ try await $0.nursery() }) { nursery = c.configured }

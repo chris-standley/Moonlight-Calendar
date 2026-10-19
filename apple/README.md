@@ -97,7 +97,8 @@ Assistant's address: Home Assistant's login page opens in a sign-in sheet and th
 | Settings | What this Apple TV is paired with | Forget it and pair again |
 
 Everything works with the Siri Remote and there is no text entry. Play/Pause controls this screen's speaker from any
-tab.
+tab. If it's turned on (Settings › Security in Moonlight, pop up people on Apple TV; off by default), a camera that sees
+a person pops up its full-resolution live video in the corner over any tab until 15 seconds after they've gone.
 
 ## Pairing (both apps)
 

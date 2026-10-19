@@ -25,6 +25,23 @@ struct Settings: Codable {
     /// Show when and where each photo was taken (default true).
     var photo_details: Bool?
     var media_players: [String: String]?
+    var security: SecuritySettings?
+}
+
+/// The part of Settings › Security the apps use: which styles of screen pop up a camera that sees a person.
+struct SecuritySettings: Codable {
+    var popup: [String: Bool]?
+}
+
+/// A camera that sees a person now (`/api/security/alerts`). `video_hd_url` is its full-resolution HLS video.
+struct SecurityAlert: Codable, Identifiable, Equatable {
+    let camera: String
+    let name: String
+    let test: Bool
+    let snapshot_url: String
+    let video_url: String?
+    let video_hd_url: String?
+    var id: String { camera }
 }
 
 struct Repeat: Codable, Hashable {
