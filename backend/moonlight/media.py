@@ -273,6 +273,9 @@ def _default_ws_connect(url: str):
 
 
 class MediaService:
+    watch_re = ENTITY_RE  # entities set_watched accepts
+    subject = "the media player"  # for log lines
+
     def __init__(self, base_url: str, token: str, *, ws_url: str | None = None,
                  transport: httpx.AsyncBaseTransport | None = None,
                  ws_connect: WsConnect | None = None,
@@ -489,7 +492,7 @@ class MediaService:
 
     # ---- watcher: WebSocket subscription with REST polling fallback
     def set_watched(self, entities: set[str]) -> None:
-        entities = {e for e in entities if ENTITY_RE.match(e)}
+        entities = {e for e in entities if self.watch_re.match(e)}
         if entities == self.watched:
             return
         self.watched = entities
@@ -605,7 +608,7 @@ class MediaService:
 
     def _log_down(self, e: Exception) -> None:
         if not self._logged_down:
-            log.warning("Couldn't read the media player from Home Assistant: %s", _describe(e))
+            log.warning("Couldn't read %s from Home Assistant: %s", self.subject, _describe(e))
             self._logged_down = True
 
 

@@ -13,10 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, ha_discovery, media, recipe_batch, security
+from . import __version__, auth, caldav_sync, db, ha_discovery, home_security, media, recipe_batch, security
 from . import immich as immich_source
 from .common import hub, log
 from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals, recipes
+from .routes import home_security as security_routes
 from .routes import media as media_routes
 from .routes import summary as summary_routes
 from .auth import AuthMiddleware
@@ -97,6 +98,7 @@ def create_app(
         app.include_router(module.router)
     app.include_router(summary_routes.router)
     app.include_router(media_routes.router)
+    app.include_router(security_routes.router)
 
     # Follow the configured media players over Home Assistant's WebSocket (only when HA is reachable at all).
     async def start_media():
@@ -112,6 +114,9 @@ def create_app(
 
     app.router.on_startup.append(start_media)
     app.router.on_shutdown.append(stop_media)
+    # Follow the alarm, its sensors and the cameras' person sensors the same way.
+    app.router.on_startup.append(home_security.start)
+    app.router.on_shutdown.append(home_security.stop)
 
     # Inside the add-on: offer the Moonlight integration in Home Assistant (Devices & services > Discovered).
     async def start_discovery():

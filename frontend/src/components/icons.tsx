@@ -28,6 +28,12 @@ export const IconLists = ({ size, ...p }: P) => (
 export const IconHome = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><path d="M3.5 11L12 4l8.5 7" /><path d="M5.5 9.5V20h13V9.5" /><path d="M10 20v-5h4v5" /></svg>
 );
+export const IconShield = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" /><path d="M8.8 12l2.3 2.3 4.2-4.4" /></svg>
+);
+export const IconCctv = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}><rect x="3" y="6.5" width="13" height="11" rx="2.5" /><path d="M16 10.5l5-3v9l-5-3" /></svg>
+);
 export const IconPhotos = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><rect x="3" y="4.5" width="18" height="15" rx="3" /><circle cx="9" cy="10" r="1.8" /><path d="M21 16l-5-5-8.5 8.5" /></svg>
 );

@@ -254,8 +254,9 @@ DEFAULT_SETTINGS = {
     # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
     # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
     "screens": {
-        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists"]},
-        "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
+        "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists", "security"]},
+        "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists",
+                                                   "security"]},
         "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
     },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
@@ -354,6 +355,7 @@ def init_db() -> None:
                 c.execute(f"ALTER TABLE immich ADD COLUMN {col} {decl}")
         _rename_layouts(c)
         _add_recipes_section(c)
+        _add_security_section(c)
 
 
 # Screen styles were named after rooms until 0.3.8.
@@ -401,11 +403,42 @@ def _add_recipes_section(c: sqlite3.Connection) -> None:
     set_setting(c, RECIPES_MARKER, True)
 
 
+# Security (the alarm and cameras from Home Assistant) arrived in 0.6.0. Once, add it to the wall screens' menus
+# (large and compact; not phones); the marker keeps a later choice to hide it.
+SECURITY_MARKER = "security_section_added"
+
+
+def _with_security(secs: Any) -> Any:
+    return secs + ["security"] if isinstance(secs, list) and secs and "security" not in secs else secs
+
+
+def _add_security_section(c: sqlite3.Connection) -> None:
+    if get_setting(c, SECURITY_MARKER):
+        return
+    screens = get_setting(c, "screens")
+    if isinstance(screens, dict):
+        for layout, conf in screens.items():
+            if layout in ("large", "compact") and isinstance(conf, dict) and "sections" in conf:
+                conf["sections"] = _with_security(conf["sections"])
+        set_setting(c, "screens", screens)
+    rows = c.execute("SELECT id, setup FROM displays WHERE setup IS NOT NULL AND layout IN ('large', 'compact')")
+    for d in rows.fetchall():
+        try:
+            setup = json.loads(d["setup"])
+        except ValueError:
+            continue
+        if isinstance(setup, dict) and "sections" in setup:
+            setup["sections"] = _with_security(setup["sections"])
+            c.execute("UPDATE displays SET setup = ? WHERE id = ?", (json.dumps(setup), d["id"]))
+    set_setting(c, SECURITY_MARKER, True)
+
+
 def is_empty() -> bool:
     with connect() as c:
         n = c.execute(
-            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings WHERE key NOT IN ('instance_id', ?))",
-            (RECIPES_MARKER,),
+            "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings "
+            "WHERE key NOT IN ('instance_id', ?, ?))",
+            (RECIPES_MARKER, SECURITY_MARKER),
         ).fetchone()[0]
     return n == 0
 

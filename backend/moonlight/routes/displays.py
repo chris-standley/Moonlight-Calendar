@@ -24,7 +24,7 @@ from ..common import LAYOUTS, as_int, bad, body_dict, choice, hub, layout_name, 
 
 router = APIRouter(prefix="/api")
 
-SECTIONS = ("today", "calendar", "chores", "rewards", "meals", "recipes", "lists")  # Settings is always shown
+SECTIONS = ("today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "security")  # Settings is always shown
 SERVICE = "service"  # a non-screen client, e.g. the Home Assistant integration
 APP = "app"  # the iPhone and iPad app
 NOT_SCREENS = (SERVICE, APP)

@@ -51,6 +51,7 @@ struct MainTabs: View {
             Tab("Photos", systemImage: "photo.on.rectangle") { PhotosView() }
             Tab("Settings", systemImage: "gearshape") { SettingsView() }
         }
+        .overlay { CameraPopUp() }
         .task { await model.refreshWeatherPeriodically() }
         // The remote's Play/Pause controls this screen's speaker from anywhere (Photos uses it for the slideshow).
         .onPlayPauseCommand {
