@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse
 
 from .. import db, tapestry
-from ..common import as_int, bad, body_dict, hub, not_found, require_pin
+from ..common import as_int, bad, body_dict, hub, log, not_found, require_pin
 
 router = APIRouter(prefix="/api")
 
@@ -13,6 +13,7 @@ PHOTO_CACHE = "private, max-age=604800, immutable"  # a changed update's photos 
 
 
 def _error(e: tapestry.TapestryError) -> HTTPException:
+    log.warning("Tapestry sign-in failed: %s", e)
     return HTTPException(status_code=400 if isinstance(e, tapestry.AuthFailed) else 502, detail=str(e))
 
 

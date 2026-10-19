@@ -58,6 +58,7 @@ class FakeTapestry:
         self.two_factor = False
         self.schools = False
         self.expired = False
+        self.blocked = False
         self.chosen: str | None = None
         self.observations = [obs(12), obs(11, notes="Painted a <b>rainbow</b>&nbsp;today!<br>Very proud.")]
         self.details = {
@@ -81,6 +82,9 @@ class FakeTapestry:
             return httpx.Response(200, content=b"\xff\xd8JPEG" + req.url.path.encode(), headers={"content-type": "image/jpeg"})
         assert req.url.host == "tapestryjournal.com" and req.url.scheme == "https"
         path = req.url.path
+        if self.blocked:
+            return httpx.Response(403, html="<title>Just a moment...</title>",
+                                  headers={"server": "cloudflare", "cf-mitigated": "challenge"})
         signed_in = req.headers.get("cookie", "").find("tapestry_session=good") >= 0
         if path == "/login" and req.method == "GET":
             return httpx.Response(200, html=LOGIN_PAGE, headers={"set-cookie": "tapestry_session=anon; Path=/; Secure"})
@@ -190,6 +194,13 @@ def test_wrong_password_and_two_factor(client, fake):
     r = client.put("/api/nursery", json={"pin": PIN, "email": EMAIL, "password": PASSWORD})
     assert r.status_code == 400 and "verification code" in r.json()["detail"]
     assert client.put("/api/nursery", json={"pin": "0000", "email": EMAIL, "password": PASSWORD}).status_code == 403
+
+
+def test_blocked_sign_in_says_so_and_is_logged(client, fake, caplog):
+    fake.blocked = True
+    r = client.put("/api/nursery", json={"pin": PIN, "email": EMAIL, "password": PASSWORD})
+    assert r.status_code == 502 and "blocked Moonlight as automated traffic" in r.json()["detail"]
+    assert "Tapestry sign-in failed" in caplog.text and PASSWORD not in caplog.text
 
 
 def test_session_lapse_signs_in_again(client, fake):
