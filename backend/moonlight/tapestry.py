@@ -370,7 +370,11 @@ class Client:
         if httpx.URL(action).host != httpx.URL(self.base).host:
             raise TapestryError("Tapestry's sign-in form points somewhere unexpected, so Moonlight didn't send the password")
         try:
-            r = await http.post(action, data=fields, headers={"Referer": str(r.url), "Origin": self.base})
+            # Not following the redirect here: the sign-in itself is judged by this answer, and the page it sends
+            # us on to may well be a 404 (Tapestry's web app routes some pages in the browser) without that
+            # meaning anything went wrong.
+            r = await http.post(action, data=fields, headers={"Referer": str(r.url), "Origin": self.base},
+                                follow_redirects=False)
         except httpx.HTTPError as e:
             raise self._unreachable(e) from None
         if r.status_code == 419:
@@ -378,7 +382,14 @@ class Client:
         if r.status_code == 429:
             raise TapestryError("Tapestry has had too many sign-in attempts. Wait a while before trying again")
         if r.status_code >= 400:
-            raise self._refused(r, "signing in")
+            raise self._refused(r, f"signing in at {httpx.URL(action).path}")
+        if r.is_redirect and r.headers.get("location"):
+            r = await self._get(http, str(r.url.join(r.headers["location"])))
+        log.info("Tapestry sign-in landed on %s (%s)", r.url.path, r.status_code)
+        if r.status_code >= 400:
+            # Signed in but sent somewhere that doesn't exist: the home page takes us into the journal instead.
+            r = await self._get(http, "/")
+            log.info("Tapestry home page: %s (%s)", r.url.path, r.status_code)
         body = r.text
         path = r.url.path.rstrip("/")
         if re.search(r"two[- ]factor|verification code|authenticator app|one[- ]time code", body, re.I):

@@ -59,6 +59,7 @@ class FakeTapestry:
         self.schools = False
         self.expired = False
         self.blocked = False
+        self.land_on_404 = False
         self.chosen: str | None = None
         self.observations = [obs(12), obs(11, notes="Painted a <b>rainbow</b>&nbsp;today!<br>Very proud.")]
         self.details = {
@@ -94,9 +95,11 @@ class FakeTapestry:
             if form.get("email") != EMAIL or form.get("password") != PASSWORD:
                 return httpx.Response(302, headers={"location": "https://tapestryjournal.com/login"})
             self.logins += 1
-            to = "/two-factor" if self.two_factor else "/select-school" if self.schools else "/s/little-acorns/observations"
+            to = "/dashboard" if self.land_on_404 else "/two-factor" if self.two_factor else "/select-school" if self.schools else "/s/little-acorns/observations"
             return httpx.Response(302, headers={"location": f"https://tapestryjournal.com{to}",
                                                 "set-cookie": "tapestry_session=good; Path=/; Secure; HttpOnly"})
+        if path == "/" and signed_in:
+            return httpx.Response(302, headers={"location": "/s/little-acorns/observations"})
         if path == "/two-factor":
             return httpx.Response(200, html="<p>Enter the verification code from your authenticator app</p>")
         if path == "/select-school" and signed_in:
@@ -201,6 +204,12 @@ def test_blocked_sign_in_says_so_and_is_logged(client, fake, caplog):
     r = client.put("/api/nursery", json={"pin": PIN, "email": EMAIL, "password": PASSWORD})
     assert r.status_code == 424 and "blocked Moonlight as automated traffic" in r.json()["detail"]
     assert "Tapestry sign-in failed" in caplog.text and PASSWORD not in caplog.text
+
+
+def test_landing_on_a_missing_page_after_signing_in_is_fine(client, fake):
+    fake.land_on_404 = True  # the page after sign-in only exists in Tapestry's browser app
+    assert connect(client)["status"] == "ok"
+    assert len(client.get("/api/nursery/updates").json()) == 2
 
 
 def test_session_lapse_signs_in_again(client, fake):
