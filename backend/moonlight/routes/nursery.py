@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse
 
 from .. import db, tapestry
-from ..common import as_int, bad, body_dict, hub, not_found, require_pin
+from ..common import as_int, bad, body_dict, hub, log, not_found, require_pin
 
 router = APIRouter(prefix="/api")
 
@@ -13,7 +13,10 @@ PHOTO_CACHE = "private, max-age=604800, immutable"  # a changed update's photos 
 
 
 def _error(e: tapestry.TapestryError) -> HTTPException:
-    return HTTPException(status_code=400 if isinstance(e, tapestry.AuthFailed) else 502, detail=str(e))
+    """400 login rejected; 424 for any other Tapestry problem. Not 502: proxies in front of the add-on (ingress, a
+    reverse proxy) can swap a 502's body for their own page, and the screen then can't show the reason."""
+    log.warning("Tapestry sign-in failed: %s", e)
+    return HTTPException(status_code=400 if isinstance(e, tapestry.AuthFailed) else 424, detail=str(e))
 
 
 @router.get("/nursery")
@@ -75,7 +78,7 @@ async def delete_nursery(body: dict | None = Body(None)):
 
 @router.post("/nursery/sync")
 async def sync_nursery():
-    """Check Tapestry now -> the status as GET /api/nursery. 400 login rejected, 502 Tapestry unreachable."""
+    """Check Tapestry now -> the status as GET /api/nursery. 400 login rejected, 424 Tapestry unreachable or refused."""
     with db.connect() as c:
         if not tapestry.load_config(c):
             raise not_found("Tapestry isn't connected")

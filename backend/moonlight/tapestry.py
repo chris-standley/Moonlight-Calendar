@@ -317,6 +317,16 @@ class Client:
             finally:
                 self.cookies = http.cookies
 
+    @staticmethod
+    def _refused(r: httpx.Response, doing: str) -> TapestryError:
+        """A 4xx/5xx from Tapestry, naming a bot check in front of the site when that is what answered."""
+        text = r.text[:4000] if r.headers.get("content-type", "").startswith("text/") else ""
+        if r.headers.get("cf-mitigated") or (r.status_code in (403, 429, 503) and (
+                "cloudflare" in r.headers.get("server", "").lower() or re.search(r"Just a moment|Attention Required", text))):
+            return TapestryError(f"Tapestry's website blocked Moonlight as automated traffic when {doing} "
+                                 f"(error {r.status_code})")
+        return TapestryError(f"Tapestry answered {r.status_code} when {doing}")
+
     def _unreachable(self, e: httpx.HTTPError) -> TapestryError:
         if isinstance(e, httpx.TimeoutException):
             return TapestryError("Tapestry didn't answer in time. Moonlight will try again later")
@@ -332,7 +342,7 @@ class Client:
         http.cookies.clear()
         r = await self._get(http, "/login")
         if r.status_code != 200:
-            raise TapestryError(f"Tapestry's sign-in page answered {r.status_code}")
+            raise self._refused(r, "opening the sign-in page")
         page = parse_page(r.text)
         token = csrf_token(r.text, page)
         if not token:
@@ -368,7 +378,7 @@ class Client:
         if r.status_code == 429:
             raise TapestryError("Tapestry has had too many sign-in attempts. Wait a while before trying again")
         if r.status_code >= 400:
-            raise TapestryError(f"Tapestry answered {r.status_code} when signing in")
+            raise self._refused(r, "signing in")
         body = r.text
         path = r.url.path.rstrip("/")
         if re.search(r"two[- ]factor|verification code|authenticator app|one[- ]time code", body, re.I):
