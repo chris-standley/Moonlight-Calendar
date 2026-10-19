@@ -379,7 +379,9 @@ class Client:
                 fields[name] = self.email
             elif kind == "password":
                 fields[name] = self._password
-            elif kind in ("hidden",) or (kind in ("checkbox", "radio") and name.startswith("remember")):
+            elif kind == "hidden":
+                fields[name] = i["value"]  # as the page has it: an empty one stays empty (e.g. login_redirect_url)
+            elif kind in ("checkbox", "radio") and name.startswith("remember"):
                 fields[name] = i["value"] or "1"
         fields.setdefault("_token", token)
         if not form:

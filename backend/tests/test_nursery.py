@@ -27,6 +27,8 @@ LOGIN_PAGE = f"""<!doctype html><html><head><title>Tapestry - Log In</title>
 <form class="search" action="/search" method="get"><input name="q"></form>
 <form action="/login" method="POST">
   <input type="hidden" name="_token" value="{TOKEN}">
+  <input type="hidden" name="login_redirect_url" value=""><input type="hidden" name="login_redirect_school" value="">
+  <input type="hidden" name="oauth" value=""><input type="hidden" name="oauth_login_url" value="">
   <input type="email" name="email" id="email_generated_id">
   <input type="password" name="password" id="password_generated_id">
   <input type="checkbox" name="remember" value="1">
@@ -98,6 +100,9 @@ class FakeTapestry:
         if path == "/login" and req.method == "POST":
             form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
             assert form["_token"] == TOKEN and "anon" in req.headers.get("cookie", "")
+            if not self.script_login and (form.get("login_redirect_url") or form.get("oauth")):
+                # Like the real site: anything in these hidden fields sends the sign-in elsewhere, unsigned in.
+                return httpx.Response(302, headers={"location": f"https://tapestryjournal.com/{form.get('login_redirect_url', '')}"})
             if self.script_login:
                 # Like the real site: a plain form post gets sent to "/1"; the script's JSON request signs in.
                 if "json" not in req.headers.get("accept", "") or req.headers.get("x-csrf-token") != TOKEN:
