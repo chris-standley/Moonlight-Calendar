@@ -39,6 +39,7 @@ struct RootView: View {
 
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
+    @State private var nursery = false
 
     var body: some View {
         TabView {
@@ -48,11 +49,16 @@ struct MainTabs: View {
             Tab("Rewards", systemImage: "star") { RewardsView() }
             Tab("Meals", systemImage: "fork.knife") { MealsView() }
             Tab("Lists", systemImage: "list.bullet") { ListsView() }
+            // Once Tapestry is connected in Settings › Nursery on a wall screen.
+            if nursery { Tab("Nursery", systemImage: "figure.and.child.holdinghands") { NurseryView() } }
             Tab("Photos", systemImage: "photo.on.rectangle") { PhotosView() }
             Tab("Settings", systemImage: "gearshape") { SettingsView() }
         }
         .overlay { CameraPopUp() }
         .task { await model.refreshWeatherPeriodically() }
+        .task(id: model.rev("nursery")) {
+            if let c = await model.call({ try await $0.nursery() }) { nursery = c.configured }
+        }
         // The remote's Play/Pause controls this screen's speaker from anywhere (Photos uses it for the slideshow).
         .onPlayPauseCommand {
             Task {

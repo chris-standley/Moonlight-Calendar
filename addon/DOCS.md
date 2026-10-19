@@ -177,8 +177,18 @@ Advent, Santa, nativity, carol or Boxing Day in their name only show in December
 (winter, snow, frost, skiing...) are shown; turn off "Christmas albums only in December" to stop that. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
 painted landscapes. If Immich is itself a Home Assistant add-on, check its port (2283) is filled in under the add-on's Network settings; Immich opened only through the Home Assistant sidebar can't be reached by Moonlight. If Immich uses HTTPS, start the address with `https://`; when its certificate is self-signed or made for a domain name rather than the IP address, turn on Skip certificate check.
 
+## Nursery updates (Tapestry)
+
+If your nursery uses Tapestry, Moonlight can show its updates: a Nursery section on large screens and the Apple TV,
+and a button with the number of new updates at the top of compact screens, phones and the iPhone app's Today. In
+Moonlight go to Settings > Nursery > Connect and enter the email and password you use at tapestryjournal.com (and,
+if your login has more than one nursery or school, its name). Moonlight signs in the way the website does, checks
+every 30 minutes and keeps a copy of the newest 40 updates and their photos, so the screens never talk to Tapestry.
+Tapestry has no official way to do this, so it may need an update if Tapestry changes its website. Logins that use
+Google, Microsoft or a verification code can't be used. Videos show as a still; play them in the Tapestry app.
+
 ## Data
 
-The database is `/data/moonlight.db` (including the Immich address and API key); it is part of the add-on's backups and
+The database is `/data/moonlight.db` (including the Immich address and API key, and the Tapestry login), with copies of nursery photos in `/data/nursery`; it is part of the add-on's backups and
 survives updates and restarts. Older versions kept uploaded photos in `/data/photos`; Moonlight no longer uses that
 folder.

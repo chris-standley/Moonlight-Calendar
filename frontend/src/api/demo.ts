@@ -7,6 +7,7 @@ import {
 } from "./types";
 import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
+import { demoNursery } from "./demoNursery";
 import { demoSecurity } from "./demoSecurity";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
@@ -712,6 +713,7 @@ export function demoApi(): Api {
       return { ...(s.screens?.[l] ?? DEFAULT_SCREENS[l]), speaker: s.media_players?.[l] ?? "", idle_minutes: s.idle_minutes?.[l] ?? DEFAULT_IDLE[l] };
     }),
     ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
+    ...demoNursery(checkPin, emit, () => st.people), // a pretend Tapestry account
     ...demoSecurity(emit, () => st.settings.security, checkPin), // a pretend alarm and cameras
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {

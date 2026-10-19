@@ -1,4 +1,4 @@
-import { Api, ApiError, Display, NowPlaying, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
+import { Api, ApiError, Display, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -160,6 +160,12 @@ export function httpApi(base = ""): Api {
       const r = await get<ScreensaverPhotos>("/api/screensaver/photos");
       return { ...r, photos: r.photos.map((p) => ({ ...p, url: base + p.url })) };
     },
+    nursery: () => get("/api/nursery"),
+    saveNursery: (c) => req("PUT", "/api/nursery", c),
+    disconnectNursery: async (pin) => { await req("DELETE", "/api/nursery", { pin }); },
+    syncNursery: () => req("POST", "/api/nursery/sync"),
+    nurseryUpdates: async () => (await get<NurseryUpdate[]>("/api/nursery/updates"))
+      .map((u) => ({ ...u, photos: u.photos.map((p) => ({ ...p, url: base + p.url })) })),
     accounts: () => get("/api/accounts"),
     connectAccount: (a) => req("POST", "/api/accounts", a),
     reconnectAccount: (id, creds) => req("PATCH", `/api/accounts/${id}`, creds),

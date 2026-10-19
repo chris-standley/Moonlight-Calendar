@@ -31,13 +31,13 @@ export interface Settings {
 export interface HolidayRegion { country: string; subdiv: string }
 export interface Holiday { date: string; name: string }
 export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
-export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "security";
-export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "security"];
+export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security";
+export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security"];
 export interface ScreenSetup { start: Section; sections: Section[] }
 export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
-  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "security"] },
-  compact: { start: "today", sections: [...SECTIONS] },
-  phone: { start: "today", sections: SECTIONS.filter((s) => s !== "security") },
+  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security"] },
+  compact: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery") },
+  phone: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery" && s !== "security") },
 };
 
 export type Freq = "daily" | "weekly" | "monthly";
@@ -194,7 +194,25 @@ export interface PhotoAlbum { id: string; name: string; updated_at: string | nul
 /** `albums` (newest first) is what the screensaver plays, one whole album at a time; older servers send only `photos`. */
 export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[]; albums?: PhotoAlbum[] }
 
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert";
+
+/** Nursery updates from Tapestry (see API.md "Nursery"). The password is never sent back. */
+export type NurseryStatus = "unconfigured" | "pending" | "ok" | "auth_failed" | "error";
+export interface NurseryConfig {
+  configured: boolean; email: string; school: string; school_name: string | null;
+  status: NurseryStatus; last_error: string | null; last_sync: string | null; count: number;
+}
+/** PUT /api/nursery: `password` may be left out once saved (same email). `school`: name or part of it, "" = the first. */
+export interface NurseryIn { email?: string; password?: string; school?: string; pin: string }
+/** `url` is ready for <img src>. `video`: the still of a video (the video itself stays on Tapestry). */
+export interface NurseryPhoto { url: string; video: boolean }
+/** `date`: when the nursery wrote it, local time (YYYY-MM-DDTHH:MM:SS, or a bare date). `children[].person_id`: the
+ * Moonlight person with the same first name, if any. */
+export interface NurseryUpdate {
+  id: string; title: string; notes: string; author: string; date: string;
+  children: { name: string; person_id: string | null; color: string | null }[];
+  photos: NurseryPhoto[]; comments: { author: string; date: string | null; text: string }[]; added_at: string;
+}
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery";
 
 // Security (see API.md "Security"): the alarm, Alarmo's sensors and the cameras, from Home Assistant.
 /** Where a camera that sees a person pops up: each screen style, and the Apple TV app on its own. */
@@ -413,6 +431,13 @@ export interface Api {
   testImmich(t: { server_url?: string; api_key?: string; skip_cert_check?: boolean; pin: string }): Promise<ImmichTest>;
   immichAlbums(): Promise<ImmichAlbum[]>;
   screensaverPhotos(): Promise<ScreensaverPhotos>;
+  // Nursery updates from Tapestry (see API.md "Nursery")
+  nursery(): Promise<NurseryConfig>;
+  /** Signs in to Tapestry first; 400 with a message when it doesn't accept the login. */
+  saveNursery(c: NurseryIn): Promise<NurseryConfig>;
+  disconnectNursery(pin: string): Promise<void>;
+  syncNursery(): Promise<NurseryConfig>;
+  nurseryUpdates(): Promise<NurseryUpdate[]>;
   accounts(): Promise<Account[]>;
   connectAccount(a: AccountIn): Promise<Account>;
   reconnectAccount(id: string, creds: { password: string; username?: string; pin: string }): Promise<Account>;
