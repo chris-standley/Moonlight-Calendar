@@ -43,23 +43,23 @@ export function RecipesPanel() {
       <h2 className="panel-title">Recipes</h2>
       <p className="muted connect-note">Links from most recipe sites and pasted text are read by Moonlight itself. To read photos of cookbook pages
         here, Moonlight asks Claude, Anthropic's AI, using your own API key (each photo costs a few pence). The iPhone app reads photos on the phone, without a key.</p>
-      <div className="set-row"><span>Reading photos with Claude</span>
+      <div className="set-row stack"><span>Reading photos with Claude</span>
         <span className="set-pin"><b>{reader?.configured ? `On (key ${reader.key_hint})` : "Off"}</b>
           <button className="btn ghost small" onClick={() => setEditing(true)}>{reader?.configured ? "Change" : "Add key"}</button>
           {reader?.configured && <button className="btn ghost small danger" onClick={remove}>Remove</button>}</span>
       </div>
-      <div className="set-row"><span>Send to another app</span>
+      <div className="set-row stack"><span>Send to another app</span>
         <span className="set-pin">
           {(["mela", "paprika", "schema"] as RecipeExportFormat[]).map((f) => (
             <button key={f} className="btn ghost small" disabled={!!busy} onClick={() => exportAs(f)}>{EXPORT_NAMES[f]}</button>
           ))}
         </span>
       </div>
-      <div className="set-row"><span>Bring in from another app<br /><small className="muted" style={{ fontWeight: 400 }}>
+      <div className="set-row stack"><span>Bring in from another app<br /><small className="muted" style={{ fontWeight: 400 }}>
         A Mela, Paprika or schema.org recipe file, or a saved recipe page. Recipes already in the box are skipped.</small></span>
-        <label className={"btn ghost small" + (busy ? " disabled" : "")}>{busy === "import" ? "Bringing in…" : "Choose file"}
+        <span className="set-pin"><label className={"btn ghost small" + (busy ? " disabled" : "")}>{busy === "import" ? "Bringing in…" : "Choose file"}
           <input type="file" hidden disabled={!!busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importFile(f); }} />
-        </label>
+        </label></span>
       </div>
       {editing && <KeySheet model={reader?.model ?? "claude-opus-5-5"} onClose={() => setEditing(false)} />}
     </section>
