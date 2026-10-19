@@ -199,7 +199,7 @@ def test_wrong_password_and_two_factor(client, fake):
 def test_blocked_sign_in_says_so_and_is_logged(client, fake, caplog):
     fake.blocked = True
     r = client.put("/api/nursery", json={"pin": PIN, "email": EMAIL, "password": PASSWORD})
-    assert r.status_code == 502 and "blocked Moonlight as automated traffic" in r.json()["detail"]
+    assert r.status_code == 424 and "blocked Moonlight as automated traffic" in r.json()["detail"]
     assert "Tapestry sign-in failed" in caplog.text and PASSWORD not in caplog.text
 
 
@@ -215,7 +215,7 @@ def test_unreachable_keeps_updates(client, fake):
     connect(client)
     fake.down = True
     r = client.post("/api/nursery/sync")
-    assert r.status_code == 502 and "Couldn't reach Tapestry" in r.json()["detail"]
+    assert r.status_code == 424 and "Couldn't reach Tapestry" in r.json()["detail"]
     st = client.get("/api/nursery").json()
     assert st["status"] == "error" and st["count"] == 2
     assert len(client.get("/api/nursery/updates").json()) == 2
