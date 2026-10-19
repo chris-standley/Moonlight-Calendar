@@ -8,7 +8,7 @@ struct RecipesScreen: View {
     @State private var loaded = false
     @State private var query = ""
     @State private var filter = "all"
-    @State private var sort = "az"
+    @AppStorage("recipes.arrange") private var sort = "course"
     @State private var path: [String] = []
     @State private var importing: RecipeSource?
     @State private var draft: Recipe?
@@ -36,10 +36,20 @@ struct RecipesScreen: View {
                         } else if shown.isEmpty && loaded && !recipes.isEmpty {
                             EmptyHint(text: "Nothing matches. Try another word or filter.")
                         }
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: room == .narrow ? 2 : room == .medium ? 3 : 5),
-                                  spacing: 12) {
-                            ForEach(shown) { r in
-                                NavigationLink(value: r.id ?? "") { card(r) }.buttonStyle(.plain)
+                        ForEach(groups) { g in
+                            if !g.name.isEmpty {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text(g.name).font(Theme.text(.title3, .heavy)).foregroundStyle(Theme.text)
+                                    Text("\(g.items.count)").font(Theme.text(.subheadline, .bold)).foregroundStyle(Theme.muted)
+                                }
+                                .padding(.top, 6)
+                            }
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12),
+                                                     count: room == .narrow ? 2 : room == .medium ? 3 : 5),
+                                      spacing: 12) {
+                                ForEach(g.items) { r in
+                                    NavigationLink(value: r.id ?? "") { card(r) }.buttonStyle(.plain)
+                                }
                             }
                         }
                     }
@@ -55,6 +65,8 @@ struct RecipesScreen: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("Sort", selection: $sort) {
+                            Text("By course").tag("course")
+                            Text("By cookbook").tag("book")
                             Text("A to Z").tag("az")
                             Text("Best rated").tag("rated")
                             Text("Recently made").tag("recent")
@@ -182,6 +194,24 @@ struct RecipesScreen: View {
             }
     }
 
+    /// By course or by cookbook: a heading per group, in menu order (books A to Z), the rest at the end.
+    private var groups: [RecipeGroup] {
+        let list = shown
+        guard sort == "course" || sort == "book" else { return [RecipeGroup(key: "", name: "", items: list)] }
+        let by = Dictionary(grouping: list) { (r: Recipe) -> String in (sort == "course" ? r.course : r.book) ?? "" }
+        let order = sort == "course" ? RecipeCourse.all.map(\.key)
+            : by.keys.filter { !$0.isEmpty }.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        var out: [RecipeGroup] = order.compactMap { k in
+            by[k].map { RecipeGroup(key: k, name: sort == "course" ? RecipeCourse.name(k) ?? k : k, items: $0) }
+        }
+        if let rest = by[""] {
+            // Nothing arranged yet: no heading at all.
+            let name = out.isEmpty ? "" : sort == "course" ? "No course set" : "Not from a cookbook"
+            out.append(RecipeGroup(key: "", name: name, items: rest))
+        }
+        return out
+    }
+
     private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -228,4 +258,11 @@ struct RecipesScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
     }
+}
+
+struct RecipeGroup: Identifiable {
+    let key: String
+    let name: String
+    let items: [Recipe]
+    var id: String { key }
 }

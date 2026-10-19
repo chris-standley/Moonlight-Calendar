@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, Recipe, RecipeIn } from "../../api/types";
-import { useApp } from "../../state";
+import { useApp, useData } from "../../state";
 import { Sheet } from "../../components/ui";
 import { IconDown, IconPhotos, IconPlus, IconTrash, IconUp } from "../../components/icons";
 import { shrinkImage } from "../../recipes/images";
 import { metricAmount } from "../../recipes/recipeText";
 import { Heart, Stars } from "./bits";
+import { COURSES } from "../../recipes/courses";
 
 interface StepDraft { key: number; text: string; minutes: string; photo: { id: string; url: string } | null }
 let keys = 0;
@@ -31,6 +32,11 @@ export function RecipeEditor({ recipe, draftId, onSaved, onClose }: { recipe?: R
   })));
   const [notes, setNotes] = useState(recipe?.notes ?? "");
   const [url, setUrl] = useState(recipe?.url ?? "");
+  const [course, setCourse] = useState(recipe?.course ?? "");
+  const [book, setBook] = useState(recipe?.book ?? "");
+  const [all] = useData((a) => a.recipes(), ["recipes"], []);
+  const books = [...new Set((all ?? []).map((r) => r.book).filter(Boolean))].sort();
+  const [bookPage, setBookPage] = useState(recipe?.book_page != null ? String(recipe.book_page) : "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,6 +52,7 @@ export function RecipeEditor({ recipe, draftId, onSaved, onClose }: { recipe?: R
     ingredients: ingredients.split("\n").map((l) => l.trim()).filter(Boolean),
     steps: steps.filter((s) => s.text.trim() || s.photo).map((s) => ({ text: s.text.trim(), minutes: num(s.minutes), photo: s.photo?.id ?? null })),
     notes: notes.trim(), url: url.trim() || null,
+    course: course || null, book: book.trim(), book_page: num(bookPage),
   });
 
   // How the lines read (amounts, metric, timers), a moment after typing stops.
@@ -168,6 +175,18 @@ export function RecipeEditor({ recipe, draftId, onSaved, onClose }: { recipe?: R
           })}
         </ol>
         <button type="button" className="btn ghost small rf-add-step" onClick={() => setSteps((ss) => [...ss, { key: keys++, text: "", minutes: "", photo: null }])}><IconPlus size={18} /> Add a step</button>
+        <label className="field-label">Course</label>
+        <select className="input" value={course} onChange={(e) => setCourse(e.target.value)} aria-label="Course">
+          <option value="">Not set</option>
+          {COURSES.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
+        </select>
+        <div className="rf-book">
+          <span><label className="field-label">Cookbook (optional)</label>
+            <input className="input" list="rf-books" value={book} onChange={(e) => setBook(e.target.value)} placeholder="Where it's from" /></span>
+          <span><label className="field-label">Page</label>
+            <input className="input" type="number" inputMode="numeric" min={1} value={bookPage} onChange={(e) => setBookPage(e.target.value)} /></span>
+        </div>
+        {books && books.length > 0 && <datalist id="rf-books">{books.map((b) => <option key={b} value={b} />)}</datalist>}
         <label className="field-label">Tags, separated by commas</label>
         <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="pasta, quick, kids" />
         <label className="field-label">Notes</label>

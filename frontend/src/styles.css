@@ -917,6 +917,11 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .rbox-search { flex: 1 1 14rem; max-width: 24rem; }
 .rbox-filters .chip-row { flex: 1 1 auto; }
 .rbox-sort { min-height: 2.6rem; width: auto; }
+.recipe-group { grid-column: 1 / -1; margin: 0.6rem 0 -0.2rem; font-size: 1.15rem; font-weight: 800; }
+.recipe-group:first-child { margin-top: 0; }
+.recipe-group .muted { font-weight: 700; font-size: 0.95rem; }
+.rf-book { display: grid; grid-template-columns: 1fr 6rem; gap: 0.6rem; }
+.rf-book > span { display: flex; flex-direction: column; min-width: 0; }
 .recipe-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 1rem; padding: 0 1.6rem 6rem; align-content: start; }
 .rcard { display: flex; flex-direction: column; text-align: left; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .rcard:active { transform: scale(0.98); }

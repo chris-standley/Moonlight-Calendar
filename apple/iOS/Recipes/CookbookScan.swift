@@ -16,6 +16,7 @@ struct CookbookScanView: View {
     @State private var sending = false
     @State private var error: String?
     @State private var cheaper = false
+    @State private var book = ""
 
     static let maxPages = 200
 
@@ -56,6 +57,9 @@ struct CookbookScanView: View {
                 } footer: {
                     Text("Scan every page you want, in order: the scanner keeps going until you tap Save. Recipes that "
                          + "run over two pages are joined up. Up to \(Self.maxPages) pages at a time.")
+                }
+                Section("Which cookbook? (optional)") {
+                    TextField("The book's name, kept with every recipe", text: $book).disabled(sending)
                 }
                 Section {
                     Toggle("Cheaper, slower", isOn: $cheaper).disabled(sending)
@@ -135,7 +139,8 @@ struct CookbookScanView: View {
                 ids.append(try await api.uploadImage(jpeg).id)
                 uploaded += 1
             }
-            _ = try await api.scanCookbook(images: ids, cheaper: cheaper)
+            _ = try await api.scanCookbook(images: ids, cheaper: cheaper,
+                                           book: book.trimmingCharacters(in: .whitespaces))
             model.bump("recipes")
             dismiss()
         } catch {

@@ -123,6 +123,7 @@ def recipe_out(r: dict) -> dict:
         "ingredients": ingredients,
         "steps": [step_out(s, ingredients) for s in steps],
         "tags": tags, "notes": r.get("notes") or "", "url": r.get("url"),
+        "course": r.get("course"), "book": r.get("book") or "", "book_page": r.get("book_page"),
         "cooked_count": r.get("cooked_count") or 0, "last_cooked": r.get("last_cooked"),
         "created_at": r.get("created_at"), "updated_at": r.get("updated_at"),
     }
@@ -159,6 +160,15 @@ def recipe_fields(c, body: dict, partial: bool, check_images: bool = True) -> di
         out["description"] = _text(body.get("description") or "", "description", 4000)
     if has("notes"):
         out["notes"] = _text(body.get("notes") or "", "notes", 8000)
+    if has("course"):
+        course = body.get("course") or None
+        if course is not None and course not in recipe_text.COURSES:
+            raise bad("course must be one of " + ", ".join(recipe_text.COURSES) + ", or null")
+        out["course"] = course
+    if has("book"):
+        out["book"] = _text(body.get("book") or "", "book", 200)
+    if has("book_page"):
+        out["book_page"] = _opt_int(body, "book_page", 1, 10000)
     if has("url"):
         out["url"] = opt_str(body, "url").strip() or None
     if has("photo"):
@@ -503,9 +513,9 @@ def batch_out(c, bid: str) -> dict:
         drafts.append({"id": d["id"], "pages": [p + 1 for p in json.loads(d["pages"])],
                        "recipe": recipe_out({"id": None, **fields})})
     drafts.sort(key=lambda d: d["pages"][0])
-    b = db.row(c, "SELECT cheaper FROM recipe_batches WHERE id = ?", (bid,))
+    b = db.row(c, "SELECT cheaper, book FROM recipe_batches WHERE id = ?", (bid,))
     return {
-        "id": bid, "pages": len(pages), "cheaper": bool(b and b["cheaper"]),
+        "id": bid, "pages": len(pages), "cheaper": bool(b and b["cheaper"]), "book": b["book"] if b else "",
         "read": sum(p["status"] in ("read", "failed") for p in pages),
         "reading": any(p["status"] in ("waiting", "reading") for p in pages),
         "failed": [{"page": p["page"] + 1, "error": p["error"] or ""} for p in pages if p["status"] == "failed"],
@@ -527,7 +537,7 @@ def list_batches():
 
 @router.post("/recipes-batches")
 async def create_batch(body: dict = Body(...)):
-    """{images: [ids], cheaper?: bool}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads
+    """{images: [ids], cheaper?: bool, book?: the cookbook's name, given to every recipe found}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads
     them in the background; the recipes found turn up in GET /api/recipes-batches to check and save. `cheaper` sends
     them as an Anthropic Message Batch: half the price, usually done within the hour, at most a day."""
     body = body_dict(body)
@@ -543,7 +553,8 @@ async def create_batch(body: dict = Body(...)):
         for iid in ids:
             if not isinstance(iid, str) or not c.execute("SELECT 1 FROM images WHERE id = ?", (iid,)).fetchone():
                 raise bad("images must be uploaded pictures (POST /api/images)")
-    bid = recipe_batch.create(ids, cheaper=body.get("cheaper") is True)
+    book = body.get("book") if isinstance(body.get("book"), str) else ""
+    bid = recipe_batch.create(ids, cheaper=body.get("cheaper") is True, book=book.strip()[:200])
     with db.connect() as c:
         out = batch_out(c, bid)
     await hub.broadcast("recipes")

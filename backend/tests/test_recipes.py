@@ -424,3 +424,42 @@ def test_reading_anthropic_batch_results(monkeypatch):
     assert out[4][0] is None and "declined" in out[4][1]
     assert out[5] == (None, "Anthropic couldn't read this page. Try again.")
     assert "within a day" in out[6][1]
+
+
+def test_course_and_cookbook(client):
+    r = client.post("/api/recipes", json={"title": "Eton mess", "course": "dessert", "book": "Simple", "book_page": 212})
+    assert (r.json()["course"], r.json()["book"], r.json()["book_page"]) == ("dessert", "Simple", 212)
+    assert client.post("/api/recipes", json={"title": "X", "course": "elevenses"}).status_code == 400
+    rid = r.json()["id"]
+    assert client.patch(f"/api/recipes/{rid}", json={"course": None}).json()["course"] is None
+    assert [recipe_text.course_from(t) for t in (["Main course"], ["vegan", "Desserts"], ["Light bites"], ["quick"])] == \
+        ["main", "dessert", "light", None]
+    page = ('<script type="application/ld+json">{"@type":"Recipe","name":"Soup","recipeCategory":"Starter",'
+            '"recipeIngredient":["1 onion"],"recipeInstructions":"Chop."}</script>')
+    draft, _ = recipe_import.read_page(page, "https://example.com/soup")
+    assert draft["course"] == "starter"
+
+
+def test_cookbook_scan_names_the_book(client, monkeypatch):
+    import time
+
+    async def fake_page(key, model, image):
+        return [{"title": "Scones", "description": "", "servings": None, "prep_minutes": None, "cook_minutes": None,
+                 "minutes": None, "ingredients": ["225g flour"], "steps": [{"text": "Bake.", "minutes": None}],
+                 "tags": [], "notes": "", "course": "baking", "book_page": 88, "continues": False}]
+
+    monkeypatch.setattr(recipe_import, "read_cookbook_page", fake_page)
+    client.put("/api/recipes-reader", json={"pin": PIN, "api_key": "sk-ant-test-abcd"})
+    img = client.post("/api/images", content=PNG).json()["id"]
+    b = client.post("/api/recipes-batches", json={"images": [img], "book": "Bake Off"}).json()
+    assert b["book"] == "Bake Off"
+    for _ in range(100):
+        [b] = client.get("/api/recipes-batches").json()
+        if b["drafts"]:
+            break
+        time.sleep(0.02)
+    rec = b["drafts"][0]["recipe"]
+    assert (rec["book"], rec["book_page"], rec["course"]) == ("Bake Off", 88, "baking")
+    client.post(f"/api/recipes-batches/{b['id']}/save-all")
+    [saved] = client.get("/api/recipes").json()
+    assert (saved["book"], saved["book_page"], saved["course"]) == ("Bake Off", 88, "baking")

@@ -140,6 +140,10 @@ def _servings(y) -> int | None:
     return int(m.group(0)) if m and 0 < int(m.group(0)) <= 200 else None
 
 
+def _list(v) -> list[str]:
+    return [_clean(x) for x in v] if isinstance(v, list) else [_clean(x) for x in str(v or "").split(",")]
+
+
 def _tags(node: dict) -> list[str]:
     tags: list[str] = []
     for k in ("recipeCategory", "recipeCuisine", "keywords"):
@@ -161,6 +165,7 @@ def from_schema(node: dict, url: str) -> dict:
         "ingredients": [_clean(i) for i in (node.get("recipeIngredient") or node.get("ingredients") or []) if _clean(i)],
         "steps": _steps(node.get("recipeInstructions")),
         "tags": _tags(node),
+        "course": recipe_text.course_from(_list(node.get("recipeCategory"))),
         "notes": "",
         "url": url,
         "image_url": _image_url(node.get("image")),
@@ -228,9 +233,11 @@ READER_SCHEMA = {
             "required": ["text", "minutes"], "additionalProperties": False}},
         "tags": {"type": "array", "items": {"type": "string"}},
         "notes": {"type": "string"},
+        "course": {"type": "string", "enum": [*recipe_text.COURSES, "none"]},
+        "page_number": {"type": ["integer", "null"]},
     },
     "required": ["found", "title", "description", "servings", "prep_minutes", "cook_minutes", "ingredients", "steps",
-                 "tags", "notes"],
+                 "tags", "notes", "course", "page_number"],
     "additionalProperties": False,
 }
 
@@ -244,7 +251,10 @@ states, if any, else null.
 - tags: up to five short lower-case words (cuisine, course, main ingredient).
 - description: the recipe's own introduction, shortened to two sentences at most; empty if there is none.
 - notes: tips or variations printed with the recipe; empty if none.
-If several pages are given they are one recipe, in order. If there is no recipe, set found to false."""
+- course: the one that fits best: {courses}; none if none fits.
+- page_number: the page number printed on a cookbook page where the recipe starts, if you can see one, else null.
+If several pages are given they are one recipe, in order. If there is no recipe, set found to false.""".replace(
+    "{courses}", ", ".join(f"{k} ({name.lower()})" for k, (name, _) in recipe_text.COURSES.items()))
 
 
 async def read_with_claude(api_key: str, model: str, *, images: list[tuple[str, bytes]] | None = None,
@@ -431,6 +441,8 @@ def _draft(data: dict) -> dict:
                   for s in data.get("steps") or [] if isinstance(s, dict) and str(s.get("text") or "").strip()],
         "tags": [str(t).strip().lower() for t in data.get("tags") or [] if str(t).strip()][:8],
         "notes": str(data.get("notes") or ""),
+        "course": data.get("course") if data.get("course") in recipe_text.COURSES else None,
+        "book_page": _int_or_none(data.get("page_number")),
     }
 
 

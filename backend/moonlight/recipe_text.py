@@ -437,3 +437,30 @@ def iso_minutes(value) -> int | None:
     d, h, mi, s = (float(x) if x else 0 for x in m.groups())
     total = int(round(d * 1440 + h * 60 + mi + s / 60))
     return total or None
+
+
+# ---------------------------------------------------------------- courses (how the recipe box is arranged)
+
+# key -> (name, words that mean it in tags, categories and recipe sites). In menu order.
+COURSES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "breakfast": ("Breakfast & brunch", ("breakfast", "brunch")),
+    "starter": ("Starters", ("starter", "starters", "appetizer", "appetizers", "appetiser", "appetisers", "entree")),
+    "light": ("Light bites", ("light bite", "light bites", "lunch", "light meal", "light meals", "light lunch")),
+    "main": ("Main meals", ("main", "mains", "main meal", "main meals", "main course", "main dish", "dinner", "supper")),
+    "side": ("Sides", ("side", "sides", "side dish", "side dishes", "accompaniment")),
+    "dessert": ("Desserts", ("dessert", "desserts", "desert", "deserts", "pudding", "puddings", "sweet", "sweets")),
+    "baking": ("Baking", ("baking", "bake", "bakes", "cake", "cakes", "bread", "breads", "biscuits", "cookies")),
+    "snack": ("Snacks", ("snack", "snacks", "nibbles")),
+    "drink": ("Drinks", ("drink", "drinks", "cocktail", "cocktails", "smoothie", "smoothies", "beverage")),
+    "extra": ("Sauces & extras", ("sauce", "sauces", "condiment", "condiments", "dressing", "dressings", "preserves")),
+}
+
+
+def course_from(words) -> str | None:
+    """The course a list of tags or categories names, if any ("Main course", "desserts", "Main meals")."""
+    for w in words or []:
+        w = str(w).strip().lower()
+        for key, (name, words_) in COURSES.items():
+            if w == key or w == name.lower() or w in words_:
+                return key
+    return None

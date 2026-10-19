@@ -8,6 +8,7 @@ import { Heart, IngredientRow, RecipePicture, ServingsStepper, Stars, StepAmount
 import { AddToListSheet } from "./AddToListSheet";
 import { CookMode } from "./CookMode";
 import { RecipeEditor } from "./RecipeEditor";
+import { bookLine, courseName } from "../../recipes/courses";
 
 const SLOT_OPTIONS: { value: Slot; label: string }[] = [
   { value: "breakfast", label: "Breakfast" }, { value: "lunch", label: "Lunch" }, { value: "dinner", label: "Dinner" }, { value: "snack", label: "Snack" },
@@ -52,6 +53,9 @@ export function RecipePage({ recipe, onClose }: { recipe: Recipe; onClose: () =>
               {recipe.cooked_count ? `Made ${recipe.cooked_count} ${recipe.cooked_count === 1 ? "time" : "times"}, last ${lastMade}` : "Not made yet"}
               {recipe.tags.length > 0 && <> · {recipe.tags.join(", ")}</>}
             </p>
+            {(recipe.course || recipe.book) && <p className="rp-made muted">
+              {[courseName(recipe.course), bookLine(recipe.book, recipe.book_page)].filter(Boolean).join(" · ")}
+            </p>}
             <div className="rp-actions">
               <button className="btn" onClick={() => setSheet("cook")} disabled={!recipe.steps.length}>▶ Start cooking</button>
               <button className="btn ghost" onClick={() => setSheet("list")} disabled={!recipe.ingredients.length}><IconCart size={20} /> Add to list</button>

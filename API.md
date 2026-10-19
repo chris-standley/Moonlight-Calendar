@@ -205,7 +205,11 @@ Meal = `{id, date, slot: "breakfast"|"lunch"|"dinner"|"snack", title, notes, rec
 Recipe = `{id, title, emoji, description, photo: image id|null, photo_url|null, rating: 0..5 (0 = not rated),
 favourite: bool, servings: int|null, prep_minutes|null, cook_minutes|null, minutes|null (total: as saved, else prep +
 cook), ingredients: [Ingredient], steps: [Step], tags: [str], notes, url|null (where it came from), cooked_count,
-last_cooked: date|null, created_at, updated_at}`
+last_cooked: date|null, created_at, updated_at, course: str|null, book: str ("" when none), book_page: int|null}`.
+  `course` is one of `breakfast, starter, light, main, side, dessert, baking, snack, drink, extra` (Breakfast &
+  brunch, Starters, Light bites, Main meals, Sides, Desserts, Baking, Snacks, Drinks, Sauces & extras), which the
+  screens arrange the recipe box by; `book` and `book_page` are the cookbook it came from. Claude fills in the course
+  and the printed page number when it reads a recipe; recipes saved before courses got a first guess from their tags.
 - Ingredient = `{text, quantity: number|null, quantity_max: number|null (a range "3-4"), unit, name, note, heading: bool,
   metric: {quantity, quantity_max, unit: "g"|"ml"}|null}`, read from the saved line `text`, which is never changed.
   `unit` is a short name (`g, kg, ml, l, tsp, tbsp, cup, fl oz, oz, lb, pint, quart, gallon, stick, clove, tin, can,
@@ -223,7 +227,7 @@ last_cooked: date|null, created_at, updated_at}`
 - `GET /api/recipes` (by title); `GET /api/recipes/{id}`
 - `POST /api/recipes` `{title, emoji?, description?, photo?, rating?, favourite?, servings? 1..100, prep_minutes?,
   cook_minutes?, minutes?, ingredients?: [str | {text}], steps?: [str | {text, minutes?, photo?}], tags?, notes?,
-  url?}` -> Recipe; `PATCH /api/recipes/{id}` (any of those); `DELETE /api/recipes/{id}` -> `{ok: true}`. Meals planned
+  url?, course?, book?, book_page?}` -> Recipe; `PATCH /api/recipes/{id}` (any of those); `DELETE /api/recipes/{id}` -> `{ok: true}`. Meals planned
   from a deleted recipe keep their title and get `recipe_id: null`. Tags are stored lower-case, without repeats.
 - `POST /api/recipes/{id}/to-list` `{list_id, items?: [str]}` -> `{added}`: the chosen lines (the screens send them
   scaled, as shown), else every ingredient that isn't a heading.
@@ -250,10 +254,10 @@ last_cooked: date|null, created_at, updated_at}`
 - Scanning a whole cookbook: each page photo is read by Claude on its own, four at a time, in the background (and
   after a restart) until every page is done; pages Anthropic is too busy for are tried 3 times. A recipe that carries
   on from the page before is joined to it, so a recipe is offered once the page after it is read (or it's the last).
-  Batch = `{id, pages, read, reading: bool, cheaper: bool, failed: [{page, error}], saved, drafts: [{id, pages: [int] (from 1),
+  Batch = `{id, pages, read, reading: bool, cheaper: bool, book, failed: [{page, error}], saved, drafts: [{id, pages: [int] (from 1),
   recipe: Recipe (id null)}]}`. Every change sends `recipes`.
   - `GET /api/recipes-batches` -> [Batch]; `POST /api/recipes-batches` `{images: [image ids], in page order, up to 200,
-    cheaper?: bool}` -> Batch (409 when no key is set). `cheaper` sends the pages as one Anthropic Message Batch: half
+    cheaper?: bool, book?: the cookbook's name, given to every recipe found}` -> Batch (409 when no key is set). `cheaper` sends the pages as one Anthropic Message Batch: half
     the price, read when Anthropic has room (usually within the hour, at most a day); Moonlight checks on it every two
     minutes, cancels it when the scan is cleared, and failed pages tried again go as a new batch.
   - `POST /api/recipes-batches/{id}/retry` -> Batch: read the failed pages again.

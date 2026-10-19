@@ -130,6 +130,9 @@ RECIPE_EXTRA_COLUMNS = {
     "tags": "TEXT NOT NULL DEFAULT '[]'",
     "notes": "TEXT NOT NULL DEFAULT ''",
     "cooked_count": "INTEGER NOT NULL DEFAULT 0",
+    "course": "TEXT",                     # a key of recipe_text.COURSES, or null
+    "book": "TEXT NOT NULL DEFAULT ''",   # the cookbook it came from
+    "book_page": "INTEGER",
     "last_cooked": "TEXT",
     "created_at": "TEXT",
     "updated_at": "TEXT",
@@ -141,7 +144,8 @@ CREATE TABLE IF NOT EXISTS recipe_batches (
     id           TEXT PRIMARY KEY,
     created_at   TEXT NOT NULL,
     cheaper      INTEGER NOT NULL DEFAULT 0,  -- sent as an Anthropic Message Batch: half price, within a day
-    anthropic_id TEXT                         -- that batch, while Anthropic is reading it
+    anthropic_id TEXT,                        -- that batch, while Anthropic is reading it
+    book         TEXT NOT NULL DEFAULT ''     -- the cookbook's name, given to every recipe found
 );
 CREATE TABLE IF NOT EXISTS recipe_batch_pages (
     batch_id TEXT NOT NULL,
@@ -314,13 +318,24 @@ def init_db() -> None:
         c.executescript(IMAGES_SCHEMA)
         c.executescript(BATCH_SCHEMA)
         have = {r[1] for r in c.execute("PRAGMA table_info(recipe_batches)")}
-        for col, decl in (("cheaper", "INTEGER NOT NULL DEFAULT 0"), ("anthropic_id", "TEXT")):
+        for col, decl in (("cheaper", "INTEGER NOT NULL DEFAULT 0"), ("anthropic_id", "TEXT"),
+                          ("book", "TEXT NOT NULL DEFAULT ''")):
             if col not in have:
                 c.execute(f"ALTER TABLE recipe_batches ADD COLUMN {col} {decl}")
         have = {r[1] for r in c.execute("PRAGMA table_info(recipes)")}
         for col, decl in RECIPE_EXTRA_COLUMNS.items():
             if col not in have:
                 c.execute(f"ALTER TABLE recipes ADD COLUMN {col} {decl}")
+        if "course" not in have:  # a first guess at each recipe's course, from its tags
+            from .recipe_text import course_from
+
+            for r in c.execute("SELECT id, tags FROM recipes").fetchall():
+                try:
+                    course = course_from(json.loads(r[1] or "[]"))
+                except ValueError:
+                    continue
+                if course:
+                    c.execute("UPDATE recipes SET course = ? WHERE id = ?", (course, r[0]))
         have = {r[1] for r in c.execute("PRAGMA table_info(events)")}
         for col, decl in EVENT_SOURCE_COLUMNS.items():
             if col not in have:
