@@ -1180,6 +1180,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-phone .sec-sensors { overflow: visible; }
 .layout-phone .sec-when { display: none; }
 .sec-set-sub { display: flex; align-items: center; justify-content: space-between; margin: 1rem 0 0.3rem; font-size: 1rem; font-weight: 800; }
+.set-row > .sec-popup-on { flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
 .sec-set-cam { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
 .sec-set-cam-top { display: flex; align-items: center; gap: 0.7rem; }
 .sec-set-cam-top .player-main { flex: 1; min-width: 0; }

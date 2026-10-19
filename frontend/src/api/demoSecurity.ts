@@ -1,7 +1,7 @@
 // Demo-mode security: a pretend alarm with door, window and motion sensors and three cameras. The camera pictures
 // are drawn as SVG (a "live" one moves a little) so the demo needs no real camera.
 import {
-  Api, ApiError, Layout, SecurityAlert, SecurityCamera, SecurityOptions, SecurityOverview, SecuritySensor, SecuritySettings, Topic,
+  Api, ApiError, PopupTarget, SecurityAlert, SecurityCamera, SecurityOptions, SecurityOverview, SecuritySensor, SecuritySettings, Topic,
 } from "./types";
 
 type Extras = Pick<Api, "security" | "securityAlerts" | "securityOptions" | "testSecurityAlert">;
@@ -76,7 +76,7 @@ export function demoSecurity(emit: (...t: Topic[]) => void, settings: () => Secu
         cameras: cams().map((c) => ({ entity_id: c.entity_id, name: c.name, show: c.show, person: c.personSensor, auto_person: settings()?.cameras?.[c.entity_id]?.person == null, default_person: c.person, available: true })),
         person_sensors: CAMS.map((c) => ({ entity_id: c.person, name: `${c.name} Person detected` })),
         sensors_source: "alarmo", sensor_count: SENSORS.length,
-        popup: { large: true, compact: true, phone: false, ...settings()?.popup } as Record<Layout, boolean>,
+        popup: { large: true, compact: true, phone: false, tv: false, ...settings()?.popup } as Record<PopupTarget, boolean>,
       };
     },
     async testSecurityAlert(camera, pin) {

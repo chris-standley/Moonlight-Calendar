@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, Layout, SecurityOptions, SecuritySettingsPatch, STYLE_LABEL } from "../api/types";
+import { ApiError, PopupTarget, SecurityOptions, SecuritySettingsPatch, STYLE_LABEL } from "../api/types";
 import { useApp } from "../state";
 import { Sheet } from "../components/ui";
 
-const STYLES: Layout[] = ["large", "compact", "phone"];
+const TARGETS: PopupTarget[] = ["large", "compact", "phone", "tv"];
+const TARGET_LABEL: Record<PopupTarget, string> = { ...STYLE_LABEL, tv: "Apple TV" };
 
 /** Settings › Security: which alarm, which cameras (and their person sensors), and where people pop up. */
 export function SecurityPanel() {
@@ -39,7 +40,7 @@ export function SecurityPanel() {
     );
   }
   const alarmName = !opts ? "…" : opts.alarm_entity ? (opts.panels.find((p) => p.entity_id === opts.alarm_entity)?.name ?? opts.alarm_entity) : "None";
-  const popup = opts?.popup ?? { large: true, compact: true, phone: false };
+  const popup = opts?.popup ?? { large: true, compact: true, phone: false, tv: false };
   return (
     <section className="panel">
       <h2 className="panel-title">Security</h2>
@@ -52,10 +53,10 @@ export function SecurityPanel() {
         <b>{!opts ? "…" : opts.sensors_source === "alarmo" ? `${opts.sensor_count} from Alarmo` : "Alarmo not found"}</b>
       </div>
       <div className="set-row"><span>Pop up people on</span>
-        <span className="set-pin">
-          {STYLES.map((l) => (
+        <span className="set-pin sec-popup-on">
+          {TARGETS.map((l) => (
             <button key={l} className={"chip-btn" + (popup[l] ? " on" : "")} disabled={!opts}
-              onClick={() => save({ popup: { [l]: !popup[l] } }, "Change where people pop up")}>{STYLE_LABEL[l]}</button>
+              onClick={() => save({ popup: { [l]: !popup[l] } }, "Change where people pop up")}>{TARGET_LABEL[l]}</button>
           ))}
         </span>
       </div>

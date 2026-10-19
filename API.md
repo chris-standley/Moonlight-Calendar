@@ -15,7 +15,7 @@ implementation of the same contract, used for the published preview). Keep them 
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
   media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv},
-  security: {alarm_entity?, cameras?, popup: {large, compact, phone}}}`
+  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
@@ -39,7 +39,7 @@ implementation of the same contract, used for the published preview). Keep them 
   screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security`, plus `pin` (required) -> settings.
   `security` (merged, see Security): `alarm_entity` an `alarm_control_panel.*` id, `""` none, null automatic;
   `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
-  `popup: {large?, compact?, phone?: bool}` (default large and compact on). Broadcasts `security` and `security_alert`.
+  `popup: {large?, compact?, phone?, tv?: bool}` (default large and compact on; `tv` is the Apple TV app, off). Broadcasts `security` and `security_alert`.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial

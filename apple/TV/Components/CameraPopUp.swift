@@ -1,14 +1,15 @@
 import AVFoundation
 import SwiftUI
 
-/// When a camera sees a person, its live video pops up in the corner (Settings › Security, "Pop up people on"
-/// Large) and goes 15 seconds after they've gone. The TV plays the camera's full-resolution stream.
+/// When a camera sees a person, its live video pops up in the corner and goes 15 seconds after they've gone. Only when
+/// it's turned on for the Apple TV in Settings › Security ("Pop up people on"; off by default, as the TV may already
+/// show cameras from HomeKit). The TV plays the camera's full-resolution stream.
 struct CameraPopUp: View {
     @Environment(AppModel.self) private var model
     @State private var shown: SecurityAlert?
     @State private var hide: Task<Void, Never>?
 
-    private var enabled: Bool { model.settings?.security?.popup?[model.api?.layout ?? "large"] ?? true }
+    private var enabled: Bool { model.settings?.security?.popup?["tv"] ?? false }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -33,6 +34,7 @@ struct CameraPopUp: View {
     }
 
     private func load() async {
+        guard enabled else { shown = nil; return }
         guard let alerts = await model.call({ try await $0.securityAlerts() }) else { return }
         if let first = alerts.first(where: { $0.camera == shown?.camera }) ?? alerts.first {
             hide?.cancel()

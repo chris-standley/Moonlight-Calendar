@@ -426,7 +426,7 @@ export function demoApi(): Api {
       }
       if (security) {
         const cur = st.settings.security ?? {};
-        const next: SecuritySettings = { ...cur, cameras: { ...cur.cameras }, popup: { large: true, compact: true, phone: false, ...cur.popup, ...security.popup } };
+        const next: SecuritySettings = { ...cur, cameras: { ...cur.cameras }, popup: { large: true, compact: true, phone: false, tv: false, ...cur.popup, ...security.popup } };
         if (security.alarm_entity === null) delete next.alarm_entity;
         else if (security.alarm_entity !== undefined) next.alarm_entity = security.alarm_entity;
         for (const [k, v] of Object.entries(security.cameras ?? {})) {

@@ -294,15 +294,15 @@ def test_no_home_assistant(tmp_path, monkeypatch):
 def test_options_and_settings(client, fake):
     o = client.get("/api/security/options").json()
     assert o["alarm_entity"] == "alarm_control_panel.alarm" and o["sensor_count"] == 4
-    assert o["popup"] == {"large": True, "compact": True, "phone": False}
+    assert o["popup"] == {"large": True, "compact": True, "phone": False, "tv": False}
     assert {p["entity_id"] for p in o["person_sensors"]} == {"binary_sensor.driveway_person_detected",
                                                              "binary_sensor.front_door_person_detected"}
     r = client.patch("/api/settings", json={"pin": PIN, "security": {
-        "alarm_entity": "", "popup": {"compact": False},
+        "alarm_entity": "", "popup": {"compact": False, "tv": True},
         "cameras": {"camera.driveway": {"show": False}, "camera.printer": {"show": True, "person": ""},
                     "camera.front_doorbell": {"person": "binary_sensor.driveway_person_detected"}}}})
     assert r.status_code == 200, r.text
-    assert r.json()["security"]["popup"] == {"large": True, "compact": False, "phone": False}
+    assert r.json()["security"]["popup"] == {"large": True, "compact": False, "phone": False, "tv": True}
     s = client.get("/api/security").json()
     assert s["alarm"] is None and s["sensors"] and [c["entity_id"] for c in s["cameras"]] == ["camera.front_doorbell", "camera.printer"]
     fake.states["binary_sensor.driveway_person_detected"]["state"] = "on"

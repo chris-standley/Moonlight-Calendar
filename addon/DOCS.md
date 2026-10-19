@@ -111,8 +111,8 @@ The Security section shows your alarm, its sensors and your cameras from Home As
 
 When a camera's "Person detected" sensor turns on, the camera pops up live in the corner of the wall screens (if the
 screensaver is showing, the camera takes the photo's place full screen instead) and goes away 15 seconds after the person has gone; tap it to watch full size or the cross to close
-it. Settings > Security chooses which styles of screen pop up (large and compact by default), which sensor each camera
-uses, and has a **Test pop-up** button. The live picture is Home Assistant's own video
+it. Settings > Security chooses which styles of screen pop up (large and compact by default) and whether the Apple TV
+app does (off by default, handy if the TV already shows cameras from HomeKit), which sensor each camera uses, and has a **Test pop-up** button. The live picture is Home Assistant's own video
 stream of the camera. For a lighter stream on a Raspberry Pi, enable each camera's "Medium resolution channel" entity in
 Home Assistant: compact screens then play it, while large screens and the Apple TV keep the full resolution. Turning on
 "Preload stream" in each camera entity's settings makes the video start faster. Cameras that can't stream fall back to snapshots about twice a second.

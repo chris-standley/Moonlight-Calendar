@@ -44,8 +44,9 @@ PANEL_RE = re.compile(r"^alarm_control_panel\.[a-z0-9_]+$")
 CAMERA_RE = re.compile(r"^camera\.[a-z0-9_]+$")
 BINARY_RE = re.compile(r"^binary_sensor\.[a-z0-9_]+$")
 WATCH_RE = re.compile(r"^(alarm_control_panel|binary_sensor|sensor)\.[a-z0-9_]+$")
-LAYOUTS = ("large", "compact", "phone")
-DEFAULT_POPUP = {"large": True, "compact": True, "phone": False}
+# Where a camera that sees a person pops up: each screen style, and the Apple TV app on its own (off by default, as a
+# TV may already show cameras from HomeKit).
+DEFAULT_POPUP = {"large": True, "compact": True, "phone": False, "tv": False}
 
 DISCOVERY_TTL = 300.0
 STATES_TTL = 2.0
@@ -146,8 +147,8 @@ def apply_settings(c, body: dict) -> bool:
         out["cameras"] = merged
     if "popup" in val:
         pop = val["popup"]
-        if not isinstance(pop, dict) or any(k not in LAYOUTS or not isinstance(v, bool) for k, v in pop.items()):
-            raise bad("security.popup must map large/compact/phone to true or false")
+        if not isinstance(pop, dict) or any(k not in DEFAULT_POPUP or not isinstance(v, bool) for k, v in pop.items()):
+            raise bad("security.popup must map large/compact/phone/tv to true or false")
         out["popup"] = {**popup_setting(c), **pop}
     db.set_setting(c, KEY, out)
     return True
