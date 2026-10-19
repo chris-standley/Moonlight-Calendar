@@ -11,7 +11,7 @@ from . import db
 
 log = logging.getLogger("moonlight")
 
-TOPICS = {"people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos", "displays", "accounts", "media", "security", "security_alert"}
+TOPICS = {"people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos", "displays", "accounts", "media", "security", "security_alert", "nursery"}
 
 
 class Hub:

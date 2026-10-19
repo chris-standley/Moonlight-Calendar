@@ -37,6 +37,10 @@ export const IconCctv = ({ size, ...p }: P) => (
 export const IconPhotos = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><rect x="3" y="4.5" width="18" height="15" rx="3" /><circle cx="9" cy="10" r="1.8" /><path d="M21 16l-5-5-8.5 8.5" /></svg>
 );
+/** Nursery: a stack of toy blocks. */
+export const IconNursery = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}><rect x="3.5" y="13" width="8" height="7.5" rx="1.5" /><rect x="12.5" y="13" width="8" height="7.5" rx="1.5" /><path d="M12 3.5l4.5 7.5h-9z" /></svg>
+);
 export const IconSettings = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2L5.5 5.5" /></svg>
 );

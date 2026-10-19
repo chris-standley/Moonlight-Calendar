@@ -497,6 +497,37 @@ ImmichAlbum = `{id, name, asset_count, shared, updated_at|null}` (`updated_at` =
   Needs the same auth as the rest of `/api` (paired screens send the cookie with `<img>` requests).
 Changes broadcast the `photos` topic.
 
+## Nursery (Tapestry)
+Nursery updates from [Tapestry](https://tapestry.info), the early years learning journal. Tapestry has no public API,
+so Moonlight signs in with the family's own email and password as the website does (`GET /login` for the CSRF token,
+`POST /login`, and for accounts at more than one setting the `/select-school` page's `/visit-school/<id>` or
+`/s/<slug>/` links) and reads the JSON endpoints Tapestry's web app uses: `GET /api/4/observations/list?perPage=N`
+(newest first) and `GET /api/4/observations/get/{id}`, with `X-Requested-With: XMLHttpRequest`, `X-CSRF-TOKEN` and
+`X-TAPESTRY-VERSION: 3`. Unofficial: it may need changing if Tapestry changes its site. Logins that use Google,
+Microsoft or a verification code can't be used. The newest 20 observations are checked every 30 minutes
+(`MOONLIGHT_TAPESTRY_SECONDS`; 10 minutes after a network error); new ones, and ones whose list entry changed (edited,
+new photos or comments), are read in full. The newest 40 are kept: text in the database, photos (up to 12 per update,
+the still for a video) as files in `nursery/` beside it, because Tapestry's photo links are signed and expire. A
+rejected login stops the checks until it is changed, so the account isn't locked.
+
+NurseryConfig = `{configured, email, school, school_name|null, status: "unconfigured"|"pending"|"ok"|"auth_failed"|"error",
+last_error|null, last_sync|null, count}`. The password is never returned.
+NurseryUpdate = `{id, title, notes, author, date, children: [{name, person_id|null, color|null}], photos: [{url, video}],
+comments: [{author, date|null, text}], added_at}`. `notes` is plain text with line breaks. `date` is when the nursery
+wrote it, household time (`YYYY-MM-DDTHH:MM:SS`, or a bare date). `person_id`/`color`: the Moonlight person with the
+same first name, if any. `video`: the picture is a video's still (the video stays on Tapestry).
+- `GET /api/nursery` -> NurseryConfig
+- `PUT /api/nursery` `{pin, email, password?, school?}` -> NurseryConfig. Signs in to Tapestry first (400 with the reason
+  when it doesn't accept the login, 502 unreachable), then reads the newest updates. `password` may be left out to keep
+  the saved one (same email). `school`: the setting's name, part of it or its slug, for logins at more than one (""
+  = the first). Another account's email forgets the previous account's updates.
+- `DELETE /api/nursery` `{pin}` -> `{ok: true}` (forgets the login, updates and photos; nothing changes on Tapestry)
+- `POST /api/nursery/sync` -> NurseryConfig after checking Tapestry now (404 not connected, 400 / 502 as above)
+- `GET /api/nursery/updates?limit=40` -> `[NurseryUpdate]`, newest first
+- `GET /api/nursery/photos/{id}/{n}?v=...` -> the photo (`url` above), `Cache-Control: private, max-age=604800, immutable`
+Changes broadcast the `nursery` topic. The `nursery` menu section is shown on screens only once Tapestry is connected;
+it is in the large screens' menus by default, and other screens show a button in the top bar instead.
+
 ## Display
 - `GET /display` and every non-`/api` path serve the SPA `index.html`. Older `/display/hallway`, `/display/kitchen` and
   `/display/phone` addresses keep working; a paired screen's style comes from the server either way.

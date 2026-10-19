@@ -13,10 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, ha_discovery, home_security, media, recipe_batch, security
+from . import __version__, auth, caldav_sync, db, ha_discovery, home_security, media, recipe_batch, security, tapestry
 from . import immich as immich_source
 from .common import hub, log
-from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals, recipes
+from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals, nursery, recipes
 from .routes import home_security as security_routes
 from .routes import media as media_routes
 from .routes import summary as summary_routes
@@ -55,6 +55,7 @@ def create_app(
     db.configure(db_path or os.environ.get("MOONLIGHT_DB", "./moonlight.db"))
     db.init_db()
     immich_source.cache.reset()  # the cached photo list belongs to the previous database's settings
+    tapestry.forget_session()
     if auth_enabled is None:
         auth_enabled = auth.auth_enabled_from_env()
     if demo is None:
@@ -94,7 +95,7 @@ def create_app(
         return JSONResponse({"detail": f"Something went wrong ({exc.__class__.__name__}). The add-on log has the "
                                        "details."}, status_code=500)
 
-    for module in (calendar, chores, lists, meals, recipes, displays, ha_login, immich, accounts):
+    for module in (calendar, chores, lists, meals, recipes, displays, ha_login, immich, accounts, nursery):
         app.include_router(module.router)
     app.include_router(summary_routes.router)
     app.include_router(media_routes.router)
@@ -150,6 +151,19 @@ def create_app(
 
         app.router.on_startup.append(start_sync)
         app.router.on_shutdown.append(stop_sync)
+
+        # Nursery updates from Tapestry, when a login is saved (see tapestry.py).
+        async def start_tapestry():
+            tapestry.syncer = tapestry.Syncer()
+            tapestry.syncer.start()
+
+        async def stop_tapestry():
+            if tapestry.syncer:
+                await tapestry.syncer.stop()
+                tapestry.syncer = None
+
+        app.router.on_startup.append(start_tapestry)
+        app.router.on_shutdown.append(stop_tapestry)
 
     @app.get("/api/health")
     async def health():
