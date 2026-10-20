@@ -358,8 +358,9 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .set-pin > b.clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Rows with several buttons: on phones the buttons go on the line under the text. */
 .layout-phone .set-row.stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
-.layout-phone .set-row.stack > .set-pin { flex-wrap: wrap; gap: 0.5rem; }
-.layout-phone .set-row.stack > .set-pin > b.clip { flex: 1 1 100%; }
+.layout-phone .set-row.stack > .set-pin { flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.layout-phone .set-row.stack > .set-pin > b { flex: 1 1 100%; text-align: right; }
+.layout-phone .acct-actions { margin-left: auto; justify-content: flex-end; }
 .set-wx { display: flex; align-items: center; gap: 0.4rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wx-row .wx-icon { flex: none; width: 2.2rem; display: grid; place-items: center; }
 .wx-row .wx-temp { flex: none; font-size: 1.3rem; font-weight: 800; }
