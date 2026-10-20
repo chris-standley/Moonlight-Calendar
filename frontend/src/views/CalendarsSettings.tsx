@@ -100,7 +100,7 @@ export function CalendarsPanel() {
             <span className={`status-dot s-${a.status}`} aria-label={a.status} />
             <div className="acct-name">
               <b>{a.label}</b>
-              <span className={a.status !== "ok" ? `s-${a.status}` : undefined}>{kindName(a.kind)}{single(a.kind) ? ` · ${a.server_url}` : ""} · {statusText(a)}</span>
+              <span className={a.status !== "ok" ? `s-${a.status}` : undefined}>{kindName(a.kind)}{single(a.kind) && <> · <span className="acct-src">{a.server_url}</span></>} · {statusText(a)}</span>
             </div>
             <div className="acct-actions">
               {a.status === "auth_failed" && <button className="btn small" onClick={() => setConnect({ account: a })}>Reconnect</button>}
