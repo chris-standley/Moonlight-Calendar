@@ -127,7 +127,7 @@ export function httpApi(base = ""): Api {
     async uploadImage(data) { const r = await req<UploadedImage>("POST", "/api/images", data); return { ...r, url: base + r.url }; },
     recipeReader: () => get("/api/recipes-reader"),
     recipeBatches: async () => (await get<RecipeBatch[]>("/api/recipes-batches")).map(batch),
-    scanCookbook: async (images, cheaper = false) => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images, cheaper })),
+    scanCookbook: async (images, cheaper = false, book = "") => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images, cheaper, book })),
     retryBatch: async (id) => batch(await req<RecipeBatch>("POST", `/api/recipes-batches/${id}/retry`, {})),
     deleteBatch: async (id) => { await req("DELETE", `/api/recipes-batches/${id}`); },
     saveAllDrafts: async (id) => (await req<{ saved: number }>("POST", `/api/recipes-batches/${id}/save-all`, {})).saved,

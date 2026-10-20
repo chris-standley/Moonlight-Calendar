@@ -11,14 +11,22 @@ import { demoNursery } from "./demoNursery";
 import { demoSecurity } from "./demoSecurity";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
+import { COURSES } from "../recipes/courses";
 
 interface Completion { chore_id: string; date: string; at: string }
 /** A recipe as the add-on stores it: ingredient lines and steps; the rest is worked out when read (recipeOut). */
+/** Like the add-on's first guess for recipes saved before courses: the course a tag names. */
+const COURSE_WORDS: Record<string, string> = { breakfast: "breakfast", brunch: "breakfast", starter: "starter", lunch: "light",
+  main: "main", dinner: "main", side: "side", dessert: "dessert", pudding: "dessert", baking: "baking", cake: "baking",
+  snack: "snack", drink: "drink", sauce: "extra" };
+const courseFromTags = (tags: string[]) => tags.map((t) => COURSE_WORDS[t]).find(Boolean) ?? null;
+
 interface RecipeRow {
   id: string; title: string; emoji: string; description?: string; photo?: string | null; rating?: number; favourite?: boolean;
   servings?: number | null; prep_minutes?: number | null; cook_minutes?: number | null; minutes: number | null;
   ingredients: string[]; steps?: { text: string; minutes: number | null; photo: string | null }[]; tags?: string[];
   notes?: string; url: string | null; cooked_count?: number; last_cooked?: string | null; created_at?: string; updated_at?: string;
+  course?: string | null; book?: string; book_page?: number | null;
 }
 interface State {
   seededOn: string;
@@ -283,7 +291,7 @@ export function demoApi(): Api {
   const recipeFields = (b: Partial<RecipeIn>, partial = false, checkImages = true): Partial<RecipeRow> => {
     const out: Partial<RecipeRow> = {};
     const has = (k: keyof RecipeIn) => !partial || k in b;
-    const int = (k: "servings" | "prep_minutes" | "cook_minutes" | "minutes" | "rating", lo: number, hi: number) => {
+    const int = (k: "servings" | "prep_minutes" | "cook_minutes" | "minutes" | "rating" | "book_page", lo: number, hi: number) => {
       const v = b[k];
       if (v == null || (v as unknown) === "") return null;
       if (!Number.isInteger(v) || v < lo || v > hi) throw new ApiError(400, `${k} must be between ${lo} and ${hi}`);
@@ -313,6 +321,12 @@ export function demoApi(): Api {
         if (x.minutes != null && !(x.minutes > 0 && x.minutes <= 1440)) throw new ApiError(400, "step minutes must be a number from 0 to 1440, or null");
         return { text: x.text.trim(), minutes: x.minutes ?? null, photo: img(x.photo, "step photo") };
       }).filter((x) => x.text || x.photo);
+    if (has("course")) {
+      if (b.course && !COURSES.some((c) => c.key === b.course)) throw new ApiError(400, "course must be a known course, or null");
+      out.course = b.course || null;
+    }
+    if (has("book")) out.book = (b.book ?? "").trim().slice(0, 200);
+    if (has("book_page")) out.book_page = int("book_page", 1, 10000);
     if (has("tags")) out.tags = [...new Set((b.tags ?? []).map((t) => t.trim().toLowerCase().slice(0, 30)).filter(Boolean))].slice(0, 20);
     return out;
   };
@@ -329,6 +343,7 @@ export function demoApi(): Api {
       steps: (r.steps ?? []).map((x) => ({ text: x.text, minutes: x.minutes, photo: x.photo, photo_url: imageUrl(x.photo),
         timers: stepTimers(x.text, x.minutes), metric_text: metricNote(x.text), uses: stepUses(x.text, ingredients) })),
       tags: r.tags ?? [], notes: r.notes ?? "", url: r.url ?? null, cooked_count: r.cooked_count ?? 0,
+      course: r.course ?? courseFromTags(r.tags ?? []), book: r.book ?? "", book_page: r.book_page ?? null,
       last_cooked: r.last_cooked ?? null, created_at: r.created_at ?? null, updated_at: r.updated_at ?? null,
     };
   };

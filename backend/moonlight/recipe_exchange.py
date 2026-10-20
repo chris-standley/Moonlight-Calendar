@@ -17,6 +17,7 @@ import zipfile
 from datetime import datetime
 
 from . import recipe_import, recipe_text
+from .recipe_text import COURSES, course_from
 
 FORMATS = {
     "mela": ("melarecipes", "application/zip"),
@@ -87,14 +88,14 @@ def _b64(pictures: dict, iid: str | None) -> str | None:
 def _mela(r: dict, pictures: dict) -> dict:
     out = {
         "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"moonlight:{r['id']}")).upper(),
-        "title": r["title"], "text": r["description"], "link": r["url"] or "",
+        "title": r["title"], "text": r["description"], "link": r["url"] or r["book"],
         "yield": str(r["servings"] or ""),
         "prepTime": _duration(r["prep_minutes"]), "cookTime": _duration(r["cook_minutes"]),
         "totalTime": _duration(r["minutes"]),
         "ingredients": "\n".join(_ingredient_lines(r, "# ")),
         "instructions": "\n".join(s["text"] for s in r["steps"] if s["text"]),
         "notes": r["notes"], "nutrition": "",
-        "categories": [t.replace(",", " ") for t in r["tags"]],
+        "categories": [t.replace(",", " ") for t in _categories(r)],
         "favorite": r["favourite"],
         "images": [b for b in [_b64(pictures, r["photo"])] if b],
     }
@@ -113,13 +114,19 @@ def _paprika(r: dict, pictures: dict) -> dict:
         "servings": str(r["servings"] or ""),
         "prep_time": _duration(r["prep_minutes"]), "cook_time": _duration(r["cook_minutes"]),
         "total_time": _duration(r["minutes"]),
-        "source": "", "source_url": r["url"] or "", "image_url": "",
-        "categories": r["tags"], "rating": r["rating"], "difficulty": "",
+        "source": r["book"], "source_url": r["url"] or "", "image_url": "",
+        "categories": _categories(r), "rating": r["rating"], "difficulty": "",
         "created": created, "photo": "1.jpg" if photo else "", "photo_data": photo, "photos": [],
         "photo_hash": hashlib.sha256(photo.encode()).hexdigest() if photo else "",
     }
     out["hash"] = hashlib.sha256(json.dumps(out, sort_keys=True).encode()).hexdigest()
     return out
+
+
+def _categories(r: dict) -> list[str]:
+    """The course (by name, as the other apps show it) and then the tags."""
+    course = COURSES[r["course"]][0] if r.get("course") in COURSES else None
+    return ([course] if course else []) + [t for t in r["tags"] if t != (course or "").lower()]
 
 
 def _data_uri(pictures: dict, iid: str | None) -> str | None:
@@ -139,6 +146,9 @@ def _schema_node(r: dict, pictures: dict) -> dict:
                                                   "image": _data_uri(pictures, s["photo"])}.items() if v}
                                for s in r["steps"] if s["text"]],
         "keywords": ", ".join(r["tags"]) or None,
+        "recipeCategory": COURSES[r["course"]][0] if r.get("course") in COURSES else None,
+        "isPartOf": {"@type": "Book", "name": r["book"]} if r["book"] else None,
+        "pagination": str(r["book_page"]) if r.get("book_page") else None,
         "url": r["url"],
         "comment": {"@type": "Comment", "text": r["notes"]} if r["notes"] else None,
         "aggregateRating": {"@type": "AggregateRating", "ratingValue": r["rating"], "ratingCount": 1}
@@ -212,7 +222,11 @@ def _from_json(value) -> list[dict]:
 def _schema_extras(n: dict) -> dict:
     rating = n.get("aggregateRating")
     comment = n.get("comment")
+    book = n.get("isPartOf")
+    page = n.get("pagination")
     return {
+        "book": str(book.get("name") or "") if isinstance(book, dict) else "",
+        "book_page": int(page) if isinstance(page, (str, int)) and str(page).isdigit() else None,
         "rating": _rating(rating.get("ratingValue")) if isinstance(rating, dict) else 0,
         "notes": comment.get("text", "") if isinstance(comment, dict) else "",
     }
@@ -292,6 +306,12 @@ def _tags(v) -> list[str]:
     return [str(t).strip().lower()[:30] for t in vals if str(t).strip()]
 
 
+def _link(link: str) -> dict:
+    """Mela's `link` is a web address or any other source, such as a cookbook."""
+    link = link.strip()
+    return {"url": link or None} if link.startswith(("http://", "https://")) else {"url": None, "book": link}
+
+
 def _from_mela(v: dict) -> dict:
     images = v.get("images") if isinstance(v.get("images"), list) else []
     return _finish({
@@ -301,8 +321,9 @@ def _from_mela(v: dict) -> dict:
         "minutes": minutes(v.get("totalTime")),
         "ingredients": _ingredients(v.get("ingredients")), "steps": _steps(v.get("instructions")),
         "tags": _tags(v.get("categories")),
+        "course": course_from(v.get("categories") if isinstance(v.get("categories"), list) else []),
         "notes": "\n\n".join(x for x in (str(v.get("notes") or "").strip(), str(v.get("nutrition") or "").strip()) if x),
-        "url": str(v.get("link") or "") or None,
+        **_link(str(v.get("link") or "")),
         "favourite": bool(v.get("favorite")),
         "photo": next((p for p in (_image(i) for i in images) if p), None),
     })
@@ -321,9 +342,11 @@ def _from_paprika(v: dict) -> dict:
         "minutes": minutes(v.get("total_time")),
         "ingredients": _ingredients(v.get("ingredients")), "steps": _steps(v.get("directions")),
         "tags": _tags(v.get("categories")),
+        "course": course_from(v.get("categories") if isinstance(v.get("categories"), list) else []),
         "notes": "\n\n".join(x for x in (str(v.get("notes") or "").strip(),
                                          str(v.get("nutritional_info") or "").strip()) if x),
         "url": str(v.get("source_url") or "") or None,
+        "book": "" if str(v.get("source") or "").startswith("http") else str(v.get("source") or "").strip(),
         "rating": _rating(v.get("rating")),
         "photo": photo or (v.get("image_url") or None),
     })
@@ -343,4 +366,8 @@ def _finish(d: dict) -> dict:
     d.setdefault("rating", 0)
     d.setdefault("favourite", False)
     d.setdefault("notes", "")
+    if d.get("course") in COURSES:
+        name = COURSES[d["course"]][0].lower()
+        d["tags"] = [t for t in d.get("tags") or [] if t != name]
+    d["book"] = (d.get("book") or "")[:200]
     return d

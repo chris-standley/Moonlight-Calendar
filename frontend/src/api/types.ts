@@ -112,6 +112,8 @@ export interface Recipe {
   /** Total: as saved, else prep + cook. */
   minutes: number | null;
   ingredients: Ingredient[]; steps: Step[]; tags: string[]; notes: string; url: string | null;
+  /** A key of COURSES (recipes/courses.ts), or null. `book`: the cookbook it came from ("" when none). */
+  course: string | null; book: string; book_page: number | null;
   cooked_count: number; last_cooked: string | null; created_at: string | null; updated_at: string | null;
 }
 export interface StepIn { text: string; minutes?: number | null; photo?: string | null }
@@ -119,6 +121,7 @@ export interface RecipeIn {
   title: string; emoji?: string; description?: string; photo?: string | null; rating?: number; favourite?: boolean;
   servings?: number | null; prep_minutes?: number | null; cook_minutes?: number | null; minutes?: number | null;
   ingredients?: string[]; steps?: StepIn[]; tags?: string[]; notes?: string; url?: string | null;
+  course?: string | null; book?: string; book_page?: number | null;
 }
 export type RecipeImport = { url: string } | { text: string; use_reader?: boolean } | { images: string[] };
 export interface RecipeReader { configured: boolean; model: string; key_hint: string | null }
@@ -133,6 +136,8 @@ export interface RecipeBatch {
   id: string; pages: number; read: number; reading: boolean; saved: number;
   /** Sent as an Anthropic Message Batch: half price, usually read within the hour, at most a day. */
   cheaper: boolean;
+  /** The cookbook's name, given to every recipe found. */
+  book: string;
   failed: { page: number; error: string }[]; drafts: RecipeDraft[];
 }
 
@@ -388,7 +393,7 @@ export interface Api {
   /** Cookbook scans still being read or with recipes to check. */
   recipeBatches(): Promise<RecipeBatch[]>;
   /** Start reading a cookbook: page pictures in order (uploaded first). 409 when there's no Claude key. */
-  scanCookbook(images: string[], cheaper?: boolean): Promise<RecipeBatch>;
+  scanCookbook(images: string[], cheaper?: boolean, book?: string): Promise<RecipeBatch>;
   retryBatch(id: string): Promise<RecipeBatch>;
   /** Stop reading and drop the recipes not checked yet. */
   deleteBatch(id: string): Promise<void>;

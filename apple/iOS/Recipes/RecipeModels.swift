@@ -59,11 +59,30 @@ struct Recipe: Codable, Identifiable, Hashable {
     let url: String?
     let cooked_count: Int
     let last_cooked: String?
+    /// A key of `RecipeCourse.all`, the cookbook it came from and the page there.
+    var course: String? = nil
+    var book: String? = nil
+    var book_page: Int? = nil
 
     var key: String { id ?? "draft-\(title)" }
     var defaultServings: Double { Double(servings ?? 1) }
     /// Scale for a chosen number of servings (a multiplier when the recipe doesn't say how many it serves).
     func factor(_ chosen: Double) -> Double { servings.map { chosen / Double($0) } ?? chosen }
+}
+
+/// The courses the recipe box is arranged by, in menu order (the add-on's recipe_text.COURSES).
+enum RecipeCourse {
+    static let all: [(key: String, name: String)] = [
+        ("breakfast", "Breakfast & brunch"), ("starter", "Starters"), ("light", "Light bites"), ("main", "Main meals"),
+        ("side", "Sides"), ("dessert", "Desserts"), ("baking", "Baking"), ("snack", "Snacks"), ("drink", "Drinks"),
+        ("extra", "Sauces & extras"),
+    ]
+    static func name(_ key: String?) -> String? { all.first { $0.key == key }?.name }
+    /// "From Simple, page 212"
+    static func bookLine(_ book: String?, _ page: Int?) -> String? {
+        guard let book, !book.isEmpty else { return nil }
+        return "From \(book)" + (page.map { ", page \($0)" } ?? "")
+    }
 }
 
 struct RecipeReader: Codable {
@@ -88,6 +107,7 @@ struct RecipeBatch: Codable, Identifiable {
     let reading: Bool
     /// Sent as an Anthropic Message Batch: half price, usually read within the hour, at most a day.
     let cheaper: Bool?
+    let book: String?
     let failed: [Failure]
     let saved: Int
     let drafts: [RecipeDraft]
@@ -124,8 +144,8 @@ extension APIClient {
     func recipeReader() async throws -> RecipeReader { try await get("/api/recipes-reader") }
 
     func recipeBatches() async throws -> [RecipeBatch] { try await get("/api/recipes-batches") }
-    func scanCookbook(images: [String], cheaper: Bool = false) async throws -> RecipeBatch {
-        try await send("POST", "/api/recipes-batches", ["images": images, "cheaper": cheaper])
+    func scanCookbook(images: [String], cheaper: Bool = false, book: String = "") async throws -> RecipeBatch {
+        try await send("POST", "/api/recipes-batches", ["images": images, "cheaper": cheaper, "book": book])
     }
     func retryBatch(_ id: String) async throws -> RecipeBatch { try await send("POST", "/api/recipes-batches/\(id)/retry", [:]) }
     func deleteBatch(_ id: String) async throws {

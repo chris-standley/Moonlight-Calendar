@@ -36,6 +36,9 @@ struct RecipeEditor: View {
     @State private var steps: [StepDraft] = []
     @State private var notes = ""
     @State private var link = ""
+    @State private var course = ""
+    @State private var book = ""
+    @State private var bookPage = ""
     @State private var preview: Recipe?
     @State private var busy = false
     @State private var uploading = 0
@@ -78,6 +81,14 @@ struct RecipeEditor: View {
                 }
                 ingredientsSection
                 stepsSection
+                Section("Course and cookbook") {
+                    Picker("Course", selection: $course) {
+                        Text("Not set").tag("")
+                        ForEach(RecipeCourse.all, id: \.key) { c in Text(c.name).tag(c.key) }
+                    }
+                    TextField("Cookbook it's from", text: $book)
+                    numberRow("Page", $bookPage, unit: "")
+                }
                 Section("Tags") {
                     TextField("e.g. quick, vegetarian, kids", text: $tags).textInputAutocapitalization(.never)
                 }
@@ -283,6 +294,9 @@ struct RecipeEditor: View {
         }
         notes = r.notes
         link = r.url ?? ""
+        course = r.course ?? ""
+        book = r.book ?? ""
+        bookPage = r.book_page.map(String.init) ?? ""
     }
 
     private func payload() -> [String: Any] {
@@ -301,6 +315,8 @@ struct RecipeEditor: View {
             "ingredients": ingredientLines, "steps": stepBodies,
             "notes": notes.trimmingCharacters(in: .whitespacesAndNewlines),
             "url": trimmedLink.isEmpty ? NSNull() as Any : trimmedLink,
+            "course": course.isEmpty ? NSNull() as Any : course,
+            "book": book.trimmingCharacters(in: .whitespaces), "book_page": int(bookPage),
         ]
     }
 

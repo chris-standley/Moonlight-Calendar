@@ -184,6 +184,8 @@ struct RecipeDetail: View {
             parts.append("Not made yet")
         }
         if !r.tags.isEmpty { parts.append(r.tags.joined(separator: ", ")) }
+        if let c = RecipeCourse.name(r.course) { parts.append(c) }
+        if let b = RecipeCourse.bookLine(r.book, r.book_page) { parts.append(b) }
         return parts.joined(separator: " · ")
     }
 

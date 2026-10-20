@@ -150,6 +150,11 @@ step aloud; on the wall screens it needs a browser with speech recognition (Chro
 available). Add to list, and planning a meal with a recipe, offer the
 ingredients for a shopping list.
 
+Recipes are arranged by course (Breakfast & brunch, Starters, Light bites, Main meals, Sides, Desserts, Baking, Snacks,
+Drinks, Sauces & extras) or by the cookbook they came from: choose in the sort menu. Each recipe's course, cookbook and
+page are in its editor. Claude fills in the course and the printed page number when it reads a recipe, and a cookbook
+scan asks for the book's name once for every recipe found.
+
 Bring recipes in from a web page (most recipe sites mark out their recipes, so they come straight in), pasted text,
 or photos. The iPhone app reads photos on the phone. To read photos on the wall screens and in the browser, or to
 let Claude read handwriting and pages without a recipe layout, add an Anthropic API key in Settings > Recipes (from

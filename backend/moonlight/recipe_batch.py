@@ -30,10 +30,11 @@ _gate: asyncio.Semaphore | None = None
 _wait = asyncio.sleep  # tests replace this
 
 
-def create(images: list[str], cheaper: bool = False) -> str:
+def create(images: list[str], cheaper: bool = False, book: str = "") -> str:
     bid = db.new_id("rb")
     with db.connect() as c:
-        c.execute("INSERT INTO recipe_batches(id, created_at, cheaper) VALUES(?, ?, ?)", (bid, db.now_iso(), int(cheaper)))
+        c.execute("INSERT INTO recipe_batches(id, created_at, cheaper, book) VALUES(?, ?, ?, ?)",
+                  (bid, db.now_iso(), int(cheaper), book))
         c.executemany("INSERT INTO recipe_batch_pages(batch_id, page, image) VALUES(?, ?, ?)",
                       [(bid, i, iid) for i, iid in enumerate(images)])
     start(bid)
@@ -236,9 +237,13 @@ def settle(c, bid: str) -> None:
                 current = {"piece": f"{p['page']}.{j}", "pages": [p["page"]], "draft": piece}
                 groups.append(current)
     last = pages[-1]["page"] if pages else -1
+    b = db.row(c, "SELECT book FROM recipe_batches WHERE id = ?", (bid,))
+    book = b["book"] if b else ""
     for g in groups:
         if g["pages"][-1] < done_to or done_to == last:
             draft = {k: v for k, v in g["draft"].items() if k != "continues"}
+            if book:
+                draft["book"] = book
             c.execute("INSERT OR IGNORE INTO recipe_drafts(id, batch_id, piece, pages, draft) VALUES(?,?,?,?,?)",
                       (db.new_id("rd"), bid, g["piece"], json.dumps(g["pages"]), json.dumps(draft)))
 
@@ -246,7 +251,7 @@ def settle(c, bid: str) -> None:
 def _join(into: dict, more: dict) -> None:
     for k in ("ingredients", "steps", "tags"):
         into[k] = (into.get(k) or []) + [x for x in more.get(k) or [] if k != "tags" or x not in (into.get(k) or [])]
-    for k in ("title", "description", "servings", "prep_minutes", "cook_minutes"):
+    for k in ("title", "description", "servings", "prep_minutes", "cook_minutes", "course"):
         if not into.get(k) and more.get(k):
             into[k] = more[k]
     into["notes"] = "\n\n".join(n for n in (into.get("notes"), more.get("notes")) if n)

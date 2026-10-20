@@ -104,8 +104,8 @@ def seed(data: dict, today: date | None = None) -> None:
 
         for r in data.get("recipes", []):
             c.execute("INSERT INTO recipes(id, title, emoji, minutes, ingredients, url, description, rating, favourite, "
-                      "servings, prep_minutes, cook_minutes, steps, tags, created_at, updated_at) "
-                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "servings, prep_minutes, cook_minutes, steps, tags, created_at, updated_at, course) "
+                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (r["id"], r["title"], r.get("emoji", ""), r.get("minutes"),
                        json.dumps(r.get("ingredients", [])), r.get("url"), r.get("description", ""),
                        r.get("rating", 0), int(bool(r.get("favourite"))), r.get("servings"), r.get("prep_minutes"),
@@ -113,7 +113,7 @@ def seed(data: dict, today: date | None = None) -> None:
                        json.dumps([{"text": s["text"], "minutes": s.get("minutes"), "photo": None}
                                    for s in r.get("steps", [])]),
                        json.dumps(r.get("tags", [])), now.isoformat(timespec="seconds"),
-                       now.isoformat(timespec="seconds")))
+                       now.isoformat(timespec="seconds"), r.get("course")))
 
         for i, m in enumerate(data.get("meals", [])):
             c.execute("INSERT INTO meals(id, date, slot, title, notes, recipe_id) VALUES(?,?,?,?,?,?)",

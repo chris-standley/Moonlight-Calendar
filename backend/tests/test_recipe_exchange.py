@@ -25,7 +25,7 @@ def _box(client):
     photo = client.post("/api/images", content=PNG).json()["id"]
     step_photo = client.post("/api/images", content=PNG + b"x").json()["id"]
     client.post("/api/recipes", json={
-        "title": "Lasagne", "description": "Family favourite", "photo": photo, "rating": 4, "favourite": True,
+        "title": "Lasagne", "description": "Family favourite", "course": "main", "book": "Pasta Grannies", "photo": photo, "rating": 4, "favourite": True,
         "servings": 6, "prep_minutes": 30, "cook_minutes": 75, "tags": ["pasta", "oven"], "notes": "Freezes well",
         "url": "https://example.com/lasagne",
         "ingredients": ["For the sauce:", "500g beef mince", "1 onion", "For the topping:", "50g parmesan"],
@@ -63,7 +63,8 @@ def test_round_trip(client, fmt):
         assert lasagne["rating"] == 4
     if fmt == "schema":
         assert lasagne["steps"][1]["photo"]  # step pictures travel too
-    assert toast["steps"][0]["text"] == "Toast it."
+    assert lasagne["course"] == "main" and lasagne["book"] == ("" if fmt == "mela" else "Pasta Grannies")
+    assert toast["steps"][0]["text"] == "Toast it." and toast["course"] is None
     # Importing again skips what's already there.
     again = client.post("/api/recipes/collection", content=data).json()
     assert again["added"] == 0 and sorted(again["skipped"]) == ["Lasagne", "Toast"]
