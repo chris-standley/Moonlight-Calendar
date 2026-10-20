@@ -126,15 +126,12 @@ function SensorRow({ s, now }: { s: SecuritySensor; now: Date }) {
 }
 
 function CameraTile({ cam, person, onOpen }: { cam: SecurityCamera; person: boolean; onOpen: () => void }) {
-  // A fresh picture every 10 seconds; the full live view is a tap away.
-  const tick = Math.floor(useNow(10_000).getTime() / 10_000);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [tick]);
+  // Live, from the camera's lighter stream (several play at once); tap for it full size.
   return (
     <button className={"sec-cam" + (person ? " person" : "")} onClick={onOpen}>
-      {!failed && cam.available
-        ? <img src={sized(cam.snapshot_url, 640, `&t=${tick}`)} alt="" onError={() => setFailed(true)} />
-        : <span className="sec-cam-off"><IconCctv size={40} />{cam.available ? "No picture" : "Offline"}</span>}
+      {cam.available
+        ? <CameraVideo cam={cam} width={960} light />
+        : <span className="sec-cam-off"><IconCctv size={40} />Offline</span>}
       <span className="sec-cam-name">{cam.name}</span>
       {person && <span className="sec-cam-badge">Person</span>}
     </button>
@@ -145,15 +142,16 @@ type CamUrls = { live_url: string; snapshot_url: string; video_url: string | nul
 
 /** A camera, live: Home Assistant's HLS video when the camera has it (hls.js, or the browser itself on Apple
  * devices), else, or if the video fails, the snapshot MJPEG feed. The snapshot shows while the video starts.
- * Large screens play the camera's full resolution; the others its lighter medium channel when there is one. */
-export function CameraVideo({ cam, width, fit = "cover" }: { cam: CamUrls; width: number; fit?: "cover" | "contain" }) {
+ * Large screens play the camera's full resolution; the others, and `light` ones (tiles), its lighter medium channel
+ * when there is one. */
+export function CameraVideo({ cam, width, fit = "cover", light = false }: { cam: CamUrls; width: number; fit?: "cover" | "contain"; light?: boolean }) {
   const { layout } = useApp();
   const ref = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
   // The MJPEG feed ends after a quarter of an hour; open a new one before that if it's still showing.
   const [round, setRound] = useState(0);
   useEffect(() => { const t = setInterval(() => setRound((r) => r + 1), 10 * 60_000); return () => clearInterval(t); }, []);
-  const video = failed ? null : (layout === "large" ? cam.video_hd_url : null) ?? cam.video_url;
+  const video = failed ? null : (layout === "large" && !light ? cam.video_hd_url : null) ?? cam.video_url;
   useEffect(() => {
     const el = ref.current;
     if (!video || !el) return;

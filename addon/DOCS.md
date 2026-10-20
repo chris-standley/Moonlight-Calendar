@@ -107,7 +107,8 @@ The Security section shows your alarm, its sensors and your cameras from Home As
 - **Sensors**: the ones you set up in Alarmo, grouped into doors, windows, motion and smoke or leaks, with a lock on
   the ones guarded in the current mode.
 - **Cameras**: UniFi Protect cameras appear on their own (through the UniFi Protect integration); other cameras can be
-  turned on in Settings > Security. Tap one to watch it full size.
+  turned on in Settings > Security. Each plays live (the camera's medium-resolution channel when it's enabled, so
+  several can play at once on a Pi); tap one to watch it full size.
 
 When a camera's "Person detected" sensor turns on, the camera pops up live in the corner of the wall screens (if the
 screensaver is showing, the camera takes the photo's place full screen instead) and goes away 15 seconds after the person has gone; tap it to watch full size or the cross to close
