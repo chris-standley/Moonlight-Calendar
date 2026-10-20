@@ -35,8 +35,8 @@ export function NurseryPanel() {
       <h2 className="panel-title">Nursery</h2>
       <p className="muted connect-note">Updates from nursery on Tapestry: a Nursery section on large screens, and a button at the top of the
         smaller ones. Moonlight signs in to Tapestry with your login and checks every 30 minutes.</p>
-      <div className="set-row"><span>Tapestry</span>
-        <span className="set-pin"><b>{cfg?.configured ? cfg.email : "Not connected"}</b>
+      <div className="set-row stack"><span>Tapestry</span>
+        <span className="set-pin"><b className="clip" title={cfg?.configured ? cfg.email : undefined}>{cfg?.configured ? cfg.email : "Not connected"}</b>
           <button className="btn ghost small" onClick={() => setEditing(true)}>{cfg?.configured ? "Change" : "Connect"}</button>
           {cfg?.configured && <button className="btn ghost small danger" onClick={disconnect}>Disconnect</button>}</span>
       </div>

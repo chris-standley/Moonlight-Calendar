@@ -518,11 +518,11 @@ wrote it, household time (`YYYY-MM-DDTHH:MM:SS`, or a bare date). `person_id`/`c
 same first name, if any. `video`: the picture is a video's still (the video stays on Tapestry).
 - `GET /api/nursery` -> NurseryConfig
 - `PUT /api/nursery` `{pin, email, password?, school?}` -> NurseryConfig. Signs in to Tapestry first (400 with the reason
-  when it doesn't accept the login, 502 unreachable), then reads the newest updates. `password` may be left out to keep
+  when it doesn't accept the login, 424 when Tapestry can't be reached or refuses Moonlight), then reads the newest updates. `password` may be left out to keep
   the saved one (same email). `school`: the setting's name, part of it or its slug, for logins at more than one (""
   = the first). Another account's email forgets the previous account's updates.
 - `DELETE /api/nursery` `{pin}` -> `{ok: true}` (forgets the login, updates and photos; nothing changes on Tapestry)
-- `POST /api/nursery/sync` -> NurseryConfig after checking Tapestry now (404 not connected, 400 / 502 as above)
+- `POST /api/nursery/sync` -> NurseryConfig after checking Tapestry now (404 not connected, 400 / 424 as above)
 - `GET /api/nursery/updates?limit=40` -> `[NurseryUpdate]`, newest first
 - `GET /api/nursery/photos/{id}/{n}?v=...` -> the photo (`url` above), `Cache-Control: private, max-age=604800, immutable`
 Changes broadcast the `nursery` topic. The `nursery` menu section is shown on screens only once Tapestry is connected;
