@@ -405,6 +405,14 @@ struct NurseryUpdate: Codable, Identifiable, Hashable {
 struct PhotoList: Codable {
     let source: String
     let photos: [Photo]
+    /// The same photos grouped by album, each oldest first (photo ids).
+    var albums: [PhotoAlbum]?
+}
+
+struct PhotoAlbum: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let photos: [String]
 }
 
 struct Display: Codable, Hashable {
