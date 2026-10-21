@@ -189,19 +189,19 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
         {solar && <Flow d="M520 304 V429" w={solar.power} color={COLORS.solar} />}
         {battery && <Flow d="M395 440 H509" w={battery.power} color={COLORS.battery} back={(battery.power ?? 0) < 0} />}
         {grid && <Flow d="M958 500 Q956 524 930 524 H548 L526 451" w={gridW} color={COLORS.grid} back={(gridW ?? 0) < 0} />}
-        {car && <Flow d="M510 448 L330 470 L262 470" w={car.charging ? car.power ?? 2000 : 0} color={COLORS.car} />}
+        {car && <Flow d="M510 448 L478 490 H300 L262 470" w={car.charging ? car.power ?? 2000 : 0} color={COLORS.car} />}
         {car && plugged && <Flow d="M262 470 Q240 500 205 476" w={car.charging ? car.power ?? 2000 : 0} color={COLORS.car} />}
         {hp && <Flow d="M530 449 L556 488 H728" w={hp.running ? hp.power ?? 500 : 0} color={COLORS.heat} />}
         <circle cx="520" cy="440" r="11" className="en-hub" />
 
         {/* Battery, inside on the left */}
         {battery && (
-          <g transform="translate(350 410)">
+          <g transform="translate(350 404)">
             <rect x="9" y="-8" width="18" height="10" rx="3" className="en-batt-cap" />
-            <rect x="0" y="0" width="36" height="82" rx="7" className="en-batt" />
-            {batt != null && <rect x="4" y={4 + 74 * (1 - Math.min(100, Math.max(0, batt)) / 100)} width="28"
-              height={74 * Math.min(100, Math.max(0, batt)) / 100} rx="4" fill={battColor} />}
-            {battery.state === "charging" && <path d="M20 22 L12 44 H19 L15 62 L26 36 H19 Z" className="en-bolt" />}
+            <rect x="0" y="0" width="36" height="76" rx="7" className="en-batt" />
+            {batt != null && <rect x="4" y={4 + 68 * (1 - Math.min(100, Math.max(0, batt)) / 100)} width="28"
+              height={68 * Math.min(100, Math.max(0, batt)) / 100} rx="4" fill={battColor} />}
+            {battery.state === "charging" && <path d="M20 18 L12 40 H19 L15 58 L26 32 H19 Z" className="en-bolt" />}
           </g>
         )}
 

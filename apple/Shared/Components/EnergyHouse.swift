@@ -426,7 +426,7 @@ private struct EnergyScene {
         }
         if let car {
             let w = car.charging == true ? (car.power ?? 2000) : 0
-            flow(&ctx, line([(510, 448), (330, 470), (262, 470)]), w, c.car)
+            flow(&ctx, line([(510, 448), (478, 490), (300, 490), (262, 470)]), w, c.car)
             if plugged {
                 flow(&ctx, path { p in p.move(to: CGPoint(x: 262, y: 470)); p.addQuadCurve(to: CGPoint(x: 205, y: 476), control: CGPoint(x: 240, y: 500)) }, w, c.car)
             }
@@ -439,17 +439,17 @@ private struct EnergyScene {
 
         // Battery
         if let battery {
-            let x = 350.0, y = 410.0
+            let x = 350.0, y = 404.0
             ctx.fill(Path(roundedRect: CGRect(x: x + 9, y: y - 8, width: 18, height: 10), cornerRadius: 3), with: .color(c.line))
-            let body = Path(roundedRect: CGRect(x: x, y: y, width: 36, height: 82), cornerRadius: 7)
+            let body = Path(roundedRect: CGRect(x: x, y: y, width: 36, height: 76), cornerRadius: 7)
             ctx.fill(body, with: .color(c.wall)); ctx.stroke(body, with: .color(c.line), lineWidth: 4)
             if let soc = battery.soc {
                 let f = min(100, max(0, soc)) / 100
-                ctx.fill(Path(roundedRect: CGRect(x: x + 4, y: y + 4 + 74 * (1 - f), width: 28, height: 74 * f), cornerRadius: 4),
+                ctx.fill(Path(roundedRect: CGRect(x: x + 4, y: y + 4 + 68 * (1 - f), width: 28, height: 68 * f), cornerRadius: 4),
                          with: .color(soc < 20 ? Color(hex: "#E2902B") : c.battery))
             }
             if battery.state == "charging" {
-                let bolt = line([(x + 20, y + 22), (x + 12, y + 44), (x + 19, y + 44), (x + 15, y + 62), (x + 26, y + 36), (x + 19, y + 36)], close: true)
+                let bolt = line([(x + 20, y + 18), (x + 12, y + 40), (x + 19, y + 40), (x + 15, y + 58), (x + 26, y + 32), (x + 19, y + 32)], close: true)
                 ctx.fill(bolt, with: .color(.white))
             }
         }
