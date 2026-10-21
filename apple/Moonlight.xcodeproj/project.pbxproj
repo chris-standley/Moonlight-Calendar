@@ -43,8 +43,24 @@
 		AA0000000000000000000202 /* CookingWidget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "CookingWidget-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AA0000000000000000000230 /* Exceptions for "Shared" folder in "CookingWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Components/EnergyHouse.swift,
+				Components/Pieces.swift,
+				Components/Theme.swift,
+				Core/APIClient.swift,
+				Core/Credentials.swift,
+				Core/Dates.swift,
+				Core/Models.swift,
+			);
+			target = AA0000000000000000000206 /* CookingWidget */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AA0000000000000000000020 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
+		AA0000000000000000000020 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (AA0000000000000000000230 /* Exceptions for "Shared" folder in "CookingWidget" target */, ); explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
 		AA0000000000000000000002 /* TV */ = {isa = PBXFileSystemSynchronizedRootGroup; path = TV; sourceTree = "<group>"; };
 		AA0000000000000000000102 /* iOS */ = {isa = PBXFileSystemSynchronizedRootGroup; path = iOS; sourceTree = "<group>"; };
 		AA0000000000000000000220 /* Cooking */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Cooking; sourceTree = "<group>"; };
@@ -446,6 +462,7 @@
 		AA000000000000000000020E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = CookingWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -472,6 +489,7 @@
 		AA000000000000000000020F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = CookingWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;

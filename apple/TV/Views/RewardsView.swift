@@ -18,7 +18,6 @@ struct RewardsView: View {
 
     var body: some View {
         Screen {
-            Text("Rewards").font(Theme.font(40, .heavy)).foregroundStyle(Theme.text)
             if model.kids.isEmpty {
                 FamilyPrompt(text: "Children earn stars for chores and spend them here. Add a child in Moonlight Settings › Family to get started.")
             } else {

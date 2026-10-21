@@ -13,7 +13,6 @@ struct PhotosView: View {
         Screen {
             HStack(alignment: .top, spacing: 50) {
                 VStack(alignment: .leading, spacing: 24) {
-                    Text("Photos").font(Theme.font(48, .heavy)).foregroundStyle(Theme.text)
                     Text(photos.isEmpty
                          ? "Connect Immich in Moonlight Settings › Screensaver photos to show your family's albums here."
                          : "\(photos.count) photos from your albums, with the time and what's playing.")
@@ -23,8 +22,11 @@ struct PhotosView: View {
                         .disabled(photos.isEmpty)
                 }
                 .frame(width: 560, alignment: .leading)
-                RemoteImage(path: photos.first?.url)
+                // The photo fills the space it's given; on its own a filled image grows to its own shape and pushes
+                // the whole page (header included) off the screen.
+                Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay { RemoteImage(path: photos.first?.url) }
                     .background(Theme.logoGradient.opacity(0.35))
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                     .padding(.bottom, 50)
