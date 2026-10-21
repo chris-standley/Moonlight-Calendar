@@ -98,6 +98,21 @@ struct UploadedImage: Codable {
 
 struct AddedResponse: Codable { let added: Int }
 
+/// A cookbook found by the barcode on its back. Recipes from it have its title in `book`.
+struct Cookbook: Codable, Hashable, Identifiable {
+    let isbn: String
+    let title: String
+    let authors: String
+    let publisher: String
+    let year: Int?
+    let cover_url: String?
+    let recipes: Int
+    var id: String { isbn }
+
+    /// "Yotam Ottolenghi · 2018"
+    var byline: String { [authors, year.map(String.init) ?? ""].filter { !$0.isEmpty }.joined(separator: " · ") }
+}
+
 /// A whole cookbook being read by Claude on the server, page by page, with the recipes found so far to check.
 struct RecipeBatch: Codable, Identifiable {
     struct Failure: Codable, Hashable { let page: Int; let error: String }
@@ -144,8 +159,15 @@ extension APIClient {
     func recipeReader() async throws -> RecipeReader { try await get("/api/recipes-reader") }
 
     func recipeBatches() async throws -> [RecipeBatch] { try await get("/api/recipes-batches") }
-    func scanCookbook(images: [String], cheaper: Bool = false, book: String = "") async throws -> RecipeBatch {
-        try await send("POST", "/api/recipes-batches", ["images": images, "cheaper": cheaper, "book": book])
+    func scanCookbook(images: [String], cheaper: Bool = false, book: String = "", isbn: String? = nil) async throws -> RecipeBatch {
+        var body: [String: Any] = ["images": images, "cheaper": cheaper, "book": book]
+        if let isbn { body["isbn"] = isbn }
+        return try await send("POST", "/api/recipes-batches", body)
+    }
+    func cookbooks() async throws -> [Cookbook] { try await get("/api/cookbooks") }
+    /// The book with this ISBN, looked up on Moonlight (Open Library, then Google Books).
+    func findCookbook(isbn: String) async throws -> Cookbook {
+        try await get("/api/cookbooks/\(isbn.filter { "0123456789Xx".contains($0) })")
     }
     func retryBatch(_ id: String) async throws -> RecipeBatch { try await send("POST", "/api/recipes-batches/\(id)/retry", [:]) }
     func deleteBatch(_ id: String) async throws {

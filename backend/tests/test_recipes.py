@@ -463,3 +463,83 @@ def test_cookbook_scan_names_the_book(client, monkeypatch):
     client.post(f"/api/recipes-batches/{b['id']}/save-all")
     [saved] = client.get("/api/recipes").json()
     assert (saved["book"], saved["book_page"], saved["course"]) == ("Bake Off", 88, "baking")
+
+
+def test_isbn13():
+    from moonlight.cookbooks import isbn13
+
+    assert isbn13("978-1-78503-399-5") == "9781785033995"
+    assert isbn13("0 7432 7356 7") == "9780743273565"  # an ISBN-10 becomes the 978 ISBN-13
+    assert isbn13("080442957X") == "9780804429573"
+    assert isbn13("9781785033994") is None  # wrong check digit
+    assert isbn13("5012345678900") is None  # a supermarket barcode, not a book
+    assert isbn13("") is None
+
+
+def test_cookbook_found_by_barcode(client, monkeypatch):
+    import time
+
+    from moonlight import cookbooks
+
+    isbn = "9781785033995"
+    answers = {
+        cookbooks.OPEN_LIBRARY.format(isbn=isbn): json.dumps({f"ISBN:{isbn}": {
+            "title": "Simple", "subtitle": "Effortless food, big flavours", "authors": [{"name": "Yotam Ottolenghi"}],
+            "publishers": [{"name": "Ebury Press"}], "publish_date": "Sep 06, 2018",
+            "cover": {"large": "https://covers.openlibrary.org/b/id/1-L.jpg"}}}).encode(),
+        "https://covers.openlibrary.org/b/id/1-L.jpg": PNG,
+    }
+    asked = []
+
+    async def fake_fetch(url, limit=0):
+        asked.append(url)
+        if url not in answers:
+            raise recipe_import.ImportError_("That page answered with error 404.")
+        return answers[url], ""
+    monkeypatch.setattr(recipe_import, "fetch", fake_fetch)
+
+    assert client.get("/api/cookbooks/12345").status_code == 400
+    book = client.get("/api/cookbooks/978-1-78503-399-5").json()
+    assert (book["isbn"], book["title"], book["authors"], book["publisher"], book["year"]) == \
+        (isbn, "Simple: Effortless food, big flavours", "Yotam Ottolenghi", "Ebury Press", 2018)
+    assert client.get(book["cover_url"]).content == PNG
+    n = len(asked)
+    assert client.get(f"/api/cookbooks/{isbn}").json()["title"] == book["title"]
+    assert len(asked) == n  # kept: not looked up again
+
+    # Unknown to Open Library: Google Books is asked next; unknown to both is a 404.
+    other = "9780743273565"
+    answers[cookbooks.OPEN_LIBRARY.format(isbn=other)] = b"{}"
+    answers[cookbooks.GOOGLE_BOOKS.format(isbn=other)] = json.dumps({"items": [{"volumeInfo": {
+        "title": "The Great Gatsby", "authors": ["F. Scott Fitzgerald"], "publishedDate": "2004"}}]}).encode()
+    g = client.get(f"/api/cookbooks/{other}").json()
+    assert (g["title"], g["authors"], g["year"], g["cover_url"]) == ("The Great Gatsby", "F. Scott Fitzgerald", 2004, None)
+    assert client.get("/api/cookbooks/9780804429573").status_code == 404
+
+    # A scan given the book's ISBN files every recipe under its title.
+    async def fake_page(key, model, image):
+        return [{"title": "Hummus", "description": "", "servings": None, "prep_minutes": None, "cook_minutes": None,
+                 "minutes": None, "ingredients": ["1 tin chickpeas"], "steps": [{"text": "Blend.", "minutes": None}],
+                 "tags": [], "notes": "", "course": "starter", "book_page": 12, "continues": False}]
+    monkeypatch.setattr(recipe_import, "read_cookbook_page", fake_page)
+    client.put("/api/recipes-reader", json={"pin": PIN, "api_key": "sk-ant-test-abcd"})
+    img = client.post("/api/images", content=PNG).json()["id"]
+    b = client.post("/api/recipes-batches", json={"images": [img], "isbn": isbn}).json()
+    assert b["book"] == book["title"]
+    for _ in range(100):
+        [b] = client.get("/api/recipes-batches").json()
+        if b["drafts"]:
+            break
+        time.sleep(0.02)
+    client.post(f"/api/recipes-batches/{b['id']}/save-all")
+    [saved] = client.get("/api/recipes").json()
+    assert saved["book"] == book["title"]
+    listed = {x["isbn"]: x for x in client.get("/api/cookbooks").json()}
+    assert listed[isbn]["recipes"] == 1 and listed[other]["recipes"] == 0
+
+    # Typing a different name over the found one renames the book and its recipes.
+    img = client.post("/api/images", content=PNG).json()["id"]
+    b2 = client.post("/api/recipes-batches", json={"images": [img], "isbn": isbn, "book": "Simple"}).json()
+    assert b2["book"] == "Simple"
+    assert client.get("/api/recipes").json()[0]["book"] == "Simple"
+    assert {x["isbn"]: x for x in client.get("/api/cookbooks").json()}[isbn]["title"] == "Simple"

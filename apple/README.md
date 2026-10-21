@@ -41,7 +41,9 @@ for the shopping list, with everyday staples and things already on the list left
   pages are read a column at a time) and sorted into a recipe by the add-on; with an Anthropic key set in the add-on
   (Settings › Recipes on a wall screen), "Read with Claude" sends the photos to Claude instead. Either way the recipe
   opens in the editor to check before it's saved.
-- **Scanning a whole cookbook** (+ › Scan a whole cookbook, needs the Anthropic key): scan or choose up to 200 pages;
+- **Scanning a whole cookbook** (+ › Scan a whole cookbook, needs the Anthropic key): the camera first looks for the
+  barcode on the back (VisionKit's DataScanner, EAN-13 starting 978/979), the add-on looks the ISBN up for the title,
+  author and cover, and the camera moves on to the pages. Then scan or choose up to 200 pages;
   they're sent to the add-on, where Claude reads them in the background. A Cookbook scan card at the top of Recipes
   shows progress and the recipes found: tap one to check it in the editor, tick to save it as read, or Save all.
   **Cheaper, slower** sends them as an Anthropic batch at half the price, back within a day (usually the hour).

@@ -6,6 +6,7 @@ struct RecipesScreen: View {
     @Environment(AppModel.self) private var model
     @State private var recipes: [Recipe] = []
     @State private var loaded = false
+    @State private var cookbooks: [Cookbook] = []
     @State private var query = ""
     @State private var filter = "all"
     @AppStorage("recipes.arrange") private var sort = "course"
@@ -38,11 +39,7 @@ struct RecipesScreen: View {
                         }
                         ForEach(groups) { g in
                             if !g.name.isEmpty {
-                                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text(g.name).font(Theme.text(.title3, .heavy)).foregroundStyle(Theme.text)
-                                    Text("\(g.items.count)").font(Theme.text(.subheadline, .bold)).foregroundStyle(Theme.muted)
-                                }
-                                .padding(.top, 6)
+                                groupHeading(g)
                             }
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12),
                                                      count: room == .narrow ? 2 : room == .medium ? 3 : 5),
@@ -104,6 +101,7 @@ struct RecipesScreen: View {
         .task(id: model.rev("recipes")) {
             if let r = await model.call({ try await $0.recipes() }) { recipes = r }
             if let b = await model.call({ try await $0.recipeBatches() }) { batches = b }
+            if let c = await model.call({ try await $0.cookbooks() }) { cookbooks = c }
             loaded = true
         }
         .sheet(item: $importing, onDismiss: {
@@ -192,6 +190,28 @@ struct RecipesScreen: View {
                 default: a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
                 }
             }
+    }
+
+    /// A group's name and count; a cookbook found by its barcode also shows its cover and author.
+    private func groupHeading(_ g: RecipeGroup) -> some View {
+        let book = sort == "book" && !g.key.isEmpty ? cookbooks.first(where: { $0.title == g.key }) : nil
+        return HStack(alignment: .center, spacing: 10) {
+            if let book, book.cover_url != nil {
+                RemoteImage(path: book.cover_url)
+                    .frame(width: 30, height: 42)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(g.name).font(Theme.text(.title3, .heavy)).foregroundStyle(Theme.text)
+                    Text("\(g.items.count)").font(Theme.text(.subheadline, .bold)).foregroundStyle(Theme.muted)
+                }
+                if let book, !book.byline.isEmpty {
+                    Text(book.byline).font(Theme.text(.caption, .semibold)).foregroundStyle(Theme.muted)
+                }
+            }
+        }
+        .padding(.top, 6)
     }
 
     /// By course or by cookbook: a heading per group, in menu order (books A to Z), the rest at the end.

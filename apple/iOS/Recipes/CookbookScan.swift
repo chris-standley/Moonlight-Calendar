@@ -2,14 +2,17 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Scan a whole cookbook in one go: scan or pick the pages, and Claude reads them on Moonlight a few at a time while
-/// you carry on. The recipes found turn up at the top of Recipes to check and save.
+/// Scan a whole cookbook in one go: the barcode on the back finds the book, then scan or pick the pages, and Claude
+/// reads them on Moonlight a few at a time while you carry on. The recipes found turn up at the top of Recipes to check
+/// and save, filed under the book.
 struct CookbookScanView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
+    enum Camera: String, Identifiable { case barcode, pages; var id: String { rawValue } }
+
     @State private var pages: [UIImage] = []
-    @State private var scanning = false
+    @State private var camera: Camera?
     @State private var picks: [PhotosPickerItem] = []
     @State private var reader: RecipeReader?
     @State private var uploaded = 0
@@ -17,6 +20,10 @@ struct CookbookScanView: View {
     @State private var error: String?
     @State private var cheaper = false
     @State private var book = ""
+    @State private var cookbook: Cookbook?
+    @State private var isbn = ""
+    @State private var findingBook = false
+    @State private var bookNote: String?
 
     static let maxPages = 200
 
@@ -43,7 +50,7 @@ struct CookbookScanView: View {
                         Button("Remove all pages", role: .destructive) { pages = [] }.disabled(sending)
                     }
                     if DocumentScanner.isAvailable {
-                        Button { scanning = true } label: {
+                        Button { camera = .pages } label: {
                             Label(pages.isEmpty ? "Scan pages" : "Scan more pages", systemImage: "doc.viewfinder")
                         }
                         .disabled(sending)
@@ -58,9 +65,7 @@ struct CookbookScanView: View {
                     Text("Scan every page you want, in order: the scanner keeps going until you tap Save. Recipes that "
                          + "run over two pages are joined up. Up to \(Self.maxPages) pages at a time.")
                 }
-                Section("Which cookbook? (optional)") {
-                    TextField("The book's name, kept with every recipe", text: $book).disabled(sending)
-                }
+                bookSection
                 Section {
                     Toggle("Cheaper, slower", isOn: $cheaper).disabled(sending)
                 } footer: {
@@ -97,14 +102,27 @@ struct CookbookScanView: View {
                 }
             }
             .interactiveDismissDisabled(sending)
-            .fullScreenCover(isPresented: $scanning) {
-                DocumentScanner { scanned in
-                    pages = Array((pages + scanned).prefix(Self.maxPages))
-                    scanning = false
-                } onCancel: {
-                    scanning = false
+            .fullScreenCover(item: $camera) { which in
+                switch which {
+                case .barcode:
+                    BookBarcodeScanner { code in
+                        isbn = code
+                        Task { await findBook(code) }
+                        camera = pages.isEmpty && DocumentScanner.isAvailable ? .pages : nil
+                    } onSkip: {
+                        camera = DocumentScanner.isAvailable ? .pages : nil
+                    } onCancel: {
+                        camera = nil
+                    }
+                case .pages:
+                    DocumentScanner { scanned in
+                        pages = Array((pages + scanned).prefix(Self.maxPages))
+                        camera = nil
+                    } onCancel: {
+                        camera = nil
+                    }
+                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
             }
             .onChange(of: picks) { _, items in
                 guard !items.isEmpty else { return }
@@ -121,8 +139,81 @@ struct CookbookScanView: View {
             }
             .task {
                 reader = await model.call { try await $0.recipeReader() }
-                if DocumentScanner.isAvailable && pages.isEmpty && reader?.configured == true { scanning = true }
+                // Straight to the camera: the book's barcode first, then its pages.
+                if pages.isEmpty && cookbook == nil && reader?.configured == true {
+                    camera = BookBarcodeScanner.isAvailable ? .barcode : DocumentScanner.isAvailable ? .pages : nil
+                }
             }
+        }
+    }
+
+    @ViewBuilder private var bookSection: some View {
+        Section {
+            if let cookbook {
+                HStack(spacing: 12) {
+                    RemoteImage(path: cookbook.cover_url)
+                        .frame(width: 48, height: 68)
+                        .background(Theme.muted.opacity(0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(cookbook.title).font(Theme.text(.body, .bold))
+                        if !cookbook.byline.isEmpty {
+                            Text(cookbook.byline).font(Theme.text(.footnote)).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Button("Not this book") {
+                        self.cookbook = nil
+                        book = ""
+                        isbn = ""
+                    }
+                    .font(Theme.text(.footnote, .bold))
+                    .buttonStyle(.borderless)
+                    .disabled(sending)
+                }
+                TextField("Name kept with every recipe", text: $book).disabled(sending)
+            } else {
+                if BookBarcodeScanner.isAvailable {
+                    Button { camera = .barcode } label: { Label("Scan the book's barcode", systemImage: "barcode.viewfinder") }
+                        .disabled(sending || findingBook)
+                }
+                HStack {
+                    TextField("Or type the ISBN", text: $isbn)
+                        .keyboardType(.numbersAndPunctuation)
+                        .submitLabel(.search)
+                        .onSubmit { Task { await findBook(isbn) } }
+                    if findingBook {
+                        ProgressView()
+                    } else {
+                        Button("Find") { Task { await findBook(isbn) } }
+                            .buttonStyle(.borderless)
+                            .disabled(isbn.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                .disabled(sending)
+                TextField("Or just the book's name", text: $book).disabled(sending)
+            }
+            if let bookNote {
+                Text(bookNote).font(Theme.text(.footnote)).foregroundStyle(Theme.danger)
+            }
+        } header: {
+            Text("Which cookbook? (optional)")
+        } footer: {
+            Text("The barcode on the back finds the book's title, author and cover. Every recipe found is filed under it.")
+        }
+    }
+
+    private func findBook(_ code: String) async {
+        guard let api = model.api, !code.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        findingBook = true
+        bookNote = nil
+        defer { findingBook = false }
+        do {
+            let found = try await api.findCookbook(isbn: code)
+            cookbook = found
+            book = found.title
+        } catch {
+            bookNote = error.localizedDescription
         }
     }
 
@@ -140,7 +231,7 @@ struct CookbookScanView: View {
                 uploaded += 1
             }
             _ = try await api.scanCookbook(images: ids, cheaper: cheaper,
-                                           book: book.trimmingCharacters(in: .whitespaces))
+                                           book: book.trimmingCharacters(in: .whitespaces), isbn: cookbook?.isbn)
             model.bump("recipes")
             dismiss()
         } catch {
