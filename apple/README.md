@@ -103,7 +103,7 @@ Assistant's address: Home Assistant's login page opens in a sign-in sheet and th
 | Meals | The week's meal plan | Previous / next week |
 | Lists | Shopping and to-do lists | Select an item to tick it off |
 | Nursery | Nursery updates from Tapestry, once connected (Settings › Nursery on a wall screen) | Pick an update; open its photos full screen |
-| Photos | The Immich screensaver photos | Full-screen slideshow with the clock |
+| Photos | The Immich screensaver photos and their albums | Play everything shuffled, or one album oldest to newest, full screen with the clock. Each photo is centred over a blurred copy of itself; a portrait photo is shown beside another portrait one from the same day |
 | Settings | What this Apple TV is paired with | Forget it and pair again |
 
 Everything works with the Siri Remote and there is no text entry. Play/Pause controls this screen's speaker from any

@@ -39,7 +39,14 @@ struct EnergyProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<EnergyEntry>) -> Void) {
         Task {
             let entry = await Self.load()
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(every))))
+            let refresh = Date().addingTimeInterval(every)
+            var entries = [entry]
+            // Sunset or sunrise before the next refresh: switch the picture over then.
+            if var data = entry.data, let sun = data.sun, let at = Energy.parse(sun.next), at > entry.date, at < refresh {
+                data.sun?.night.toggle()
+                entries.append(EnergyEntry(date: at, data: data, sky: entry.sky))
+            }
+            completion(Timeline(entries: entries, policy: .after(refresh)))
         }
     }
 
@@ -63,6 +70,7 @@ struct EnergyProvider: TimelineProvider {
 struct EnergyWidgetView: View {
     let entry: EnergyEntry
     @Environment(\.widgetFamily) private var family
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Group {
@@ -78,6 +86,8 @@ struct EnergyWidgetView: View {
                 .containerBackground(Theme.bg, for: .widget)
             }
         }
+        // After sunset the whole widget goes dark, like the picture.
+        .environment(\.colorScheme, entry.data?.sun?.night == true ? .dark : scheme)
     }
 
     /// Just the picture, as tall as the widget; the sky and grass carry on either side of it.

@@ -1,9 +1,9 @@
 import { CSSProperties, ReactNode } from "react";
 import { EnergyOverview, EnergyTariff, EnergyWindow } from "../api/types";
-import { useApp, useData } from "../state";
+import { useApp, useData, useNow } from "../state";
 import { Empty } from "../components/ui";
 import { WeatherIcon } from "../components/icons";
-import { fmtTime } from "../dates";
+import { fmtFull, fmtTime, today } from "../dates";
 
 /** "774 W", "2.45 kW", "12.3 kW". */
 export function fmtW(w: number | null | undefined): string {
@@ -68,20 +68,32 @@ const COLORS = { solar: "#f2a33a", battery: "#2fb58a", grid: "#8b7cf0", car: "#4
 /** Energy: the house with solar on the roof, the battery inside, the grid, the car and the heat pump around it, and
  * the power running between them. */
 export function EnergyView() {
-  const { layout, go } = useApp();
+  const { layout } = useApp();
   const [data] = useData((a) => a.energy(), ["energy", "settings"], []);
   const [weather] = useData((a) => a.weather(), ["settings"], []);
   if (!data) return <div className="energy" />;
   const nothing = !data.solar && !data.battery && !data.grid && !data.home && !data.car && !data.heat_pump;
-  return (
-    <div className="energy">
-      <div className="toolbar">
-        <div className="toolbar-l"><h1 className="toolbar-title">Energy</h1></div>
-        <div className="toolbar-r">
-          {data.configured && !data.reachable && <span className="sec-offline">Can't reach Home Assistant</span>}
-          <button className="btn ghost small" onClick={() => go("settings")}>Settings</button>
+  const offline = data.configured && !data.reachable && <span className="sec-offline">Can't reach Home Assistant</span>;
+  // Wall screens: the picture fills the screen (no top bar), with the clock and Predbat's plan on it.
+  if (layout !== "phone" && data.configured && !nothing) {
+    return (
+      <div className="energy full">
+        <div className={"en-stage" + (data.sun?.night ? " night" : "")}>
+          <House data={data} sky={weather?.current ?? null} bare />
+          <StageClock temp={weather?.current?.temp ?? null} offline={offline} />
+          {(data.plan || data.tariff) && <Plan plan={data.plan} tariff={data.tariff} />}
         </div>
       </div>
+    );
+  }
+  return (
+    <div className="energy">
+      {layout === "phone" ? (
+        <div className="toolbar">
+          <div className="toolbar-l"><h1 className="toolbar-title">Energy</h1></div>
+          <div className="toolbar-r">{offline}</div>
+        </div>
+      ) : <div className="en-gap">{offline}</div>}
       {!data.configured ? (
         <Empty>Energy shows your solar, battery, car and heat pump from Home Assistant. Run Moonlight as the Home Assistant add-on to use it.</Empty>
       ) : nothing ? (
@@ -93,6 +105,19 @@ export function EnergyView() {
           {layout === "phone" && <Details data={data} />}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The top bar's time, date and temperature, in the sky's top right corner (the weather's icon is on the picture). */
+function StageClock({ temp, offline }: { temp: number | null; offline: ReactNode }) {
+  const now = useNow(10_000);
+  const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
+  return (
+    <div className="en-clock">
+      <b>{time}</b>
+      <span>{fmtFull(today())}{temp != null && <> · {temp}°</>}</span>
+      {offline}
     </div>
   );
 }
@@ -141,7 +166,10 @@ function Tag({ x, y, title, value, cls }: { x: number; y: number; title: string;
 // The house from its long side: walls 330–690 across and 320–500 down, the roof a slope above them with the panels on.
 const PANELS = Array.from({ length: 12 }, (_, i) => ({ x: 384 + (i % 6) * 44, y: i < 6 ? 198 : 254 }));
 
-export function House({ data, small, sky }: { data: EnergyOverview; small?: boolean; sky?: { temp: number; condition: string } | null }) {
+/** `bare`: no sky or grass of its own (the full-screen stage behind it draws them, edge to edge). */
+export function House({ data, small, sky, bare }: {
+  data: EnergyOverview; small?: boolean; sky?: { temp: number; condition: string } | null; bare?: boolean;
+}) {
   const { solar, battery, grid, home, car, heat_pump: hp, temperatures: temps } = data;
   const sunny = (solar?.power ?? 0) >= IDLE;
   const batt = battery?.soc ?? null;
@@ -153,15 +181,15 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
   const tank = temps?.tank ?? null;
   const tankColor = tank == null ? "var(--en-glass)" : tank >= 45 ? "#e8674f" : tank >= 35 ? "#f2a33a" : "#6aa6e8";
   return (
-    <div className={"en-house" + (small ? " small" : "")}>
+    <div className={"en-house" + (small ? " small" : "") + (bare ? " bare" : "") + (data.sun?.night ? " night" : "")}>
       <svg viewBox="0 0 1000 600" className="en-scene" aria-hidden="true">
         <defs>
           <linearGradient id="en-sky" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" className="en-sky-top" /><stop offset="1" className="en-sky-bottom" />
           </linearGradient>
         </defs>
-        <rect width="1000" height="600" fill="url(#en-sky)" />
-        <path d="M0 500 H1000 V600 H0 Z" className="en-grass" />
+        {!bare && <rect width="1000" height="600" fill="url(#en-sky)" />}
+        {!bare && <path d="M0 500 H1000 V600 H0 Z" className="en-grass" />}
 
         {/* Sun, when the weather says sunny (or there's no weather) */}
         {drawnSun && (

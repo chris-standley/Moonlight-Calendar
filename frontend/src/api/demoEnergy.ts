@@ -104,6 +104,7 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
           ? { cheap_now: hour >= 23.5 || hour < 6, cheap_until: hour >= 23.5 || hour < 6 ? at(6, 0, hour >= 23.5 ? 1 : 0) : null,
             next: hour >= 23.5 || hour < 6 ? null : { start: at(23, 30), end: at(6, 0, 1) }, bonus: [{ start: at(5, 30, hour >= 6 ? 1 : 0), end: at(6, 0, hour >= 6 ? 1 : 0) }], dispatching: false }
           : null,
+        sun: { night: hour >= 18 || hour < 7, next: hour >= 18 ? at(7, 0, 1) : hour < 7 ? at(7, 0) : at(18, 0) },
       };
     },
     async energyOptions(): Promise<EnergyOptions> {

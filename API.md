@@ -406,7 +406,10 @@ minutes (or with `refresh`).
   power, today, flow_temp, heat, cop, cop_today: {heating, hot_water, overall} | null} | null,
   temperatures: {inside, outside, tank} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
   battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null, tariff: {cheap_now,
-  cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null}`. `tariff`: the off-peak
+  cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null, sun: {night, next} | null}`.
+  `sun`: from Home Assistant's `sun.sun` (watched, so sunset and sunrise push an update); `night` = below the horizon,
+  when every screen, the apps and the iPhone widget draw the picture in its dark colours; `next` = the next sunrise
+  (at night) or sunset (ISO). `tariff`: the off-peak
   window and planned car-charging slots merged; `bonus`: planned slots (up to 3) not inside the usual 23:30-05:30
   night rate. Power in W (kW sensors
   converted), energy in kWh. A part is null when none of its slots has an entity. `solar.starts`/`ends` (ISO): the
@@ -417,6 +420,10 @@ minutes (or with `refresh`).
   water; electricity while idle counts only in `overall`; null until 50 Wh has been used. A temperature with nothing
   picked falls back to the controller's reading. Under 30 W counts as idle; a heat pump runs from 100 W; a car is
   charging from 200 W or when its status says so. `home.computed`: no home sensor, so solar + battery + grid.
+  A "today" (solar, import, export, home, heat pump) given a running-total meter (nothing in its id or name says
+  today or daily) is its rise since local midnight: the meter's reading at midnight comes from Home Assistant's
+  history (`history/history_during_period`), kept for the day; null until it's read, and counted from the first
+  reading seen if HA has none from midnight.
   `configured: false` without Home Assistant.
 - `GET /api/energy/options?refresh=false` -> `{slots: {slot: {kind: "power"|"energy"|"percent"|"temperature"|"number"|"state",
   group, entities: [ids in use], auto: bool, suggested: [ids automatic would use]}}, battery_invert, grid_invert,

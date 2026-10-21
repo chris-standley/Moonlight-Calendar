@@ -139,6 +139,8 @@ The Energy section draws your house with the power running between its parts, li
   COP out itself from the water flow rate and how much warmer the water leaves than it comes back (ESPAltherma's
   readings, or flow-rate and return-temperature sensors you pick) against the heat pump's power meter. Today's COP
   builds up while Moonlight is running and starts again at midnight.
+- After sunset the picture switches to its night colours on every screen, the iPhone and Apple TV apps and the
+  iPhone widget, and back at sunrise (from Home Assistant's sun).
 - **Temperatures**: inside and the hot water tank, each on the picture (outside is in the top bar).
 - **Predbat**: if Predbat is installed, a row under the picture with its status, the price now, the export price, the
   cost so far today, how long the battery will last, and when it next charges the battery. With the Octopus Energy
@@ -147,7 +149,8 @@ The Energy section draws your house with the power running between its parts, li
 
 Moonlight finds the sensors itself, starting with the ones in Home Assistant's Energy dashboard (Settings > Dashboards >
 Energy), then by name (for example a myenergi zappi's plug status, or a heat pump's "Operation" sensor). Settings >
-Energy shows what it picked for each and lets you choose another sensor or None; leave everything for a part on None
+Energy shows what it picked for each and lets you choose another sensor or None. A "today" sensor can be a meter that
+just keeps counting up (a lifetime kWh total): Moonlight shows what it has added since midnight. Leave everything for a part on None
 and it isn't drawn. If the battery or grid arrows point the wrong way, use the **Flip direction** switch there.
 
 ## Notifications and timers

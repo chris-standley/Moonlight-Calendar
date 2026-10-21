@@ -65,6 +65,8 @@ def ha_states():
         st("sensor.e_niro_car_battery_level", "82", unit_of_measurement="%", friendly_name="E-NIRO Car Battery Level"),
         st("sensor.e_niro_ev_range", "129.0", unit_of_measurement="mi", friendly_name="E-NIRO EV Range"),
         st("sensor.iphone_battery_level", "40", unit_of_measurement="%", device_class="battery", friendly_name="iPhone Battery Level"),
+        st("sun.sun", "below_horizon", next_rising="2026-10-22T06:42:33.275398+00:00",
+           next_setting="2026-10-22T16:50:12.636133+00:00", friendly_name="Sun"),
         st("sensor.altherma_operation_type", "Space", friendly_name="EspAltherma Altherma Operation Type"),
         st("select.heat_pump_energy", "Heating", options=["Heating", "Hot Water"],
            friendly_name="shellyproem50-abc Energy Meter 1 Heat Pump Energy"),
@@ -138,6 +140,8 @@ class FakeHA:
 class FakeWS:
     def __init__(self, prefs=PREFS):
         self.prefs = prefs
+        self.midnight = {"sensor.heat_pump_energy_heating": "4448.5"}
+        self.history_asked: list[dict] = []
 
     def __call__(self, url):
         fake = self
@@ -157,6 +161,10 @@ class FakeWS:
                 msg = json.loads(raw)
                 if msg["type"] == "auth":
                     self.out.put_nowait({"type": "auth_ok"})
+                elif msg["type"] == "history/history_during_period":
+                    fake.history_asked.append(msg)
+                    self.out.put_nowait({"id": msg["id"], "type": "result", "success": True, "result": {
+                        e: [{"s": fake.midnight[e], "lu": 0}] for e in msg["entity_ids"] if e in fake.midnight}})
                 elif msg["type"] == "energy/get_prefs":
                     if fake.prefs is None:
                         self.out.put_nowait({"id": msg["id"], "type": "result", "success": False,
@@ -313,6 +321,40 @@ def test_car_limit_ready_and_cheap_slots():
     t = energy.build(eff, by, now=datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc))["tariff"]
     assert t["next"] == {"start": "2026-10-21T14:00:00+01:00", "end": "2026-10-21T15:30:00+01:00"}
     assert t["bonus"] == [t["next"]]
+
+
+def test_running_total_meter_counts_from_midnight():
+    by = {x["entity_id"]: x for x in ha_states()}
+    auto, flags = energy.suggest(list(by.values()), PREFS)
+    eff = energy.effective(auto, flags, {"entities": {"heat_pump_today": "sensor.heat_pump_energy_heating"}})
+    assert energy.is_meter("sensor.heat_pump_energy_heating", by["sensor.heat_pump_energy_heating"])
+    assert not energy.is_meter("sensor.givtcp_inv01_pv_energy_today_kwh", by["sensor.givtcp_inv01_pv_energy_today_kwh"])
+    # Without a midnight reading it shows nothing rather than the lifetime total
+    assert energy.build(eff, by)["heat_pump"]["today"] is None
+    assert energy.build(eff, by, midnight={"sensor.heat_pump_energy_heating": 4448.5})["heat_pump"]["today"] == 4.5
+    # A since-midnight sensor is shown as it is
+    assert energy.build(eff, by)["solar"]["today"] == 7.0
+
+
+def test_midnight_reading_from_history(client):
+    svc = energy.service()
+    ws = svc.ws_connect
+    r = client.patch("/api/settings", json={"pin": PIN, "energy": {"entities": {"heat_pump_today": "sensor.heat_pump_energy_heating"}}})
+    assert r.status_code == 200, r.text
+    assert client.get("/api/energy").json()["heat_pump"]["today"] == 4.5
+    asked = ws.history_asked[-1]
+    assert asked["entity_ids"] == ["sensor.heat_pump_energy_heating"] and asked["include_start_time_state"] is True
+    n = len(ws.history_asked)
+    client.get("/api/energy")
+    assert len(ws.history_asked) == n  # kept for the day
+
+
+def test_night_after_sunset(client, fake):
+    r = client.get("/api/energy").json()
+    assert r["sun"] == {"night": True, "next": "2026-10-22T06:42:33+00:00"}
+    fake.states["sun.sun"]["state"] = "above_horizon"
+    assert energy.sun(fake.states["sun.sun"]) == {"night": False, "next": "2026-10-22T16:50:12+00:00"}
+    assert energy.sun(None) is None
 
 
 def test_solar_window():

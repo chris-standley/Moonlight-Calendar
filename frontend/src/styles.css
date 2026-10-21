@@ -1328,6 +1328,30 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
   --en-sky1: #182033; --en-sky2: #1c1f29; --en-grass: #1f2c25; --en-drive: #262832; --en-wall: #2a2d38; --en-line: #646a7a;
   --en-roof: #7c4a3b; --en-glass: #34405a; --en-lit: #b08a3c; --en-door: #5c4636; --en-car: #3a3e4c; --en-metal: #8c909c;
 }
+/* After sunset the picture (and its labels) goes dark, whatever the screen's own theme. */
+.en-house.night, .en-stage.night {
+  --en-sky1: #182033; --en-sky2: #1c1f29; --en-grass: #1f2c25; --en-drive: #262832; --en-wall: #2a2d38; --en-line: #646a7a;
+  --en-roof: #7c4a3b; --en-glass: #34405a; --en-lit: #b08a3c; --en-door: #5c4636; --en-car: #3a3e4c; --en-metal: #8c909c;
+  --surface: #1d1f27; --surface-2: #272a34; --line: #2f323d; --text: #eceef3; --muted: #9a9eab; --text-2: #c4c7d1;
+  --raised: #3a3e4c; --faint: #555967; color: var(--text);
+}
+/* Wall screens: the picture fills the page, the sky and grass running edge to edge behind it. */
+.energy.full { margin: 0; }
+.en-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: flex-end; justify-content: center;
+  container-type: size; overflow: hidden; color: var(--text); background: linear-gradient(var(--en-sky1), var(--en-sky2)); }
+.en-stage::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(min(100cqw * 0.6, 100cqh) / 6);
+  background: var(--en-grass); }
+.en-stage .en-house { border-radius: 0; box-shadow: none; overflow: visible; }
+.en-clock { position: absolute; top: 1.4cqh; right: 1.6cqw; display: flex; flex-direction: column; align-items: flex-end;
+  gap: 0.1em; text-align: right; z-index: 2; }
+.en-clock b { font-size: max(2rem, 5cqh); font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.en-clock span { font-size: max(1rem, 2.1cqh); font-weight: 700; color: var(--muted); }
+.en-stage .en-plan { position: absolute; left: 1.6cqw; right: 1.6cqw; bottom: 1.2cqh; z-index: 2; }
+.en-stage .en-plan { gap: 0.4rem; }
+.en-stage .en-plan-item { padding: 0.3em 0.75em; gap: 0.4em; }
+.en-stage .en-plan-item span { font-size: max(0.55rem, 1.15cqh); }
+.en-stage .en-plan-item b { font-size: max(0.7rem, 1.55cqh); }
+.en-gap { height: 1rem; padding: 0 1.6rem; }
 .en-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 1.6rem 1.4rem; container-type: size; }
 .en-house { position: relative; width: min(100cqw, 100cqh * 10 / 6); aspect-ratio: 10 / 6; container-type: inline-size;
   border-radius: calc(var(--radius) * 1.4); overflow: hidden; box-shadow: var(--shadow); }

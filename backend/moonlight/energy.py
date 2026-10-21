@@ -38,7 +38,8 @@ log = logging.getLogger("moonlight.energy")
 
 KEY = "energy"
 ENTITY_RE = re.compile(r"^(sensor|binary_sensor|select|input_select|input_number|number|climate|water_heater|switch|"
-                       r"input_boolean|predbat|time)\.[a-z0-9_]+$")
+                       r"input_boolean|predbat|time|sun)\.[a-z0-9_]+$")
+SUN = "sun.sun"  # night after sunset: the picture goes dark
 DISCOVERY_TTL = 300.0
 BROADCAST_EVERY = 4.0        # seconds between `energy` broadcasts while power keeps changing
 IDLE_WATTS = 30.0            # below this a flow is drawn as nothing moving
@@ -121,6 +122,9 @@ COP_MIN_WH = 50.0            # don't give a day's COP on less electricity than t
 COP_KEY = "energy_cop_day"   # settings key holding today's running totals, so a restart doesn't lose them
 COP_SAMPLE_EVERY = 10.0
 COP_SAVE_EVERY = 300.0
+# The "today" slots. One given a meter that only ever counts up (a lifetime kWh total) shows its rise since midnight.
+TODAY_SLOTS = ("solar_today", "grid_import_today", "grid_export_today", "home_today", "heat_pump_today")
+MIDNIGHT_RETRY = 60.0
 
 # What the heat pump is doing, from its mode entity (lower case) -> words on the screen.
 MODE_WORDS = [
@@ -420,8 +424,10 @@ def _ratio(heat: float, elec: float) -> float | None:
     return round(heat / elec, 1) if elec >= COP_MIN_WH and heat > 0 else None
 
 
-def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None, now: datetime | None = None) -> dict:
-    """The house: {solar, battery, grid, home, car, heat_pump, temperatures, plan}, each None when nothing is set for it."""
+def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None, now: datetime | None = None,
+          midnight: dict[str, float] | None = None) -> dict:
+    """The house: {solar, battery, grid, home, car, heat_pump, temperatures, plan}, each None when nothing is set for it.
+    `midnight`: kWh each running-total meter read at midnight; its "today" is what it has added since."""
     ents: dict[str, list[str]] = eff["entities"]
     now = now or datetime.now(timezone.utc)
 
@@ -432,8 +438,17 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
     def power(slot: str) -> float | None:
         return watts(st(slot))
 
+    def today(e: str) -> float | None:
+        v = kwh(states.get(e))
+        if v is None or slot_of.get(e) not in TODAY_SLOTS or not is_meter(e, states.get(e)):
+            return v
+        base = (midnight or {}).get(e)
+        return None if base is None else max(v - base, 0.0)
+
+    slot_of = {e: slot for slot, es in ents.items() for e in es}
+
     def energy(slot: str) -> float | None:
-        vals = [kwh(states.get(e)) for e in ents.get(slot) or []]
+        vals = [today(e) for e in ents.get(slot) or []]
         vals = [v for v in vals if v is not None]
         return round(sum(vals), 2) if vals else None
 
@@ -583,7 +598,17 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
         out["plan"] = None
 
     out["tariff"] = tariff(st("cheap_off_peak"), st("cheap_dispatches"), now) if has("cheap_off_peak", "cheap_dispatches") else None
+    out["sun"] = sun(states.get(SUN))
     return out
+
+
+def sun(state: dict | None) -> dict | None:
+    """{night, next}: whether the sun is down (Home Assistant's sun.sun), and when that next changes (ISO)."""
+    if not state or state.get("state") not in ("above_horizon", "below_horizon"):
+        return None
+    night = state["state"] == "below_horizon"
+    nxt = _parse_dt(_attrs(state).get("next_rising" if night else "next_setting"))
+    return {"night": night, "next": nxt.replace(microsecond=0).isoformat() if nxt else None}
 
 
 def _clock_next(state: dict | None, now: datetime) -> str | None:
@@ -695,6 +720,11 @@ class CopDay:
 
 def _words(entity: str, state: dict | None) -> str:
     return (entity.split(".", 1)[1] + " " + re.sub(r"[^a-z0-9]+", "_", _name(state, entity).lower())).strip()
+
+
+def is_meter(entity: str, state: dict | None) -> bool:
+    """A running total rather than a since-midnight figure: nothing in its id or name says today or daily."""
+    return not re.search(r"today|daily|(^|_)day($|_)", _words(entity, state))
 
 
 def _prefix(entity: str) -> str:
@@ -916,7 +946,7 @@ def effective(auto: dict[str, list[str]], auto_flags: dict[str, bool], conf: dic
 
 
 def watch_list(eff: dict) -> set[str]:
-    return {e for es in eff["entities"].values() for e in es}
+    return {e for es in eff["entities"].values() for e in es} | {SUN}
 
 
 def candidates(states: list[dict]) -> dict[str, list[dict]]:
@@ -960,6 +990,9 @@ class EnergyService(home_security.SecurityService):
         self.cop = CopDay(self._load_cop())
         self._cop_task: asyncio.Task | None = None
         self._cop_saved = 0.0
+        # Running-total meters' readings at the start of today: entity -> (date, kWh).
+        self.midnight: dict[str, tuple[str, float]] = {}
+        self._midnight_tried = -1e9
 
     @staticmethod
     def _load_cop() -> dict | None:
@@ -1007,6 +1040,33 @@ class EnergyService(home_security.SecurityService):
             self._cop_task = None
             self.save_cop()
 
+    async def midnight_values(self, eff: dict, states: dict[str, dict | None]) -> dict[str, float]:
+        """What each running-total meter in a "today" slot read at local midnight (from Home Assistant's history),
+        kept for the day. If HA has no reading from then, counting starts from the first one seen."""
+        zone = _zone()
+        start = datetime.now(zone).replace(hour=0, minute=0, second=0, microsecond=0)
+        day = start.date().isoformat()
+        meters = sorted({e for slot in TODAY_SLOTS for e in eff["entities"].get(slot) or []
+                         if is_meter(e, states.get(e)) and kwh(states.get(e)) is not None})
+        missing = [e for e in meters if self.midnight.get(e, ("",))[0] != day]
+        if missing and self.clock() - self._midnight_tried >= MIDNIGHT_RETRY:
+            self._midnight_tried = self.clock()
+            try:
+                hist, = await self._ws_commands({
+                    "type": "history/history_during_period", "start_time": start.isoformat(),
+                    "end_time": (start + timedelta(seconds=1)).isoformat(), "entity_ids": missing,
+                    "minimal_response": True, "no_attributes": True, "include_start_time_state": True})
+            except Exception as e:
+                log.info("Couldn't read midnight meter readings: %s", media._describe(e))
+            else:
+                for e in missing:
+                    rows = (hist or {}).get(e) if isinstance(hist, dict) else None
+                    first = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+                    v = kwh({"state": first.get("s", first.get("state")),
+                             "attributes": _attrs(states.get(e))}) if first else None
+                    self.midnight[e] = (day, v if v is not None else kwh(states.get(e)) or 0.0)
+        return {e: v for e, (d, v) in self.midnight.items() if d == day and e in meters}
+
     async def find(self, force: bool = False) -> dict[str, list[str]]:
         async with self._auto_lock:
             if self.auto is not None and not force and self.clock() - self.auto_at < DISCOVERY_TTL:
@@ -1047,14 +1107,15 @@ async def overview(svc: EnergyService) -> dict:
     """GET /api/energy."""
     eff = await svc.setup()
     states = await svc.states_for(sorted(watch_list(eff)))
-    house = build(eff, states, svc.cop.as_dict() if svc.cop.day else None)
+    midnight = await svc.midnight_values(eff, states)
+    house = build(eff, states, svc.cop.as_dict() if svc.cop.day else None, midnight=midnight)
     return {"configured": True, "reachable": svc.last_error is None, "error": svc.found_error,
             "updated": media.utc_now_iso(), **house}
 
 
 def not_connected(error: str) -> dict:
     return {"configured": False, "reachable": False, "error": error, "updated": None, "solar": None, "battery": None,
-            "grid": None, "home": None, "car": None, "heat_pump": None, "temperatures": None, "plan": None, "tariff": None}
+            "grid": None, "home": None, "car": None, "heat_pump": None, "temperatures": None, "plan": None, "tariff": None, "sun": None}
 
 
 # ---------------------------------------------------------------- module-level service

@@ -346,6 +346,9 @@ struct EnergyOverview: Codable {
     var temperatures: Temperatures?
     var plan: Plan?
     var tariff: Tariff?
+    /// Home Assistant's sun: night after sunset (the picture goes dark); next: when that changes (ISO).
+    var sun: Sun?
+    struct Sun: Codable { var night: Bool; var next: String? }
 
     /// Cheap electricity from the Octopus Energy integration; bonus: car-charging slots outside the usual night hours.
     struct Tariff: Codable {
@@ -405,6 +408,14 @@ struct NurseryUpdate: Codable, Identifiable, Hashable {
 struct PhotoList: Codable {
     let source: String
     let photos: [Photo]
+    /// The same photos grouped by album, each oldest first (photo ids).
+    var albums: [PhotoAlbum]?
+}
+
+struct PhotoAlbum: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let photos: [String]
 }
 
 struct Display: Codable, Hashable {
