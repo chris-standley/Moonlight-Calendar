@@ -118,6 +118,21 @@ stream of the camera. For a lighter stream on a Raspberry Pi, enable each camera
 Home Assistant: compact screens then play it, while large screens and the Apple TV keep the full resolution. Turning on
 "Preload stream" in each camera entity's settings makes the video start faster. Cameras that can't stream fall back to snapshots about twice a second.
 
+## Notifications and timers
+
+With the Moonlight integration installed in Home Assistant, automations and scripts can put things on the screens:
+
+- **`moonlight.show_notification`**: a message full screen or as a toast in the corner, with a title, text, an emoji
+  and optionally a picture.
+- **`moonlight.start_timer`**: a timer with a label and a description, for a duration or counting down to a date and
+  time. At zero it chimes and says Time's up.
+
+Each goes to every screen or to chosen ones (`screens`: names from Settings > Screens, or `large`, `compact`, `phone`,
+`app`), and stays for a set time or until someone taps it away (gone from every screen) or
+`moonlight.clear_notifications` clears it. The iPhone, iPad and Apple TV apps show them too. A timer finishing and a
+notification being dismissed fire the `moonlight_alert` event in Home Assistant. Settings > Display > **Test a
+notification** shows one on that screen. Examples are in the integration's README.
+
 ## Calendars
 
 Settings > Calendars > Connect iCloud with an Apple ID and an app-specific password

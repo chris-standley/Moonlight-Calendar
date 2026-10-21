@@ -13,10 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, auth, caldav_sync, db, ha_discovery, home_security, media, recipe_batch, security, tapestry
+from . import __version__, alerts, auth, caldav_sync, db, ha_discovery, home_security, media, recipe_batch, security, tapestry
 from . import immich as immich_source
 from .common import hub, log
-from .routes import accounts, calendar, chores, displays, ha_login, immich, lists, meals, nursery, recipes
+from .routes import accounts, alerts as alert_routes, calendar, chores, displays, ha_login, immich, lists, meals, nursery, recipes
 from .routes import home_security as security_routes
 from .routes import media as media_routes
 from .routes import summary as summary_routes
@@ -56,6 +56,7 @@ def create_app(
     db.init_db()
     immich_source.cache.reset()  # the cached photo list belongs to the previous database's settings
     tapestry.forget_session()
+    alerts.load()
     if auth_enabled is None:
         auth_enabled = auth.auth_enabled_from_env()
     if demo is None:
@@ -100,6 +101,7 @@ def create_app(
     app.include_router(summary_routes.router)
     app.include_router(media_routes.router)
     app.include_router(security_routes.router)
+    app.include_router(alert_routes.router)
 
     # Follow the configured media players over Home Assistant's WebSocket (only when HA is reachable at all).
     async def start_media():
@@ -118,6 +120,10 @@ def create_app(
     # Follow the alarm, its sensors and the cameras' person sensors the same way.
     app.router.on_startup.append(home_security.start)
     app.router.on_shutdown.append(home_security.stop)
+
+    # Notifications and timers from Home Assistant: timers reaching zero, shown-for-a-while ones going.
+    app.router.on_startup.append(alerts.start)
+    app.router.on_shutdown.append(alerts.stop)
 
     # Inside the add-on: offer the Moonlight integration in Home Assistant (Devices & services > Discovered).
     async def start_discovery():

@@ -2,7 +2,8 @@
 
 A custom integration that brings your [Moonlight](https://github.com/chris-standley/Moonlight-Calendar) family
 wall calendar into Home Assistant: stars, chores, tonight's dinner, the next event, every list as a to-do
-entity and a calendar per person, plus services to add and tick off chores, award stars and add list items.
+entity and a calendar per person, plus services to add and tick off chores, award stars, add list items, and put
+notifications and timers on the screens.
 
 It talks to Moonlight's local HTTP API (port 8091), polls every 60 seconds and also listens to Moonlight's
 WebSocket, so a chore ticked off on the wall shows up in HA within a second or two.
@@ -45,7 +46,7 @@ Calendar times are Moonlight's household-local times interpreted in Home Assista
 
 ## Services
 
-All four accept a person or list by **name or id** (case-insensitive; first name works if unique; emoji in
+These four accept a person or list by **name or id** (case-insensitive; first name works if unique; emoji in
 list names can be left out) and an optional `config_entry_id` if you run more than one Moonlight. Each can
 return a response (`response_variable`).
 
@@ -85,10 +86,131 @@ data:
   item: Oat milk
 ```
 
+## Notifications and timers on the screens
+
+`moonlight.show_notification` and `moonlight.start_timer` put something on Moonlight's screens and in the iPhone,
+iPad and Apple TV apps. `screens` picks where: `all` (the default), screen names as in Moonlight's Settings > Screens
+(any case), or a style: `large`, `compact`, `phone`, or `app` (the iPhone and iPad apps). A name Moonlight doesn't
+know is an error that lists the screens it has. `style` is `fullscreen` or `toast` (a card in the top corner).
+
+Each stays for its `duration` / `finished_for`, or with none until someone taps it away on a screen (gone from every
+screen) or `moonlight.clear_notifications` clears it. `dismissible: false` leaves it to Home Assistant alone. Give it
+an `id` to replace or clear it later; the response (`response_variable`) has the id either way.
+
+```yaml
+# Full screen on every screen until someone taps Dismiss (a full screen one stays unless given a duration).
+action: moonlight.show_notification
+data:
+  title: Dinner's ready
+  message: Come to the table, everyone
+  icon: "🍝"
+  chime: true
+
+# A toast on the kitchen screen for 30 seconds (a toast with no duration goes after 10 seconds).
+action: moonlight.show_notification
+data:
+  title: Washing machine finished
+  icon: "🧺"
+  screens: Kitchen
+  style: toast
+  duration: "00:00:30"
+
+# Until Home Assistant clears it, and no one can tap it away; `image` is any picture the screens can open.
+action: moonlight.show_notification
+data:
+  id: back_door
+  title: Back door is open
+  screens: [large, compact]
+  dismissible: false
+
+# A labelled timer: a toast that counts down, chimes at zero and says Time's up until it's dismissed.
+action: moonlight.start_timer
+data:
+  label: Pizza
+  description: Take it out of the oven
+  icon: "🍕"
+  duration: "00:12:00"
+  screens: Kitchen
+
+# A full screen countdown to a date and time (Home Assistant's time zone), on the hallway screen.
+action: moonlight.start_timer
+data:
+  label: Holiday!
+  description: Off to Cornwall
+  until: "2027-07-24 08:00:00"
+  style: fullscreen
+  screens: Hallway
+
+# Take one off, or everything on some screens, or (with neither) everything.
+action: moonlight.clear_notifications
+data:
+  id: back_door
+```
+
+Starting a timer with the same `id` again restarts it. `finished_for` sets how long Time's up stays once a timer
+gets to zero. A full screen timer has a Make small button that turns it into a corner card on that screen only.
+
+Two things come back as the event `moonlight_alert`, with `event`, `id`, `kind` (`notification` or `timer`),
+`title` (the title or label), `screen` and `config_entry_id`:
+
+- `event: finished`: a timer got to zero.
+- `event: dismissed`: someone tapped one away; `screen` is that screen's name.
+
 The `todo.*` entities also work with HA's own `todo.add_item`, `todo.update_item`, `todo.remove_item` and
 with Assist ("add milk to my groceries").
 
 ## Example automations
+
+Tell everyone the back door is open, and take it away when it shuts:
+
+```yaml
+alias: Moonlight - back door open
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.back_door
+    to: "on"
+    for: "00:02:00"
+    id: open
+  - trigger: state
+    entity_id: binary_sensor.back_door
+    to: "off"
+    id: closed
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: open
+        sequence:
+          - action: moonlight.show_notification
+            data:
+              id: back_door
+              title: The back door is open
+              icon: "🚪"
+              style: toast
+              duration: 0
+    default:
+      - action: moonlight.clear_notifications
+        data:
+          id: back_door
+```
+
+Say it out loud when a timer finishes:
+
+```yaml
+alias: Moonlight - timer finished
+triggers:
+  - trigger: event
+    event_type: moonlight_alert
+    event_data:
+      event: finished
+actions:
+  - action: tts.speak
+    target:
+      entity_id: tts.home_assistant_cloud
+    data:
+      media_player_entity_id: media_player.kitchen
+      message: "{{ trigger.event.data.title }} timer is done"
+```
 
 Put the bins out the night before collection. Add the bin calendar to Moonlight first (Settings > Calendars >
 Home Assistant, pick everyone) so collection day shows on the shared calendar; this adds the chore at 7pm the

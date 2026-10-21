@@ -263,6 +263,56 @@ async def test_services(hass: HomeAssistant, moonlight_server) -> None:
     await unload(hass, entry)
 
 
+async def test_notifications_and_timers(hass: HomeAssistant, moonlight_server) -> None:
+    entry = await setup(hass, moonlight_server)
+    for _ in range(50):
+        if entry.runtime_data.ws_connected:
+            break
+        await asyncio.sleep(0.1)
+    events = []
+    hass.bus.async_listen("moonlight_alert", lambda e: events.append(e.data))
+
+    resp = await hass.services.async_call(DOMAIN, "show_notification",
+                                          {"title": "Dinner's ready", "duration": {"seconds": 30}, "style": "toast",
+                                           "id": "dinner"}, blocking=True, return_response=True)
+    assert resp["id"] == "dinner" and resp["screens"] == ["all"] and resp["expires_at"]
+    shown = await hass.async_add_executor_job(http, moonlight_server, "GET", "/api/alerts")
+    assert [a["title"] for a in shown["alerts"]] == ["Dinner's ready"]
+    with pytest.raises(ServiceValidationError, match="title or a message"):
+        await hass.services.async_call(DOMAIN, "show_notification", {}, blocking=True)
+    with pytest.raises(ServiceValidationError, match="No screen called"):
+        await hass.services.async_call(DOMAIN, "show_notification", {"title": "x", "screens": ["Garage"]},
+                                       blocking=True)
+
+    resp = await hass.services.async_call(DOMAIN, "start_timer",
+                                          {"label": "Eggs", "description": "Soft boiled", "duration": "00:00:01"},
+                                          blocking=True, return_response=True)
+    timer_id = resp["id"]
+    assert resp["ends_at"]
+    until = (dt_util.now() + timedelta(days=3)).replace(tzinfo=None)
+    resp = await hass.services.async_call(DOMAIN, "start_timer", {"label": "Holiday", "until": until.isoformat()},
+                                          blocking=True, return_response=True)
+    assert abs(resp["ends_at"] / 1000 - dt_util.as_utc(until.replace(tzinfo=dt_util.get_default_time_zone()))
+               .timestamp()) < 2
+    # The egg timer gets to zero: HA hears about it.
+    for _ in range(40):
+        await asyncio.sleep(0.1)
+        await hass.async_block_till_done()
+        if events:
+            break
+    assert events and events[0]["event"] == "finished" and events[0]["id"] == timer_id
+    assert events[0]["title"] == "Eggs" and events[0]["config_entry_id"] == entry.entry_id
+
+    resp = await hass.services.async_call(DOMAIN, "clear_notifications", {"id": ["dinner", "not-there"]},
+                                          blocking=True, return_response=True)
+    assert resp["cleared"] == ["dinner"]
+    resp = await hass.services.async_call(DOMAIN, "clear_notifications", {}, blocking=True, return_response=True)
+    assert timer_id in resp["cleared"] and len(resp["cleared"]) == 2  # the finished egg timer and the countdown
+    shown = await hass.async_add_executor_job(http, moonlight_server, "GET", "/api/alerts")
+    assert shown["alerts"] == []
+    await unload(hass, entry)
+
+
 async def test_todo_entity(hass: HomeAssistant, moonlight_server) -> None:
     entry = await setup(hass, moonlight_server)
     eid = "todo.moonlight_groceries"

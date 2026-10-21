@@ -371,6 +371,39 @@ Live updates: the panel, the sensors and the shown cameras' person sensors are f
 speakers (polling `/api/states` while it's down). Any change broadcasts `security`; a change in which cameras have a
 person broadcasts `security_alert`.
 
+## Notifications and timers (from Home Assistant)
+Put up by the Home Assistant integration (`moonlight.show_notification`, `moonlight.start_timer`) or any paired
+client; shown on every device or chosen ones; kept across restarts. Times are epoch milliseconds on the add-on's
+clock.
+- `GET /api/alerts` -> `{server_time, alerts: [Alert]}`: the ones this device shows (the HA panel, which isn't a
+  paired screen, only those for all; the integration sees every one). Count down against `server_time`.
+- `POST /api/alerts` -> Alert. Body:
+  - `kind`: `notification` (default) or `timer`; `style`: `fullscreen` (default for notifications) or `toast` (default
+    for timers: a card in the top corner).
+  - `screens`: list (or comma-separated text) of `all` (default), screen names or ids (any case), or a style: `large`,
+    `compact`, `phone`, `app` (the iPhone and iPad apps). Styles mean the devices paired at the time. An unknown name
+    is a 400 that lists the screens.
+  - `id`: your own id, to replace or clear it later (the same id again replaces it, e.g. restarting a timer); else one
+    is made.
+  - `icon` (an emoji), `dismissible` (default true; false = only `DELETE` clears it), `chime` (default false for
+    notifications, true for timers: played when it appears / reaches zero).
+  - notification: `title` and/or `message`, `image` (a web address), `duration` seconds (left out: 10 for a toast,
+    0 for full screen; 0 = until dismissed or cleared).
+  - timer: `label` (required), `description`, and either `duration` seconds or `until` (ISO date-time; without a zone
+    it is the household's time) for a countdown, up to a year. `finished_for` seconds: how long "Time's up" stays
+    (left out or 0: until dismissed or cleared).
+- Alert = `{id, kind, style, screens, icon, dismissible, chime, created_at, expires_at (null = until dismissed or
+  cleared)}` + notification `{title, message, image}` or timer `{label, description, started_at, ends_at, finished,
+  finished_for}`.
+- `POST /api/alerts/{id}/dismiss` -> `{ok}`: tapped away on a screen; gone from every screen. 409 if not
+  dismissible, 404 if already gone.
+- `DELETE /api/alerts/{id}` -> `{ok}` (404 if gone); `DELETE /api/alerts?screens=Kitchen&screens=large` -> `{cleared:
+  [ids]}`: the ones shown on those screens, or with no `screens` every one.
+
+Live updates: topic `alerts`. A timer reaching zero and a screen dismissing one also send
+`{"type": "alert", "event": "finished"|"dismissed", id, kind, title, screen}` on the WebSocket (`screen`: the name of
+the screen that dismissed it); the integration fires these as `moonlight_alert` events.
+
 ## Summary (for the Home Assistant integration)
 - `GET /api/summary?date=YYYY-MM-DD&now=YYYY-MM-DDTHH:MM` (both optional; default today / now) ->
   `{version, family_name, date, now, people: [PersonSummary], dinner: Meal|null, next_event: EventSummary|null, lists: [List + {items: [Item]}]}`

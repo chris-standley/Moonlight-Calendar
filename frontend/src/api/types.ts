@@ -217,7 +217,7 @@ export interface NurseryUpdate {
   children: { name: string; person_id: string | null; color: string | null }[];
   photos: NurseryPhoto[]; comments: { author: string; date: string | null; text: string }[]; added_at: string;
 }
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery";
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery" | "alerts";
 
 // Security (see API.md "Security"): the alarm, Alarmo's sensors and the cameras, from Home Assistant.
 /** Where a camera that sees a person pops up: each screen style, and the Apple TV app on its own. */
@@ -327,6 +327,24 @@ export function pickCalendar(cals: SyncCalendar[], personIds: string[]): string 
   return mine.reduce<SyncCalendar | null>((best, c) => (!best || c.person_ids.length < best.person_ids.length ? c : best), null)?.id ?? null;
 }
 
+/** A notification or timer put on the screens, usually by Home Assistant (see API.md "Notifications and timers").
+ * Times are epoch milliseconds on the server's clock. `expires_at` null = until dismissed or cleared. */
+export interface ScreenAlert {
+  id: string; kind: "notification" | "timer"; style: "fullscreen" | "toast"; screens: string[];
+  icon: string; dismissible: boolean; chime: boolean; created_at: number; expires_at: number | null;
+  /** notification */
+  title?: string; message?: string; image?: string | null;
+  /** timer: counts down to `ends_at` (a countdown to a date has a long one); `finished` once it got there */
+  label?: string; description?: string; started_at?: number; ends_at?: number; finished?: boolean; finished_for?: number | null;
+}
+export interface AlertsNow { server_time: number; alerts: ScreenAlert[] }
+/** POST /api/alerts: `duration` and `finished_for` in seconds, `until` an ISO date-time. */
+export interface AlertIn {
+  kind?: "notification" | "timer"; style?: "fullscreen" | "toast"; screens?: string[]; id?: string; icon?: string;
+  dismissible?: boolean; chime?: boolean; title?: string; message?: string; image?: string; duration?: number;
+  label?: string; description?: string; until?: string; finished_for?: number;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -335,6 +353,11 @@ export class ApiError extends Error {
 export interface Api {
   mode: "live" | "demo";
   subscribe(fn: (topic: Topic) => void): () => void;
+  /** Notifications and timers shown on this device. */
+  alerts(): Promise<AlertsNow>;
+  createAlert(a: AlertIn): Promise<ScreenAlert>;
+  /** Tapped away on this screen: gone everywhere. */
+  dismissAlert(id: string): Promise<void>;
   settings(): Promise<Settings>;
   /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
   updateSettings(patch: Partial<Omit<Settings, "screens" | "security">> & { security?: SecuritySettingsPatch; screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;

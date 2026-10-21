@@ -43,7 +43,7 @@ class MoonlightClient:
         """Sent with every HTTP request and the WebSocket handshake."""
         return auth_headers(self.token)
 
-    async def _req(self, method: str, path: str, *, json: Any = None, params: dict | None = None) -> Any:
+    async def _req(self, method: str, path: str, *, json: Any = None, params: dict | list | None = None) -> Any:
         try:
             async with self._session.request(method, self.base + path, json=json, params=params,
                                              headers=self.headers, timeout=TIMEOUT) as resp:
@@ -123,3 +123,14 @@ class MoonlightClient:
 
     async def delete_item(self, item_id: str) -> None:
         await self._req("DELETE", f"/api/items/{item_id}")
+
+    async def add_alert(self, alert: dict) -> dict:
+        """A notification or timer on the screens (POST /api/alerts)."""
+        return await self._req("POST", "/api/alerts", json=alert)
+
+    async def clear_alert(self, alert_id: str) -> None:
+        await self._req("DELETE", f"/api/alerts/{alert_id}")
+
+    async def clear_alerts(self, screens: list[str] | None = None) -> list[str]:
+        params = [("screens", s) for s in screens or []]
+        return (await self._req("DELETE", "/api/alerts", params=params or None)).get("cleared", [])

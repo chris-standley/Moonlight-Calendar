@@ -100,6 +100,16 @@ def test_ws_messages_and_backoff():
     assert model.backoff(50) == 300
 
 
+def test_alert_events():
+    ev = model.parse_alert_event('{"type":"alert","event":"dismissed","id":"bins","kind":"notification",'
+                                 '"title":"Bins","screen":"Kitchen"}')
+    assert ev == {"event": "dismissed", "id": "bins", "kind": "notification", "title": "Bins", "screen": "Kitchen"}
+    assert model.parse_alert_event('{"type":"alert","event":"finished","id":"t","kind":"timer"}')["title"] == ""
+    assert model.parse_alert_event('{"type":"alert","event":"other"}') is None
+    assert model.parse_alert_event('{"type":"changed","topic":"alerts"}') is None
+    assert model.parse_alert_event("pong") is None
+
+
 def test_resolve_person():
     people = SUMMARY["people"]
     assert model.resolve_person(people, "p_mum")["name"] == "Mum"

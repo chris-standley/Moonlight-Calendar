@@ -1,7 +1,8 @@
-"""moonlight.add_chore, moonlight.complete_chore, moonlight.award_stars, moonlight.add_list_item."""
+"""moonlight.add_chore, complete_chore, award_stars, add_list_item, and notifications and timers on the screens:
+show_notification, start_timer, clear_notifications."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -14,9 +15,11 @@ from homeassistant.util import dt as dt_util
 
 from .api import MoonlightApiError, MoonlightError
 from .const import (
-    ATTR_CHORE, ATTR_CONFIG_ENTRY_ID, ATTR_DATE, ATTR_DUE, ATTR_EMOJI, ATTR_ITEM, ATTR_LIST, ATTR_PERSON, ATTR_PIN,
-    ATTR_POINTS, ATTR_REASON, ATTR_STARS, ATTR_TIME_OF_DAY, ATTR_TITLE, DOMAIN, SERVICE_ADD_CHORE,
-    SERVICE_ADD_LIST_ITEM, SERVICE_AWARD_STARS, SERVICE_COMPLETE_CHORE,
+    ATTR_CHIME, ATTR_CHORE, ATTR_CONFIG_ENTRY_ID, ATTR_DATE, ATTR_DESCRIPTION, ATTR_DISMISSIBLE, ATTR_DUE,
+    ATTR_DURATION, ATTR_EMOJI, ATTR_FINISHED_FOR, ATTR_ICON, ATTR_ID, ATTR_IMAGE, ATTR_ITEM, ATTR_LABEL, ATTR_LIST,
+    ATTR_MESSAGE, ATTR_PERSON, ATTR_PIN, ATTR_POINTS, ATTR_REASON, ATTR_SCREENS, ATTR_STARS, ATTR_STYLE,
+    ATTR_TIME_OF_DAY, ATTR_TITLE, ATTR_UNTIL, DOMAIN, SERVICE_ADD_CHORE, SERVICE_ADD_LIST_ITEM, SERVICE_AWARD_STARS,
+    SERVICE_CLEAR_NOTIFICATIONS, SERVICE_COMPLETE_CHORE, SERVICE_SHOW_NOTIFICATION, SERVICE_START_TIMER,
 )
 from .coordinator import MoonlightCoordinator
 from .model import due_param, open_once_chore, resolve_chore, resolve_list, resolve_person
@@ -51,6 +54,49 @@ ADD_LIST_ITEM_SCHEMA = vol.Schema({
     vol.Required(ATTR_ITEM): cv.string,
     vol.Optional(ATTR_DUE): cv.date,
 })
+# Notifications and timers. `screens`: "all" (default), screen names, or styles (large, compact, phone, app).
+SCREENS = vol.All(cv.ensure_list, [cv.string])
+STYLE = vol.In(["fullscreen", "toast"])
+SHOW_NOTIFICATION_SCHEMA = vol.Schema({
+    **BASE,
+    vol.Optional(ATTR_TITLE, default=""): cv.string,
+    vol.Optional(ATTR_MESSAGE, default=""): cv.string,
+    vol.Optional(ATTR_SCREENS): SCREENS,
+    vol.Optional(ATTR_STYLE, default="fullscreen"): STYLE,
+    vol.Optional(ATTR_DURATION): cv.time_period,  # left out: a toast goes after 10 s, full screen stays; 0 = stays
+    vol.Optional(ATTR_ICON, default=""): cv.string,
+    vol.Optional(ATTR_IMAGE): cv.string,
+    vol.Optional(ATTR_DISMISSIBLE, default=True): cv.boolean,
+    vol.Optional(ATTR_CHIME, default=False): cv.boolean,
+    vol.Optional(ATTR_ID): cv.string,
+})
+START_TIMER_SCHEMA = vol.All(vol.Schema({
+    **BASE,
+    vol.Required(ATTR_LABEL): cv.string,
+    vol.Optional(ATTR_DESCRIPTION, default=""): cv.string,
+    vol.Exclusive(ATTR_DURATION, "end"): cv.positive_time_period,
+    vol.Exclusive(ATTR_UNTIL, "end"): cv.datetime,
+    vol.Optional(ATTR_SCREENS): SCREENS,
+    vol.Optional(ATTR_STYLE, default="toast"): STYLE,
+    vol.Optional(ATTR_FINISHED_FOR): cv.time_period,  # left out or 0: "Time's up" stays until dismissed or cleared
+    vol.Optional(ATTR_ICON, default=""): cv.string,
+    vol.Optional(ATTR_DISMISSIBLE, default=True): cv.boolean,
+    vol.Optional(ATTR_CHIME, default=True): cv.boolean,
+    vol.Optional(ATTR_ID): cv.string,
+}), cv.has_at_least_one_key(ATTR_DURATION, ATTR_UNTIL))
+CLEAR_NOTIFICATIONS_SCHEMA = vol.Schema({
+    **BASE,
+    vol.Optional(ATTR_ID): vol.All(cv.ensure_list, [cv.string]),
+    vol.Optional(ATTR_SCREENS): SCREENS,
+})
+
+
+def _seconds(value: timedelta) -> int:
+    return max(0, round(value.total_seconds()))
+
+
+def _optional(data: dict, *keys: str) -> dict[str, Any]:
+    return {k: data[k] for k in keys if data.get(k) not in (None, "")}
 
 
 def _coordinator(hass: HomeAssistant, call: ServiceCall) -> MoonlightCoordinator:
@@ -154,6 +200,75 @@ def async_setup_services(hass: HomeAssistant) -> None:
             return None
         return {"list": lst["name"], "item": item}
 
+    async def put_up(call: ServiceCall, alert: dict[str, Any]) -> ServiceResponse:
+        coordinator = _coordinator(hass, call)
+        try:
+            made = await coordinator.client.add_alert(alert)
+        except MoonlightError as err:
+            raise _api_error(err) from err
+        if not call.return_response:
+            return None
+        return {"id": made["id"], "screens": made["screens"], "expires_at": made.get("expires_at"),
+                "ends_at": made.get("ends_at")}
+
+    async def show_notification(call: ServiceCall) -> ServiceResponse:
+        """Full screen or a toast, on every screen or chosen ones, for a while or until dismissed or cleared."""
+        d = call.data
+        if not d[ATTR_TITLE] and not d[ATTR_MESSAGE]:
+            raise ServiceValidationError("Give the notification a title or a message")
+        alert: dict[str, Any] = {
+            "kind": "notification", "title": d[ATTR_TITLE], "message": d[ATTR_MESSAGE], "style": d[ATTR_STYLE],
+            "icon": d[ATTR_ICON], "dismissible": d[ATTR_DISMISSIBLE], "chime": d[ATTR_CHIME],
+            **_optional(d, ATTR_SCREENS, ATTR_IMAGE, ATTR_ID),
+        }
+        if ATTR_DURATION in d:
+            alert["duration"] = _seconds(d[ATTR_DURATION])
+        return await put_up(call, alert)
+
+    async def start_timer(call: ServiceCall) -> ServiceResponse:
+        """A timer for a duration, or a countdown to a date and time, with a label (and a description)."""
+        d = call.data
+        alert: dict[str, Any] = {
+            "kind": "timer", "label": d[ATTR_LABEL], "description": d[ATTR_DESCRIPTION], "style": d[ATTR_STYLE],
+            "icon": d[ATTR_ICON], "dismissible": d[ATTR_DISMISSIBLE], "chime": d[ATTR_CHIME],
+            **_optional(d, ATTR_SCREENS, ATTR_ID),
+        }
+        if ATTR_DURATION in d:
+            alert["duration"] = _seconds(d[ATTR_DURATION])
+        else:
+            until: datetime = d[ATTR_UNTIL]
+            if until.tzinfo is None:  # a time without a zone is Home Assistant's local time
+                until = until.replace(tzinfo=dt_util.get_default_time_zone())
+            alert["until"] = until.isoformat()
+        if ATTR_FINISHED_FOR in d:
+            alert["finished_for"] = _seconds(d[ATTR_FINISHED_FOR])
+        return await put_up(call, alert)
+
+    async def clear_notifications(call: ServiceCall) -> ServiceResponse:
+        """By id, or everything shown on some screens, or (with neither) everything."""
+        client = _coordinator(hass, call).client
+        cleared: list[str] = []
+        try:
+            if call.data.get(ATTR_ID):
+                for alert_id in call.data[ATTR_ID]:
+                    try:
+                        await client.clear_alert(alert_id)
+                        cleared.append(alert_id)
+                    except MoonlightApiError as err:
+                        if err.status != 404:  # already gone (dismissed, or its time was up) is fine
+                            raise
+            else:
+                cleared = await client.clear_alerts(call.data.get(ATTR_SCREENS))
+        except MoonlightError as err:
+            raise _api_error(err) from err
+        return {"cleared": cleared} if call.return_response else None
+
+    hass.services.async_register(DOMAIN, SERVICE_SHOW_NOTIFICATION, show_notification,
+                                 schema=SHOW_NOTIFICATION_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_START_TIMER, start_timer,
+                                 schema=START_TIMER_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_NOTIFICATIONS, clear_notifications,
+                                 schema=CLEAR_NOTIFICATIONS_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_ADD_CHORE, add_chore,
                                  schema=ADD_CHORE_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_COMPLETE_CHORE, complete_chore,

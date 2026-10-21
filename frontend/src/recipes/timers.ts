@@ -64,11 +64,13 @@ export function useTimers(): KitchenTimer[] {
 // ---------------------------------------------------------------- sound
 
 let ctx: AudioContext | null = null;
-/** Browsers only allow sound after a tap: starting a timer is that tap. */
-function unlockAudio() {
+/** Browsers only allow sound after a tap: starting a timer is that tap (kiosk browsers usually allow it anyway). */
+export function unlockAudio() {
   try { ctx ??= new AudioContext(); if (ctx.state === "suspended") void ctx.resume(); } catch { /* no audio */ }
 }
-function chime() {
+/** Three rising beeps. `start`: make the audio first (a kiosk lets a page play sound without a tap). */
+export function chime(start = false) {
+  if (!ctx && start) unlockAudio();
   if (!ctx) return;
   const t0 = ctx.currentTime;
   [0, 0.25, 0.5].forEach((d, i) => {

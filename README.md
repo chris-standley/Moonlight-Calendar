@@ -149,6 +149,11 @@ served by `httpx.MockTransport`).
   energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.
 - Chores from automations: the integration's `moonlight.add_chore` action adds a one-off chore, for example
   the night before bin day or when the dishwasher finishes (examples in its README).
+- Notifications and timers: the integration's `moonlight.show_notification` puts a message full screen or as a toast
+  on every screen or on chosen ones (by name, or a style such as `compact`), for a set time or until someone taps it
+  away or Home Assistant clears it; `moonlight.start_timer` shows a labelled timer or a countdown to a date the same
+  way. The iPhone, iPad and Apple TV apps show them too. Settings > Display > Test a notification shows one on that
+  screen.
 - Entities and services: install the `moonlight` integration through HACS, see `custom_components/moonlight/README.md`.
 
 ## Your family

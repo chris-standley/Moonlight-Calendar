@@ -44,6 +44,38 @@ struct SecurityAlert: Codable, Identifiable, Equatable {
     var id: String { camera }
 }
 
+/// A notification or timer Home Assistant put on the screens (`/api/alerts`). Times are epoch milliseconds on the
+/// add-on's clock; `expires_at` nil = until dismissed or cleared.
+struct ScreenAlert: Codable, Identifiable, Equatable {
+    let id: String
+    let kind: String          // notification | timer
+    let style: String         // fullscreen | toast
+    let icon: String
+    let dismissible: Bool
+    let chime: Bool
+    let created_at: Double
+    let expires_at: Double?
+    // notification
+    let title: String?
+    let message: String?
+    let image: String?
+    // timer (a countdown to a date is a long timer)
+    let label: String?
+    let description: String?
+    let started_at: Double?
+    let ends_at: Double?
+
+    var isTimer: Bool { kind == "timer" }
+    var isFullScreen: Bool { style == "fullscreen" }
+    /// Tells apart the same id put up again (a restarted timer).
+    var key: String { "\(id)@\(Int(created_at))" }
+}
+
+struct AlertsNow: Codable {
+    let server_time: Double
+    let alerts: [ScreenAlert]
+}
+
 struct Repeat: Codable, Hashable {
     let freq: String
     let interval: Int

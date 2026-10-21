@@ -12,8 +12,8 @@ from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MoonlightApiError, MoonlightClient, MoonlightError
-from .const import DOMAIN, LOGGER, SCAN_INTERVAL
-from .model import Summary, backoff, is_change_message, parse_summary
+from .const import DOMAIN, EVENT_ALERT, LOGGER, SCAN_INTERVAL
+from .model import Summary, backoff, is_change_message, parse_alert_event, parse_summary
 
 type MoonlightConfigEntry = ConfigEntry[MoonlightCoordinator]
 
@@ -67,6 +67,10 @@ class MoonlightCoordinator(DataUpdateCoordinator[Summary]):
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             if is_change_message(msg.data):
                                 await self.async_request_refresh()
+                            elif (event := parse_alert_event(msg.data)) is not None:
+                                # A timer reached zero, or someone dismissed a notification on a screen.
+                                self.hass.bus.async_fire(
+                                    EVENT_ALERT, {**event, "config_entry_id": self.config_entry.entry_id})
                         elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
                             break
             except asyncio.CancelledError:

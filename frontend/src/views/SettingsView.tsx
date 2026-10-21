@@ -50,6 +50,19 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
     try { await api.updateSettings({ pin: current ?? next, new_pin: next }); toast("Parent PIN changed"); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't change the PIN"); }
   }
+  /** Shows on this screen only what Home Assistant's moonlight.show_notification and start_timer would. */
+  async function testAlert(what: "fullscreen" | "toast" | "timer") {
+    const screens = screen ? [screen.id] : undefined;
+    try {
+      if (what === "timer") {
+        await api.createAlert({ kind: "timer", style: "fullscreen", label: "Test timer", description: "From Settings", icon: "⏲️", duration: 15,
+          finished_for: 30, screens, id: "test-timer" });
+      } else {
+        await api.createAlert({ title: "Test notification", message: "Home Assistant can show messages like this one.",
+          icon: "🔔", style: what, duration: what === "toast" ? 10 : 0, screens, id: `test-${what}` });
+      }
+    } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't show it"); }
+  }
   return (
     <div className="settings">
       <div className="toolbar"><div className="toolbar-l"><h1 className="toolbar-title">Settings</h1></div></div>
@@ -74,6 +87,15 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
             <span className="set-pin"><b>{holidayRegion || "None"}</b>
               <button className="btn ghost small" onClick={() => setPickHols(true)}>Change</button></span>
           </div>
+          {(screen || api.mode === "demo") && (
+            <div className="set-row"><span>Test a notification</span>
+              <span className="set-tests">
+                <button className="btn ghost small" onClick={() => testAlert("fullscreen")}>Full screen</button>
+                <button className="btn ghost small" onClick={() => testAlert("toast")}>Toast</button>
+                <button className="btn ghost small" onClick={() => testAlert("timer")}>Timer</button>
+              </span>
+            </div>
+          )}
           <div className="set-row"><span>Parent PIN</span>
             <span className="set-pin"><b>{settings?.pin_set ? "Set" : "Not set"}</b>
               <button className="btn ghost small" onClick={changePin}>{settings?.pin_set ? "Change" : "Set PIN"}</button></span>

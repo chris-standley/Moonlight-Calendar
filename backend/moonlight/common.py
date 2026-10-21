@@ -11,7 +11,7 @@ from . import db
 
 log = logging.getLogger("moonlight")
 
-TOPICS = {"people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos", "displays", "accounts", "media", "security", "security_alert", "nursery"}
+TOPICS = {"people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos", "displays", "accounts", "media", "security", "security_alert", "nursery", "alerts"}
 
 
 class Hub:
@@ -28,6 +28,14 @@ class Hub:
                     await ws.send_json(msg)
                 except Exception:  # client went away mid-send
                     self.sockets.discard(ws)
+
+    async def send(self, msg: dict) -> None:
+        """Any other message to every client (e.g. {"type": "alert", ...}, see alerts.py)."""
+        for ws in list(self.sockets):
+            try:
+                await ws.send_json(msg)
+            except Exception:
+                self.sockets.discard(ws)
 
 
 hub = Hub()
