@@ -56,6 +56,11 @@ STREAM_MAX_SECONDS = 15 * 60  # a live feed ends after this; the screen opens a 
 MAX_STREAMS = 8
 TEST_ALERT_SECONDS = 20
 SNAPSHOT_MAX_BYTES = 5 * 1024 * 1024
+# Arming modes: (mode, AlarmControlPanelEntityFeature bit, alarm_control_panel service).
+ARM_MODES = (("away", 2, "alarm_arm_away"), ("home", 1, "alarm_arm_home"), ("night", 4, "alarm_arm_night"),
+             ("vacation", 32, "alarm_arm_vacation"))
+ALARM_CONFIRM_STEP = 0.25     # after arming or disarming, how often to look whether the panel took it ...
+ALARM_CONFIRM_TRIES = 16      # ... and for how long (4 s): Alarmo ignores a wrong code rather than failing the call
 STREAM_FEATURE = 2            # CameraEntityFeature.STREAM: Home Assistant can serve the camera as HLS video
 HLS_PATH_RE = re.compile(r"^[A-Za-z0-9_\-][A-Za-z0-9_.\-]*(/[A-Za-z0-9_.\-]+)*$")
 HLS_TIMEOUT = 20.0            # low-latency HLS holds a playlist request until the next part is ready
@@ -296,6 +301,7 @@ def alarm_out(entity: str, state: dict | None, names: dict[str, str]) -> dict | 
     if not entity:
         return None
     a = _attrs(state)
+    feats = a.get("supported_features")
     st = str((state or {}).get("state") or "unavailable")
     open_sensors = a.get("open_sensors")
     blocking = [names.get(e, e) for e in (open_sensors or {})] if isinstance(open_sensors, dict) else []
@@ -303,7 +309,10 @@ def alarm_out(entity: str, state: dict | None, names: dict[str, str]) -> dict | 
             "armed": st.startswith("armed_"), "alarmo": state is not None and is_alarmo(state),
             "changed_by": a.get("changed_by") or None, "last_changed": (state or {}).get("last_changed"),
             "next_state": a.get("next_state") or None, "delay": a.get("delay") if isinstance(a.get("delay"), (int, float)) else None,
-            "open_sensors": blocking, "available": state is not None and st not in ("unavailable", "unknown")}
+            "open_sensors": blocking, "available": state is not None and st not in ("unavailable", "unknown"),
+            "modes": [m for m, bit, _ in ARM_MODES if isinstance(feats, int) and feats & bit],
+            # Disarming always asks for a code on the screen; arming only when the panel wants one.
+            "code_arm_required": bool(a.get("code_arm_required")) and a.get("code_format") is not None}
 
 
 def sensor_out(entity: str, meta: dict, state: dict | None, name: str, panel_state: str) -> dict:
@@ -452,6 +461,23 @@ class SecurityService(media.MediaService):
         loop = asyncio.get_running_loop()
         loop.create_task(_broadcast_alerts())
         loop.call_later(TEST_ALERT_SECONDS + 0.2, lambda: loop.create_task(_broadcast_alerts()))
+
+    # ---- arming
+    async def alarm(self, entity: str, action: str, code: str | None) -> str | None:
+        """Arm (`action` = an ARM_MODES mode) or disarm the panel, passing the code entered on the screen straight to
+        Home Assistant (Moonlight never keeps it). The panel's new state once it took the command, or None if it
+        didn't (a wrong code, or a sensor open); MediaError if Home Assistant refused the call itself."""
+        service = "alarm_disarm" if action == "disarm" else next(s for m, _, s in ARM_MODES if m == action)
+        await self.call_service("alarm_control_panel", service, {"entity_id": entity, **({"code": code} if code else {})})
+        for _ in range(ALARM_CONFIRM_TRIES):
+            with contextlib.suppress(Exception):
+                if await self.refresh(entity):
+                    self.notify()
+            st = str((self.states.get(entity) or {}).get("state") or "")
+            if (st == "disarmed") if action == "disarm" else (st in ("arming", "pending") or st.startswith("armed_")):
+                return st
+            await asyncio.sleep(ALARM_CONFIRM_STEP)
+        return None
 
     # ---- video
     async def hls_token(self, entity: str, force: bool = False) -> str | None:

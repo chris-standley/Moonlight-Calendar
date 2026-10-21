@@ -1205,6 +1205,10 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .sec-summary span { padding: 0.3rem 0.8rem; border-radius: 999px; background: var(--surface-2); font-weight: 800; font-size: 0.92rem; }
 .sec-summary .warn { background: var(--warn-bg); color: var(--warn-text); }
 .sec-summary .motion { background: var(--rain-bg); color: var(--rain-text); }
+.sec-arm { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.pin-keys button.go { background: var(--accent); color: #fff; }
+.alarm-dots { min-height: 1.2rem; align-items: center; }
+.alarm-dots em { color: var(--muted); font-style: normal; font-weight: 700; }
 .sec-sensors { flex: 1; min-height: 0; overflow-y: auto; }
 .sec-group + .sec-group { margin-top: 0.9rem; }
 .sec-group-title { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.3rem; }

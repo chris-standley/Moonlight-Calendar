@@ -242,7 +242,12 @@ export interface AlarmState {
   changed_by: string | null; last_changed: string | null; next_state: string | null; delay: number | null;
   /** Sensors keeping it from arming (Alarmo), by name. */
   open_sensors: string[];
+  /** The ways it can be armed. */
+  modes: AlarmMode[];
+  /** Arming asks for the code too (disarming always does). */
+  code_arm_required: boolean;
 }
+export type AlarmMode = "away" | "home" | "night" | "vacation";
 export type SensorGroup = "doors" | "windows" | "motion" | "environment" | "other";
 export interface SecuritySensor {
   entity_id: string; name: string; group: SensorGroup; state: string;
@@ -538,6 +543,8 @@ export interface Api {
   securityOptions(refresh?: boolean): Promise<SecurityOptions>;
   /** Pop a camera up on the screens for a few seconds, as if someone were there. */
   testSecurityAlert(camera: string, pin: string): Promise<void>;
+  /** Arm or disarm the alarm; the code goes to Home Assistant as typed and isn't kept. 403 wrong code, 409 can't arm. */
+  setAlarm(action: AlarmMode | "disarm", code?: string): Promise<{ ok: boolean; state: string }>;
   // Energy (see API.md "Energy")
   energy(): Promise<EnergyOverview>;
   /** For Settings > Energy; `refresh` asks Home Assistant again. */

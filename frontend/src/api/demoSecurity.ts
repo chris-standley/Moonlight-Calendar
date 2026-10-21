@@ -1,10 +1,14 @@
 // Demo-mode security: a pretend alarm with door, window and motion sensors and three cameras. The camera pictures
 // are drawn as SVG (a "live" one moves a little) so the demo needs no real camera.
 import {
-  Api, ApiError, PopupTarget, SecurityAlert, SecurityCamera, SecurityOptions, SecurityOverview, SecuritySensor, SecuritySettings, Topic,
+  AlarmState, Api, ApiError, PopupTarget, SecurityAlert, SecurityCamera, SecurityOptions, SecurityOverview, SecuritySensor, SecuritySettings, Topic,
 } from "./types";
 
-type Extras = Pick<Api, "security" | "securityAlerts" | "securityOptions" | "testSecurityAlert">;
+type Extras = Pick<Api, "security" | "securityAlerts" | "securityOptions" | "testSecurityAlert" | "setAlarm">;
+const ALARM_LABEL: Record<string, string> = {
+  disarmed: "Disarmed", arming: "Arming", armed_away: "Armed away", armed_home: "Armed home", armed_night: "Armed night",
+  armed_vacation: "Armed vacation",
+};
 
 interface Cam { entity_id: string; name: string; person: string; sky: string; ground: string; scene: "drive" | "door" | "garden" }
 const CAMS: Cam[] = [
@@ -48,6 +52,8 @@ function scene(c: Cam, live: boolean): string {
 
 export function demoSecurity(emit: (...t: Topic[]) => void, settings: () => SecuritySettings | undefined, checkPin: (pin: string) => void): Extras {
   const tests = new Map<string, number>();
+  // The demo alarm's code is the demo PIN.
+  const panel = { state: "disarmed", by: "Mum", at: ago(95) };
   const cams = () => {
     const conf = settings()?.cameras ?? {};
     return CAMS.map((c) => ({ ...c, show: conf[c.entity_id]?.show ?? true, personSensor: conf[c.entity_id]?.person ?? c.person }));
@@ -62,9 +68,11 @@ export function demoSecurity(emit: (...t: Topic[]) => void, settings: () => Secu
   const alarmEntity = () => settings()?.alarm_entity ?? PANEL.entity_id;
   return {
     async security(): Promise<SecurityOverview> {
-      const alarm = alarmEntity() ? {
-        entity_id: PANEL.entity_id, name: PANEL.name, state: "disarmed", label: "Disarmed", armed: false, alarmo: true, available: true,
-        changed_by: "Mum", last_changed: ago(95), next_state: null, delay: null, open_sensors: [],
+      const alarm: AlarmState | null = alarmEntity() ? {
+        entity_id: PANEL.entity_id, name: PANEL.name, state: panel.state, label: ALARM_LABEL[panel.state] ?? panel.state,
+        armed: panel.state.startsWith("armed_"), alarmo: true, available: true,
+        changed_by: panel.by, last_changed: panel.at, next_state: null, delay: null, open_sensors: [],
+        modes: ["away", "home", "night"], code_arm_required: false,
       } : null;
       const sensors = SENSORS.map((s, i) => ({ ...s, armed: false, last_changed: ago(CHANGED[i]) }));
       return { configured: true, reachable: true, error: null, sensors_source: "alarmo", alarm, sensors, cameras: shown(), alerts: alerts() };
@@ -78,6 +86,17 @@ export function demoSecurity(emit: (...t: Topic[]) => void, settings: () => Secu
         sensors_source: "alarmo", sensor_count: SENSORS.length,
         popup: { large: true, compact: true, phone: false, tv: false, ...settings()?.popup } as Record<PopupTarget, boolean>,
       };
+    },
+    async setAlarm(action, code) {
+      if (action === "disarm") {
+        if (code !== "1234") throw new ApiError(403, "That code wasn't accepted");
+        Object.assign(panel, { state: "disarmed", by: "Demo", at: new Date().toISOString() });
+      } else {
+        Object.assign(panel, { state: "arming", by: "Demo", at: new Date().toISOString() });
+        setTimeout(() => { if (panel.state === "arming") { panel.state = `armed_${action}`; emit("security"); } }, 5_000);
+      }
+      emit("security");
+      return { ok: true, state: panel.state };
     },
     async testSecurityAlert(camera, pin) {
       checkPin(pin);

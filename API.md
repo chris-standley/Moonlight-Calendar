@@ -344,7 +344,7 @@ are shown by default, one per camera (its best channel); each camera's person se
 offers is read again every 5 minutes (or with `refresh`). Screens only ever name a shown camera.
 - `GET /api/security` -> `{configured, reachable, error, sensors_source: "alarmo"|"none",
   alarm: {entity_id, name, state, label, armed, alarmo, available, changed_by, last_changed, next_state, delay,
-  open_sensors: [names]} | null,
+  open_sensors: [names], modes: ["away"|"home"|"night"|"vacation"], code_arm_required} | null,
   sensors: [{entity_id, name, group: "doors"|"windows"|"motion"|"environment"|"other", state, label ("Open",
   "Closed", "Motion", "Clear", "Detected", "Unavailable"...), active, available, armed (guarded in the current mode),
   last_changed}], cameras: [{entity_id, name, available, person: bool, snapshot_url, live_url}], alerts: [Alert]}`.
@@ -367,6 +367,11 @@ offers is read again every 5 minutes (or with `refresh`). Screens only ever name
 - `GET /api/security/cameras/{entity}/hd/hls/master_playlist.m3u8` -> the same, always from the camera's own
   full-resolution stream: `video_hd_url` (equal to `video_url` when HA has no lighter channel). Large screens and the
   Apple TV play this one.
+- `POST /api/security/alarm` `{action: "disarm"|"away"|"home"|"night"|"vacation", code?}` -> `{ok, state}`: calls
+  `alarm_control_panel.alarm_disarm` / `alarm_arm_<mode>` with the code (never stored) and waits up to 4 s for the panel
+  to change. A code is required to disarm (400 without). 403 when the code isn't accepted (Alarmo ignores a wrong
+  code, so an unchanged state counts as refused); 5 refusals per 5 minutes per address, then 429. 409 when arming
+  doesn't take (names the open sensors). 404 with no alarm chosen.
 - `POST /api/security/test-alert` `{camera, pin}` -> `{ok, seconds: 20}`: pops the camera up on the screens as if a
   person were there.
 
