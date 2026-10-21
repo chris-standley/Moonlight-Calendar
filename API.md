@@ -417,6 +417,10 @@ minutes (or with `refresh`).
   water; electricity while idle counts only in `overall`; null until 50 Wh has been used. A temperature with nothing
   picked falls back to the controller's reading. Under 30 W counts as idle; a heat pump runs from 100 W; a car is
   charging from 200 W or when its status says so. `home.computed`: no home sensor, so solar + battery + grid.
+  A "today" (solar, import, export, home, heat pump) given a running-total meter (nothing in its id or name says
+  today or daily) is its rise since local midnight: the meter's reading at midnight comes from Home Assistant's
+  history (`history/history_during_period`), kept for the day; null until it's read, and counted from the first
+  reading seen if HA has none from midnight.
   `configured: false` without Home Assistant.
 - `GET /api/energy/options?refresh=false` -> `{slots: {slot: {kind: "power"|"energy"|"percent"|"temperature"|"number"|"state",
   group, entities: [ids in use], auto: bool, suggested: [ids automatic would use]}}, battery_invert, grid_invert,

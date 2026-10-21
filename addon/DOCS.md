@@ -147,7 +147,8 @@ The Energy section draws your house with the power running between its parts, li
 
 Moonlight finds the sensors itself, starting with the ones in Home Assistant's Energy dashboard (Settings > Dashboards >
 Energy), then by name (for example a myenergi zappi's plug status, or a heat pump's "Operation" sensor). Settings >
-Energy shows what it picked for each and lets you choose another sensor or None; leave everything for a part on None
+Energy shows what it picked for each and lets you choose another sensor or None. A "today" sensor can be a meter that
+just keeps counting up (a lifetime kWh total): Moonlight shows what it has added since midnight. Leave everything for a part on None
 and it isn't drawn. If the battery or grid arrows point the wrong way, use the **Flip direction** switch there.
 
 ## Notifications and timers
