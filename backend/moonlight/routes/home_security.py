@@ -1,13 +1,18 @@
 """Security: alarm, Alarmo's sensors and the cameras from Home Assistant (see home_security.py)."""
 from __future__ import annotations
 
+import contextlib
+
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
-from .. import db, home_security, media
+from .. import db, home_security, media, security
 from ..common import bad, body_dict, require_pin
 
 router = APIRouter(prefix="/api/security")
+
+# Wrong alarm codes per address: a few tries, then a pause (Alarmo has no lockout of its own).
+alarm_failures = security.Limiter(limit=5, window=5 * 60)
 
 
 def _svc() -> home_security.SecurityService:
@@ -145,3 +150,45 @@ async def test_alert(body: dict = Body(...)):
         await svc.config()
     svc.test_alert(camera, _camera(camera, svc)["eff"])
     return {"ok": True, "seconds": home_security.TEST_ALERT_SECONDS}
+
+
+@router.post("/alarm")
+async def alarm(body: dict = Body(...)):
+    """Arm or disarm the chosen alarm: `{action: "away"|"home"|"night"|"vacation"|"disarm", code?}`. The code is
+    passed to Home Assistant as it is and never stored."""
+    body = body_dict(body)
+    action = body.get("action")
+    if action != "disarm" and action not in [m for m, _, _ in home_security.ARM_MODES]:
+        raise bad("action must be disarm, away, home, night or vacation")
+    code = body.get("code")
+    if code is not None and (not isinstance(code, str) or len(code) > 32):
+        raise bad("code must be text of up to 32 characters")
+    code = code or None
+    if action == "disarm" and not code:
+        raise bad("Enter the alarm code to disarm")
+    key = security.CLIENT_IP.get()
+    wait = alarm_failures.retry_after(key)
+    if wait:
+        raise security._too_many(wait, "Too many wrong alarm codes.")
+    svc = _svc()
+    eff = await svc.config()
+    entity = eff["alarm_entity"]
+    if not entity:
+        raise HTTPException(status_code=404, detail="No alarm chosen in Settings > Security")
+    try:
+        state = await svc.alarm(entity, action, code)
+    except media.MediaError as e:
+        if e.status == 400 and code:
+            alarm_failures.hit(key)
+            raise HTTPException(status_code=403, detail="Home Assistant didn't accept that code")
+        raise _fail(e)
+    if state is None:
+        if action == "disarm" or code:
+            alarm_failures.hit(key)
+            raise HTTPException(status_code=403, detail="That code wasn't accepted")
+        blocking = []
+        with contextlib.suppress(media.MediaError):
+            blocking = ((await home_security.overview(svc))["alarm"] or {}).get("open_sensors") or []
+        raise HTTPException(status_code=409, detail=f"Can't arm: {', '.join(blocking)} open" if blocking
+                            else "The alarm didn't arm. Check it in Home Assistant.")
+    return {"ok": True, "state": state}

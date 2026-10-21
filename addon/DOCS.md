@@ -104,6 +104,9 @@ The Security section shows your alarm, its sensors and your cameras from Home As
 
 - **Alarm**: the Alarmo alarm if you use Alarmo (otherwise the first alarm panel); choose another, or none, in
   Settings > Security. It shows armed or disarmed, who changed it and when, and which sensors stop it arming.
+  Buttons arm it in each mode the panel offers (away, home, night, vacation) and disarm it. Disarming asks for the
+  alarm code on a keypad; the code goes straight to Home Assistant and is never saved by Moonlight. After 5 wrong
+  codes the screen has to wait 5 minutes.
 - **Sensors**: the ones you set up in Alarmo, grouped into doors, windows, motion and smoke or leaks, with a lock on
   the ones guarded in the current mode.
 - **Cameras**: UniFi Protect cameras appear on their own (through the UniFi Protect integration); other cameras can be

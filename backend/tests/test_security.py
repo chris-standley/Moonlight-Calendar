@@ -84,6 +84,11 @@ class FakeHA:
         path = request.url.path
         if path == "/core/api/states":
             return httpx.Response(200, json=list(self.states.values()))
+        if path.startswith("/core/api/states/"):
+            got = self.states.get(path.rsplit("/", 1)[1])
+            return httpx.Response(200, json=got) if got else httpx.Response(404)
+        if path.startswith("/core/api/services/alarm_control_panel/"):
+            return self.alarm(path.rsplit("/", 1)[1], json.loads(request.content))
         if path.startswith("/core/api/hls/"):
             token, rest = path[len("/core/api/hls/"):].split("/", 1)
             if token not in self.hls_tokens.values():
@@ -98,6 +103,22 @@ class FakeHA:
                 return httpx.Response(404)
             return httpx.Response(200, content=JPEG, headers={"content-type": "image/jpeg"})
         return httpx.Response(404)
+
+
+    alarm_code = "4321"
+
+    def alarm(self, service: str, data: dict) -> httpx.Response:
+        """Like Alarmo: a wrong code is ignored (the call still succeeds); an open door stops arming."""
+        self.alarm_calls = getattr(self, "alarm_calls", []) + [(service, data)]
+        panel = self.states[data["entity_id"]]
+        if service == "alarm_disarm":
+            if data.get("code") == self.alarm_code:
+                panel["state"] = "disarmed"
+        elif self.states["binary_sensor.side_door"]["state"] == "on":
+            panel["attributes"]["open_sensors"] = {"binary_sensor.side_door": "on"}
+        else:
+            panel["state"] = "arming"
+        return httpx.Response(200, json=[])
 
 
 class FakeWS:
@@ -470,3 +491,48 @@ def test_no_video_for_hidden_or_streamless_cameras(client, fake):
     cams = {c["entity_id"]: c for c in client.get("/api/security").json()["cameras"]}
     assert cams["camera.front_doorbell"]["video_url"] is None and cams["camera.front_doorbell"]["video_hd_url"] is None
     assert client.get("/api/security/cameras/camera.front_doorbell/hls/master_playlist.m3u8").status_code == 404
+
+
+# ---------------------------------------------------------------- arming
+
+@pytest.fixture
+def quick_confirm(monkeypatch):
+    monkeypatch.setattr(home_security, "ALARM_CONFIRM_STEP", 0.01)
+    monkeypatch.setattr(home_security, "ALARM_CONFIRM_TRIES", 3)
+
+
+def test_alarm_shows_its_modes(client, fake):
+    fake.states["alarm_control_panel.alarm"]["attributes"].update(supported_features=15, code_arm_required=False, code_format=None)
+    a = client.get("/api/security").json()["alarm"]
+    assert a["modes"] == ["away", "home", "night"] and a["code_arm_required"] is False
+
+
+def test_disarm_passes_the_code_to_home_assistant(client, fake, quick_confirm):
+    fake.states["alarm_control_panel.alarm"]["state"] = "armed_away"
+    assert client.post("/api/security/alarm", json={"action": "disarm"}).status_code == 400  # a code is needed
+    r = client.post("/api/security/alarm", json={"action": "disarm", "code": "4321"})
+    assert r.status_code == 200 and r.json()["state"] == "disarmed"
+    assert fake.alarm_calls[-1] == ("alarm_disarm", {"entity_id": "alarm_control_panel.alarm", "code": "4321"})
+
+
+def test_wrong_code_refused_then_paused(client, fake, quick_confirm):
+    from moonlight.routes import home_security as routes
+
+    routes.alarm_failures.reset()
+    fake.states["alarm_control_panel.alarm"]["state"] = "armed_home"
+    for _ in range(5):
+        r = client.post("/api/security/alarm", json={"action": "disarm", "code": "0000"})
+        assert r.status_code == 403
+    assert client.post("/api/security/alarm", json={"action": "disarm", "code": "4321"}).status_code == 429
+    assert fake.states["alarm_control_panel.alarm"]["state"] == "armed_home"
+    routes.alarm_failures.reset()
+
+
+def test_arm_away_and_open_door(client, fake, quick_confirm):
+    r = client.post("/api/security/alarm", json={"action": "away"})
+    assert r.status_code == 409 and "Side door" in r.json()["detail"]  # the side door is open
+    fake.states["binary_sensor.side_door"]["state"] = "off"
+    r = client.post("/api/security/alarm", json={"action": "away"})
+    assert r.status_code == 200 and r.json()["state"] == "arming"
+    assert fake.alarm_calls[-1] == ("alarm_arm_away", {"entity_id": "alarm_control_panel.alarm"})
+    assert client.post("/api/security/alarm", json={"action": "panic"}).status_code == 400

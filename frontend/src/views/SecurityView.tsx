@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getToken } from "../api/pairing";
-import { AlarmState, SecurityCamera, SecuritySensor, SensorGroup } from "../api/types";
+import { AlarmMode, AlarmState, ApiError, SecurityCamera, SecuritySensor, SensorGroup } from "../api/types";
 import { useApp, useData, useNow } from "../state";
 import { Empty } from "../components/ui";
 import { IconCctv, IconClose, IconLock, IconShield } from "../components/icons";
@@ -35,7 +35,7 @@ function tone(a: AlarmState): string {
 }
 
 export function SecurityView() {
-  const { layout, go } = useApp();
+  const { layout } = useApp();
   const [data] = useData((a) => a.security(), ["security", "security_alert", "settings"], []);
   const [live, setLive] = useState<SecurityCamera | null>(null);
   const now = useNow(30_000);
@@ -57,7 +57,6 @@ export function SecurityView() {
         <div className="toolbar-l"><h1 className="toolbar-title">Security</h1></div>
         <div className="toolbar-r">
           {!data.reachable && <span className="sec-offline">Can't reach Home Assistant</span>}
-          <button className="btn ghost small" onClick={() => go("settings")}>Settings</button>
         </div>
       </div>
       <div className={"sec-body" + (layout === "phone" ? " stack" : "")}>
@@ -76,7 +75,7 @@ export function SecurityView() {
               return (
                 <div key={g} className="sec-group">
                   <h2 className="sec-group-title">{GROUP_LABEL[g]}</h2>
-                  {rows.map((s) => <SensorRow key={s.entity_id} s={s} now={now} />)}
+                  <div className="sec-rows">{rows.map((s) => <SensorRow key={s.entity_id} s={s} now={now} />)}</div>
                 </div>
               );
             })}
@@ -92,8 +91,33 @@ export function SecurityView() {
   );
 }
 
+const MODE_LABEL: Record<AlarmMode, string> = { away: "Arm away", home: "Arm home", night: "Arm night", vacation: "Arm vacation" };
+
 function AlarmCard({ alarm, now, open, motion }: { alarm: AlarmState; now: Date; open: number; motion: number }) {
+  const { api, toast } = useApp();
+  const [pad, setPad] = useState<AlarmMode | "disarm" | null>(null);
+  const [busy, setBusy] = useState(false);
   const who = alarm.changed_by ? ` by ${alarm.changed_by}` : "";
+  const disarmed = alarm.state === "disarmed";
+
+  /** Arm or disarm; the code (if any) goes straight to Home Assistant. Returns an error to show on the pad. */
+  async function send(action: AlarmMode | "disarm", code?: string): Promise<string | null> {
+    setBusy(true);
+    try {
+      await api.setAlarm(action, code);
+      setPad(null);
+      toast(action === "disarm" ? "Disarmed" : "Arming");
+      return null;
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Couldn't reach the alarm";
+      if (!(e instanceof ApiError) || e.status !== 403) { setPad(null); toast(msg); }
+      return msg;
+    } finally {
+      setBusy(false);
+    }
+  }
+  const arm = (m: AlarmMode) => (alarm.code_arm_required ? setPad(m) : void send(m));
+
   return (
     <section className={`panel sec-alarm ${tone(alarm)}`}>
       <div className="sec-alarm-main">
@@ -108,7 +132,47 @@ function AlarmCard({ alarm, now, open, motion }: { alarm: AlarmState; now: Date;
         <span className={open ? "warn" : ""}>{open ? `${open} open` : "All closed"}</span>
         {motion > 0 && <span className="motion">Motion in {motion} {motion === 1 ? "place" : "places"}</span>}
       </div>
+      {alarm.available && (
+        <div className="sec-arm">
+          {disarmed
+            ? alarm.modes.map((m) => <button key={m} className="btn small" disabled={busy} onClick={() => arm(m)}>{MODE_LABEL[m]}</button>)
+            : <button className="btn small danger-fill" disabled={busy} onClick={() => setPad("disarm")}>Disarm</button>}
+        </div>
+      )}
+      {pad && <AlarmPad why={pad === "disarm" ? `Disarm ${alarm.name}` : `${MODE_LABEL[pad]}`} onCancel={() => setPad(null)}
+        onCode={(code) => send(pad, code)} />}
     </section>
+  );
+}
+
+/** A number pad for the alarm's own code (any length), sent to Home Assistant with ✓. */
+function AlarmPad({ why, onCode, onCancel }: { why: string; onCode: (code: string) => Promise<string | null>; onCancel: () => void }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  async function submit() {
+    if (!code || sending) return;
+    setSending(true);
+    const err = await onCode(code);
+    setSending(false);
+    if (err) { setError(err); setCode(""); }
+  }
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "✓"];
+  return (
+    <div className="scrim" onClick={onCancel}>
+      <div className="pinpad" onClick={(e) => e.stopPropagation()}>
+        <div className="pin-why">{why}</div>
+        <div className="pin-dots alarm-dots">{code.length ? [...code].map((_, i) => <span key={i} className="on" />) : <em>Enter the alarm code</em>}</div>
+        <div className="pin-err">{error ?? " "}</div>
+        <div className="pin-keys">
+          {keys.map((k) => (
+            <button key={k} className={k === "✓" ? "go" : undefined} disabled={sending || (k === "✓" && !code)} aria-label={k === "✓" ? "Send" : k === "⌫" ? "Delete" : k}
+              onClick={() => (k === "✓" ? void submit() : setCode((c) => (k === "⌫" ? c.slice(0, -1) : (c + k).slice(0, 12))))}>{k}</button>
+          ))}
+        </div>
+        <button className="btn ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
   );
 }
 
