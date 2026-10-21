@@ -32,7 +32,7 @@ struct PhotosView: View {
                             }
                             .padding(14)
                         }
-                        .scrollClipDisabled()
+                        .clipTopAndBottom()  // rows scroll under the Albums heading, not over it
                         .padding(-14)
                         .focusSection()
                     }
