@@ -101,7 +101,7 @@ fetched by the add-on and passed on to the screens, which never see a Home Assis
 ## Security
 
 The Security section shows your alarm, its sensors and your cameras from Home Assistant, live, on the wall screens,
-phones and the iPhone and iPad app:
+phones, the iPhone and iPad app and the Apple TV app:
 
 - **Alarm**: the Alarmo alarm if you use Alarmo (otherwise the first alarm panel); choose another, or none, in
   Settings > Security. It shows armed or disarmed, who changed it and when, and which sensors stop it arming.
