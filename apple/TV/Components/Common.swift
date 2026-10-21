@@ -68,19 +68,23 @@ struct Screen<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
-            .padding(.horizontal, Theme.gutter)
-            .padding(.top, 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            // Up in the corner level with the tab bar, which floats in the middle of the top edge.
-            .overlay(alignment: .topLeading) {
-                // Measured from the screen's edge rather than the safe area, so it clears the left end of the tab bar
-                // even with every section's tab showing.
-                Header()
-                    .padding(.leading, 64)
-                    .padding(.top, 44)
-                    .ignoresSafeArea(edges: [.top, .leading])
-            }
-            .background(Theme.bg.ignoresSafeArea())
+        // The VStack matters: a page passes several views, and modifiers on them directly would apply to each one
+        // (each its own full-height slot, with its own clock).
+        VStack(alignment: .leading, spacing: 24) {
+            content
+        }
+        .padding(.horizontal, Theme.gutter)
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Up in the corner level with the tab bar, which floats in the middle of the top edge.
+        .overlay(alignment: .topLeading) {
+            // Measured from the screen's edge rather than the safe area, so it clears the left end of the tab bar
+            // even with every section's tab showing.
+            Header()
+                .padding(.leading, 64)
+                .padding(.top, 44)
+                .ignoresSafeArea(edges: [.top, .leading])
+        }
+        .background(Theme.bg.ignoresSafeArea())
     }
 }
