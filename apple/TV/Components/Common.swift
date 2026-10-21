@@ -1,29 +1,28 @@
 import SwiftUI
 
-/// Top row on every screen: clock, date, today's weather and the family name.
+/// The clock in the top-left corner, beside the tab bar: the time, with the date and today's weather on one small
+/// line under it, so the screen below gets all the height.
 struct Header: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            HStack(alignment: .firstTextBaseline, spacing: 28) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(model.dates.clock(ctx.date))
-                    .font(Theme.font(64, .heavy))
+                    .font(Theme.font(44, .heavy))
                     .foregroundStyle(Theme.text)
-                Text(model.dates.longDate(ctx.date))
-                    .font(Theme.font(32, .bold))
-                    .foregroundStyle(Theme.muted)
-                if let w = model.weather {
-                    HStack(spacing: 10) {
-                        WeatherGlyph(condition: w.current.condition, size: 34)
-                        Text("\(w.current.temp)°").font(Theme.font(34, .heavy)).foregroundStyle(Theme.text)
+                HStack(spacing: 8) {
+                    Text(model.dates.shortDate(ctx.date))
+                    if let w = model.weather {
+                        WeatherGlyph(condition: w.current.condition, size: 20)
+                        Text("\(w.current.temp)°").foregroundStyle(Theme.text)
                     }
                 }
-                Spacer()
-                Text(model.settings?.family_name ?? "")
-                    .font(Theme.font(30, .heavy))
-                    .foregroundStyle(Theme.muted)
+                .font(Theme.font(20, .bold))
+                .foregroundStyle(Theme.muted)
             }
+            .lineLimit(1)
+            .fixedSize()
         }
     }
 }
@@ -56,7 +55,6 @@ struct FamilyPrompt: View {
     }
 }
 
-/// A Moonlight screen: safe-area padding, the header, then content.
 extension View {
     /// For a scroll view inside a panel: clip the top and bottom (so rows don't run past the panel), but let a focused
     /// card's lift and shadow spill out at the sides instead of being cut off.
@@ -65,17 +63,22 @@ extension View {
     }
 }
 
+/// A Moonlight screen: safe-area padding and the content, with the clock up beside the tab bar.
 struct Screen<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Header()
-            content
-        }
-        .padding(.horizontal, Theme.gutter)
-        .padding(.top, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.bg.ignoresSafeArea())
+        content
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Up in the corner level with the tab bar, which floats in the middle of the top edge.
+            .overlay(alignment: .topLeading) {
+                Header()
+                    .padding(.leading, Theme.gutter)
+                    .padding(.top, 40)
+                    .ignoresSafeArea(edges: .top)
+            }
+            .background(Theme.bg.ignoresSafeArea())
     }
 }
