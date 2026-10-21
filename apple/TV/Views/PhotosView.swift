@@ -10,7 +10,7 @@ struct PhotosView: View {
     @State private var playing = false
     @State private var order: [Photo] = []
     /// The album the remote is on: the picture on the right shows its first photo.
-    @State private var focused: PhotoAlbum?
+    @FocusState private var focused: String?
 
     var body: some View {
         Screen {
@@ -61,7 +61,7 @@ struct PhotosView: View {
     }
 
     private var preview: Photo? {
-        guard let first = focused?.photos.first else { return photos.first }
+        guard let first = albums.first(where: { $0.id == focused })?.photos.first else { return photos.first }
         return photos.first { $0.id == first } ?? photos.first
     }
 
@@ -88,7 +88,7 @@ struct PhotosView: View {
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.moonCard(radius: 18))
-        .onFocusChange { if $0 { focused = album } }
+        .focused($focused, equals: album.id)
     }
 }
 
