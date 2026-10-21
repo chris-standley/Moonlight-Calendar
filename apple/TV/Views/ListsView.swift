@@ -10,7 +10,6 @@ struct ListsView: View {
     var body: some View {
         let current = lists.first { $0.id == selected } ?? lists.first
         Screen {
-            Text("Lists").font(Theme.font(40, .heavy)).foregroundStyle(Theme.text)
             if lists.isEmpty {
                 FamilyPrompt(text: "No lists yet. Add one on a wall screen or your phone.")
             } else {

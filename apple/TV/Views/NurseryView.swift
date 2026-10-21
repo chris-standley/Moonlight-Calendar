@@ -18,12 +18,6 @@ struct NurseryView: View {
     var body: some View {
         let current = updates.first { $0.id == selected } ?? updates.first
         Screen {
-            HStack(alignment: .firstTextBaseline, spacing: 20) {
-                Text("Nursery").font(Theme.font(40, .heavy)).foregroundStyle(Theme.text)
-                if let name = config?.school_name {
-                    Text(name).font(Theme.font(28, .bold)).foregroundStyle(Theme.muted)
-                }
-            }
             if updates.isEmpty {
                 FamilyPrompt(text: config?.configured == true
                              ? "No updates from nursery yet."
