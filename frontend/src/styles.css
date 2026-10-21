@@ -354,14 +354,14 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); font-weight: 700; }
 .set-row > span { color: var(--muted); }
 .set-row > .set-pin { display: flex; align-items: center; gap: 0.7rem; color: inherit; min-width: 0; }
-.set-pin > b { min-width: 0; overflow-wrap: anywhere; }
+.set-pin > b { min-width: 0; }
 /* A long value (an email address) is cut short with … so the row's buttons stay on the card. */
 .set-pin > b.clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Rows with several buttons: on phones the buttons go on the line under the text. */
-.layout-phone .set-row.stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
-.layout-phone .set-row.stack > .set-pin { flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
-.layout-phone .set-row.stack > .set-pin > b { flex: 1 1 100%; text-align: right; }
-.layout-phone .acct-actions { margin-left: auto; justify-content: flex-end; }
+/* Rows with several buttons put them on the line under the text, on the right: Settings cards are narrow on every screen. */
+.set-row.stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.set-row.stack > .set-pin { flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.set-row.stack > .set-pin > b { flex: 1 1 100%; text-align: right; }
+.acct-actions { margin-left: auto; justify-content: flex-end; }
 .set-wx { display: flex; align-items: center; gap: 0.4rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wx-row .wx-icon { flex: none; width: 2.2rem; display: grid; place-items: center; }
 .wx-row .wx-temp { flex: none; font-size: 1.3rem; font-weight: 800; }
