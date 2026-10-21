@@ -39,7 +39,7 @@ export interface ScreenSetup { start: Section; sections: Section[] }
 export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
   large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security", "energy"] },
   compact: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery") },
-  phone: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery" && s !== "security") },
+  phone: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery") },
 };
 
 export type Freq = "daily" | "weekly" | "monthly";

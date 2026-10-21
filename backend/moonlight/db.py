@@ -286,7 +286,7 @@ DEFAULT_SETTINGS = {
         "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists",
                                                    "security", "energy"]},
         "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists",
-                                                 "energy"]},
+                                                 "security", "energy"]},
     },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
 }
@@ -388,6 +388,7 @@ def init_db() -> None:
         _add_security_section(c)
         _add_nursery_section(c)
         _add_energy_section(c)
+        _add_security_to_phones(c)
 
 
 # Screen styles were named after rooms until 0.3.8.
@@ -517,12 +518,42 @@ def _add_energy_section(c: sqlite3.Connection) -> None:
     set_setting(c, ENERGY_MARKER, True)
 
 
+# Phones got Security in 0.8.5 (it was only on the wall screens). Once, add it to the phone menus, before Energy;
+# the marker keeps a later choice to hide it.
+SECURITY_PHONE_MARKER = "security_phone_section_added"
+
+
+def _with_security_before_energy(secs: Any) -> Any:
+    if not isinstance(secs, list) or not secs or "security" in secs:
+        return secs
+    i = secs.index("energy") if "energy" in secs else len(secs)
+    return secs[:i] + ["security"] + secs[i:]
+
+
+def _add_security_to_phones(c: sqlite3.Connection) -> None:
+    if get_setting(c, SECURITY_PHONE_MARKER):
+        return
+    screens = get_setting(c, "screens")
+    if isinstance(screens, dict) and isinstance(screens.get("phone"), dict) and "sections" in screens["phone"]:
+        screens["phone"]["sections"] = _with_security_before_energy(screens["phone"]["sections"])
+        set_setting(c, "screens", screens)
+    for d in c.execute("SELECT id, setup FROM displays WHERE setup IS NOT NULL AND layout = 'phone'").fetchall():
+        try:
+            setup = json.loads(d["setup"])
+        except ValueError:
+            continue
+        if isinstance(setup, dict) and "sections" in setup:
+            setup["sections"] = _with_security_before_energy(setup["sections"])
+            c.execute("UPDATE displays SET setup = ? WHERE id = ?", (json.dumps(setup), d["id"]))
+    set_setting(c, SECURITY_PHONE_MARKER, True)
+
+
 def is_empty() -> bool:
     with connect() as c:
         n = c.execute(
             "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings "
-            "WHERE key NOT IN ('instance_id', ?, ?, ?, ?))",
-            (RECIPES_MARKER, SECURITY_MARKER, NURSERY_MARKER, ENERGY_MARKER),
+            "WHERE key NOT IN ('instance_id', ?, ?, ?, ?, ?))",
+            (RECIPES_MARKER, SECURITY_MARKER, NURSERY_MARKER, ENERGY_MARKER, SECURITY_PHONE_MARKER),
         ).fetchone()[0]
     return n == 0
 

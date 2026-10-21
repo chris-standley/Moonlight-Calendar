@@ -28,9 +28,8 @@ implementation of the same contract, used for the published preview). Keep them 
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
   `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
   chores, rewards, meals, recipes, lists, nursery, security, energy` (Settings is always shown), and the one it opens on (default large
-  `{start: "calendar", sections: all but today}`, compact `{start: "today", sections: all but nursery}`, phone the same without
-  security). Upgrading to 0.6.0 adds `security` once to the large and compact menus; upgrading to 0.8.0 adds `energy`
-  once to every style's menu.
+  `{start: "calendar", sections: all but today}`, compact `{start: "today", sections: all but nursery}`, phone the same). Upgrading to 0.6.0 adds `security` once to the large and compact menus, and 0.8.5 to the phone
+  menus; upgrading to 0.8.0 adds `energy` once to every style's menu.
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
   `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
@@ -342,7 +341,7 @@ Read-only. The alarm is an `alarm_control_panel` entity: the Alarmo one by defau
 are shown by default, one per camera (its best channel); each camera's person sensor is the "Person detected"
 `binary_sensor` on the same device (entity registry `list_for_display`), else one named after the camera. What HA
 offers is read again every 5 minutes (or with `refresh`). Screens only ever name a shown camera.
-- `GET /api/security` -> `{configured, reachable, error, sensors_source: "alarmo"|"none",
+- `GET /api/security` (the wall screens and the iPhone and iPad app) -> `{configured, reachable, error, sensors_source: "alarmo"|"none",
   alarm: {entity_id, name, state, label, armed, alarmo, available, changed_by, last_changed, next_state, delay,
   open_sensors: [names], modes: ["away"|"home"|"night"|"vacation"], code_arm_required} | null,
   sensors: [{entity_id, name, group: "doors"|"windows"|"motion"|"environment"|"other", state, label ("Open",

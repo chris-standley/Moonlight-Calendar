@@ -80,7 +80,7 @@ struct MainTabs: View {
 /// The app's tabs. On iPhone the first four fit in the tab bar and the rest go under More; the order is chosen in
 /// Settings › Tab bar and kept on this device.
 enum AppTab: String, CaseIterable, Identifiable {
-    case today, calendar, chores, rewards, meals, recipes, lists, energy, settings
+    case today, calendar, chores, rewards, meals, recipes, lists, security, energy, settings
 
     static let orderKey = "tabs.order"
     var id: String { rawValue }
@@ -96,6 +96,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .meals: "fork.knife"
         case .recipes: "book.closed"
         case .lists: "list.bullet"
+        case .security: "lock.shield"
         case .energy: "bolt"
         case .settings: "gearshape"
         }
@@ -111,6 +112,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .meals: MealsScreen()
         case .recipes: RecipesScreen()
         case .lists: ListsScreen()
+        case .security: SecurityScreen()
         case .energy: EnergyScreen()
         case .settings: SettingsScreen()
         }

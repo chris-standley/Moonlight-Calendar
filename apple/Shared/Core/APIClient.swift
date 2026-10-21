@@ -139,6 +139,18 @@ struct APIClient: Sendable {
     func nursery() async throws -> NurseryConfig { try await get("/api/nursery") }
     func nurseryUpdates() async throws -> [NurseryUpdate] { try await get("/api/nursery/updates") }
     func securityAlerts() async throws -> [SecurityAlert] { try await get("/api/security/alerts") }
+    func security() async throws -> SecurityOverview { try await get("/api/security") }
+    /// Arm (`action` = away, home, night or vacation) or disarm the alarm. The code goes straight to Home Assistant;
+    /// a 403 here means Home Assistant didn't accept it, not a wrong parent PIN.
+    func setAlarm(_ action: String, code: String?) async throws {
+        var body: [String: Any] = ["action": action]
+        if let code, !code.isEmpty { body["code"] = code }
+        do {
+            let _: Ignored = try await send("POST", "/api/security/alarm", body)
+        } catch APIError.wrongPin {
+            throw APIError.server("That code wasn't accepted")
+        }
+    }
     func energy() async throws -> EnergyOverview { try await get("/api/energy") }
     func alerts() async throws -> AlertsNow { try await get("/api/alerts") }
     /// Tapped away here: gone from every screen.

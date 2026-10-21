@@ -425,6 +425,31 @@ def test_security_section_added_once_to_wall_screens(tmp_path):
         assert json.loads(c.execute("SELECT value FROM settings WHERE key = 'screens'").fetchone()[0])["large"]["sections"] == ["calendar"]
 
 
+def test_security_section_added_once_to_phones(tmp_path):
+    from moonlight import db
+
+    path = str(tmp_path / "old.db")
+    create_app(db_path=path, demo=False, auth_enabled=False)
+    with sqlite3.connect(path) as c:
+        c.execute("DELETE FROM settings WHERE key = ?", (db.SECURITY_PHONE_MARKER,))
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('screens', ?)", (json.dumps(
+            {"large": {"start": "calendar", "sections": ["calendar"]},
+             "phone": {"start": "today", "sections": ["today", "lists", "energy"]}}),))
+        c.execute("INSERT INTO displays(id, name, layout, token_hash, created_at, revoked, setup) "
+                  "VALUES('ds_1', 'Phone', 'phone', 'h1', '2026-10-01', 0, ?)", (json.dumps({"sections": ["today"]}),))
+    db.init_db()
+    with sqlite3.connect(path) as c:
+        screens = json.loads(c.execute("SELECT value FROM settings WHERE key = 'screens'").fetchone()[0])
+        assert screens["phone"]["sections"] == ["today", "lists", "security", "energy"]
+        assert screens["large"]["sections"] == ["calendar"]
+        assert json.loads(c.execute("SELECT setup FROM displays").fetchone()[0])["sections"] == ["today", "security"]
+        c.execute("UPDATE settings SET value = ? WHERE key = 'screens'",
+                  (json.dumps({"phone": {"start": "today", "sections": ["today"]}}),))
+    db.init_db()
+    with sqlite3.connect(path) as c:
+        assert json.loads(c.execute("SELECT value FROM settings WHERE key = 'screens'").fetchone()[0])["phone"]["sections"] == ["today"]
+
+
 def test_person_change_broadcasts_an_alert(client, fake, monkeypatch):
     from moonlight import common
 
