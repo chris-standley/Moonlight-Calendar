@@ -44,6 +44,60 @@ struct SecurityAlert: Codable, Identifiable, Equatable {
     var id: String { camera }
 }
 
+/// The Security section (`/api/security`): the alarm, its sensors and the shown cameras, from Home Assistant.
+struct SecurityOverview: Codable {
+    struct Alarm: Codable {
+        let entity_id: String
+        let name: String
+        let state: String
+        let label: String
+        var armed = false
+        var available = true
+        var changed_by: String?
+        var last_changed: String?
+        var open_sensors: [String] = []
+        /// Arm modes the panel offers: away, home, night, vacation.
+        var modes: [String] = []
+        var code_arm_required = false
+    }
+    struct Sensor: Codable, Identifiable {
+        let entity_id: String
+        let name: String
+        let group: String     // doors, windows, motion, environment, other
+        let label: String     // Open, Closed, Motion, Clear…
+        var active = false
+        var available = true
+        var armed = false
+        var last_changed: String?
+        var id: String { entity_id }
+    }
+    struct Camera: Codable, Identifiable {
+        let entity_id: String
+        let name: String
+        var available = true
+        var person = false
+        let snapshot_url: String
+        var video_url: String?
+        var video_hd_url: String?
+        var id: String { entity_id }
+    }
+    let configured: Bool
+    var reachable = true
+    var alarm: Alarm?
+    var sensors: [Sensor] = []
+    var cameras: [Camera] = []
+
+    enum CodingKeys: String, CodingKey { case configured, reachable, alarm, sensors, cameras }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        configured = try c.decode(Bool.self, forKey: .configured)
+        reachable = try c.decodeIfPresent(Bool.self, forKey: .reachable) ?? true
+        alarm = try c.decodeIfPresent(Alarm.self, forKey: .alarm)
+        sensors = try c.decodeIfPresent([Sensor].self, forKey: .sensors) ?? []
+        cameras = try c.decodeIfPresent([Camera].self, forKey: .cameras) ?? []
+    }
+}
+
 /// A notification or timer Home Assistant put on the screens (`/api/alerts`). Times are epoch milliseconds on the
 /// add-on's clock; `expires_at` nil = until dismissed or cleared.
 struct ScreenAlert: Codable, Identifiable, Equatable {
