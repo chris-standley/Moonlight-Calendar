@@ -4,7 +4,8 @@ import { useApp } from "../state";
 import { IconClose } from "../components/icons";
 import { CameraVideo, LiveCamera } from "./SecurityView";
 
-/** After the person sensor clears, the camera stays up this long (people linger at the door). */
+/** After the person sensor clears, the camera stays up this long (people linger at the door); it fades out over the
+ * last half second (`.sec-pop.leaving` in styles.css). */
 const LINGER_MS = 15_000;
 
 interface Shown { alert: SecurityAlert; until: number | null }

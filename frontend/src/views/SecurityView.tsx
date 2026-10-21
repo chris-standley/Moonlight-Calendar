@@ -205,19 +205,22 @@ function CameraTile({ cam, person, onOpen }: { cam: SecurityCamera; person: bool
 type CamUrls = { live_url: string; snapshot_url: string; video_url: string | null; video_hd_url: string | null };
 
 /** A camera, live: Home Assistant's HLS video when the camera has it (hls.js, or the browser itself on Apple
- * devices), else, or if the video fails, the snapshot MJPEG feed. The snapshot shows while the video starts.
+ * devices), else, or if the video fails, the snapshot MJPEG feed. The MJPEG feed also shows on top until the video
+ * has its first picture, since a stream Home Assistant hasn't got running yet can take 10 seconds or more to start.
  * Large screens play the camera's full resolution; the others, and `light` ones (tiles), its lighter medium channel
  * when there is one. */
 export function CameraVideo({ cam, width, fit = "cover", light = false }: { cam: CamUrls; width: number; fit?: "cover" | "contain"; light?: boolean }) {
   const { layout } = useApp();
   const ref = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
   // The MJPEG feed ends after a quarter of an hour; open a new one before that if it's still showing.
   const [round, setRound] = useState(0);
   useEffect(() => { const t = setInterval(() => setRound((r) => r + 1), 10 * 60_000); return () => clearInterval(t); }, []);
   const video = failed ? null : (layout === "large" && !light ? cam.video_hd_url : null) ?? cam.video_url;
   useEffect(() => {
     const el = ref.current;
+    setPlaying(false);
     if (!video || !el) return;
     let gone = false;
     let hls: { destroy(): void } | null = null;
@@ -254,8 +257,14 @@ export function CameraVideo({ cam, width, fit = "cover", light = false }: { cam:
       el.load();
     };
   }, [video]);
-  if (!video) return <img className={"cam-media " + fit} key={round} src={sized(cam.live_url, width)} alt="" />;
-  return <video ref={ref} className={"cam-media " + fit} muted autoPlay playsInline poster={sized(cam.snapshot_url, width)} />;
+  const live = <img className={"cam-media " + fit} key={round} src={sized(cam.live_url, width)} alt="" />;
+  if (!video) return live;
+  return (
+    <div className={"cam-media cam-stack " + fit}>
+      <video ref={ref} className={"cam-media " + fit} muted autoPlay playsInline onPlaying={() => setPlaying(true)} />
+      {!playing && live}
+    </div>
+  );
 }
 
 /** The camera full size, live. */
