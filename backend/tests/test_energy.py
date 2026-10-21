@@ -65,6 +65,8 @@ def ha_states():
         st("sensor.e_niro_car_battery_level", "82", unit_of_measurement="%", friendly_name="E-NIRO Car Battery Level"),
         st("sensor.e_niro_ev_range", "129.0", unit_of_measurement="mi", friendly_name="E-NIRO EV Range"),
         st("sensor.iphone_battery_level", "40", unit_of_measurement="%", device_class="battery", friendly_name="iPhone Battery Level"),
+        st("sun.sun", "below_horizon", next_rising="2026-10-22T06:42:33.275398+00:00",
+           next_setting="2026-10-22T16:50:12.636133+00:00", friendly_name="Sun"),
         st("sensor.altherma_operation_type", "Space", friendly_name="EspAltherma Altherma Operation Type"),
         st("select.heat_pump_energy", "Heating", options=["Heating", "Hot Water"],
            friendly_name="shellyproem50-abc Energy Meter 1 Heat Pump Energy"),
@@ -345,6 +347,14 @@ def test_midnight_reading_from_history(client):
     n = len(ws.history_asked)
     client.get("/api/energy")
     assert len(ws.history_asked) == n  # kept for the day
+
+
+def test_night_after_sunset(client, fake):
+    r = client.get("/api/energy").json()
+    assert r["sun"] == {"night": True, "next": "2026-10-22T06:42:33+00:00"}
+    fake.states["sun.sun"]["state"] = "above_horizon"
+    assert energy.sun(fake.states["sun.sun"]) == {"night": False, "next": "2026-10-22T16:50:12+00:00"}
+    assert energy.sun(None) is None
 
 
 def test_solar_window():

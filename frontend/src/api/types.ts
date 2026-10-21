@@ -311,6 +311,8 @@ export interface EnergyOverview {
   plan: { status: string | null; cost_today: number | null; cost_unit: string | null; rate_now: number | null; rate_export: number | null; rate_unit: string | null;
     battery_hours: number | null; charge: EnergyWindow | null; cheap: EnergyWindow | null } | null;
   tariff: EnergyTariff | null;
+  /** Home Assistant's sun: night after sunset (the picture goes dark), and when that next changes (ISO). */
+  sun?: { night: boolean; next: string | null } | null;
 }
 /** Cheap electricity from the Octopus Energy integration; bonus: car-charging slots outside the usual night hours. */
 export interface EnergyTariff { cheap_now: boolean; cheap_until: string | null; next: { start: string; end: string } | null; bonus: { start: string; end: string }[]; dispatching: boolean | null }

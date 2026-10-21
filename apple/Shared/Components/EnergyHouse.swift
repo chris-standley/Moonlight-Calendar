@@ -9,6 +9,7 @@ struct EnergyHouse: View {
     var compact = false
     /// The weather now: its icon takes the sun's place unless it's sunny.
     var sky: Weather.Current? = nil
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         GeometryReader { geo in
@@ -31,6 +32,8 @@ struct EnergyHouse: View {
         }
         .aspectRatio(10 / 6, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        // After sunset the picture goes dark, whatever the app's own appearance.
+        .environment(\.colorScheme, data.sun?.night == true ? .dark : scheme)
         .accessibilityElement(children: .combine)
     }
 

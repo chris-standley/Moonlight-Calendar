@@ -152,7 +152,7 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
   const tank = temps?.tank ?? null;
   const tankColor = tank == null ? "var(--en-glass)" : tank >= 45 ? "#e8674f" : tank >= 35 ? "#f2a33a" : "#6aa6e8";
   return (
-    <div className={"en-house" + (small ? " small" : "")}>
+    <div className={"en-house" + (small ? " small" : "") + (data.sun?.night ? " night" : "")}>
       <svg viewBox="0 0 1000 600" className="en-scene" aria-hidden="true">
         <defs>
           <linearGradient id="en-sky" x1="0" y1="0" x2="0" y2="1">

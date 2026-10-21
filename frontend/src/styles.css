@@ -1328,6 +1328,13 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
   --en-sky1: #182033; --en-sky2: #1c1f29; --en-grass: #1f2c25; --en-drive: #262832; --en-wall: #2a2d38; --en-line: #646a7a;
   --en-roof: #7c4a3b; --en-glass: #34405a; --en-lit: #b08a3c; --en-door: #5c4636; --en-car: #3a3e4c; --en-metal: #8c909c;
 }
+/* After sunset the picture (and its labels) goes dark, whatever the screen's own theme. */
+.en-house.night {
+  --en-sky1: #182033; --en-sky2: #1c1f29; --en-grass: #1f2c25; --en-drive: #262832; --en-wall: #2a2d38; --en-line: #646a7a;
+  --en-roof: #7c4a3b; --en-glass: #34405a; --en-lit: #b08a3c; --en-door: #5c4636; --en-car: #3a3e4c; --en-metal: #8c909c;
+  --surface: #1d1f27; --surface-2: #272a34; --line: #2f323d; --text: #eceef3; --muted: #9a9eab; --text-2: #c4c7d1;
+  --raised: #3a3e4c; --faint: #555967; color: var(--text);
+}
 .en-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 1.6rem 1.4rem; container-type: size; }
 .en-house { position: relative; width: min(100cqw, 100cqh * 10 / 6); aspect-ratio: 10 / 6; container-type: inline-size;
   border-radius: calc(var(--radius) * 1.4); overflow: hidden; box-shadow: var(--shadow); }

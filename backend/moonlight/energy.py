@@ -38,7 +38,8 @@ log = logging.getLogger("moonlight.energy")
 
 KEY = "energy"
 ENTITY_RE = re.compile(r"^(sensor|binary_sensor|select|input_select|input_number|number|climate|water_heater|switch|"
-                       r"input_boolean|predbat|time)\.[a-z0-9_]+$")
+                       r"input_boolean|predbat|time|sun)\.[a-z0-9_]+$")
+SUN = "sun.sun"  # night after sunset: the picture goes dark
 DISCOVERY_TTL = 300.0
 BROADCAST_EVERY = 4.0        # seconds between `energy` broadcasts while power keeps changing
 IDLE_WATTS = 30.0            # below this a flow is drawn as nothing moving
@@ -597,7 +598,17 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
         out["plan"] = None
 
     out["tariff"] = tariff(st("cheap_off_peak"), st("cheap_dispatches"), now) if has("cheap_off_peak", "cheap_dispatches") else None
+    out["sun"] = sun(states.get(SUN))
     return out
+
+
+def sun(state: dict | None) -> dict | None:
+    """{night, next}: whether the sun is down (Home Assistant's sun.sun), and when that next changes (ISO)."""
+    if not state or state.get("state") not in ("above_horizon", "below_horizon"):
+        return None
+    night = state["state"] == "below_horizon"
+    nxt = _parse_dt(_attrs(state).get("next_rising" if night else "next_setting"))
+    return {"night": night, "next": nxt.replace(microsecond=0).isoformat() if nxt else None}
 
 
 def _clock_next(state: dict | None, now: datetime) -> str | None:
@@ -935,7 +946,7 @@ def effective(auto: dict[str, list[str]], auto_flags: dict[str, bool], conf: dic
 
 
 def watch_list(eff: dict) -> set[str]:
-    return {e for es in eff["entities"].values() for e in es}
+    return {e for es in eff["entities"].values() for e in es} | {SUN}
 
 
 def candidates(states: list[dict]) -> dict[str, list[dict]]:
@@ -1104,7 +1115,7 @@ async def overview(svc: EnergyService) -> dict:
 
 def not_connected(error: str) -> dict:
     return {"configured": False, "reachable": False, "error": error, "updated": None, "solar": None, "battery": None,
-            "grid": None, "home": None, "car": None, "heat_pump": None, "temperatures": None, "plan": None, "tariff": None}
+            "grid": None, "home": None, "car": None, "heat_pump": None, "temperatures": None, "plan": None, "tariff": None, "sun": None}
 
 
 # ---------------------------------------------------------------- module-level service

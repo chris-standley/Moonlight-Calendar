@@ -406,7 +406,10 @@ minutes (or with `refresh`).
   power, today, flow_temp, heat, cop, cop_today: {heating, hot_water, overall} | null} | null,
   temperatures: {inside, outside, tank} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
   battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null, tariff: {cheap_now,
-  cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null}`. `tariff`: the off-peak
+  cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null, sun: {night, next} | null}`.
+  `sun`: from Home Assistant's `sun.sun` (watched, so sunset and sunrise push an update); `night` = below the horizon,
+  when every screen, the apps and the iPhone widget draw the picture in its dark colours; `next` = the next sunrise
+  (at night) or sunset (ISO). `tariff`: the off-peak
   window and planned car-charging slots merged; `bonus`: planned slots (up to 3) not inside the usual 23:30-05:30
   night rate. Power in W (kW sensors
   converted), energy in kWh. A part is null when none of its slots has an entity. `solar.starts`/`ends` (ISO): the

@@ -346,6 +346,9 @@ struct EnergyOverview: Codable {
     var temperatures: Temperatures?
     var plan: Plan?
     var tariff: Tariff?
+    /// Home Assistant's sun: night after sunset (the picture goes dark); next: when that changes (ISO).
+    var sun: Sun?
+    struct Sun: Codable { var night: Bool; var next: String? }
 
     /// Cheap electricity from the Octopus Energy integration; bonus: car-charging slots outside the usual night hours.
     struct Tariff: Codable {
