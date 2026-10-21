@@ -35,7 +35,7 @@ function tone(a: AlarmState): string {
 }
 
 export function SecurityView() {
-  const { layout, go } = useApp();
+  const { layout } = useApp();
   const [data] = useData((a) => a.security(), ["security", "security_alert", "settings"], []);
   const [live, setLive] = useState<SecurityCamera | null>(null);
   const now = useNow(30_000);
@@ -57,7 +57,6 @@ export function SecurityView() {
         <div className="toolbar-l"><h1 className="toolbar-title">Security</h1></div>
         <div className="toolbar-r">
           {!data.reachable && <span className="sec-offline">Can't reach Home Assistant</span>}
-          <button className="btn ghost small" onClick={() => go("settings")}>Settings</button>
         </div>
       </div>
       <div className={"sec-body" + (layout === "phone" ? " stack" : "")}>
@@ -76,7 +75,7 @@ export function SecurityView() {
               return (
                 <div key={g} className="sec-group">
                   <h2 className="sec-group-title">{GROUP_LABEL[g]}</h2>
-                  {rows.map((s) => <SensorRow key={s.entity_id} s={s} now={now} />)}
+                  <div className="sec-rows">{rows.map((s) => <SensorRow key={s.entity_id} s={s} now={now} />)}</div>
                 </div>
               );
             })}
