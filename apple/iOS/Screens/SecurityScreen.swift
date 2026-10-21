@@ -20,7 +20,7 @@ struct SecurityScreen: View {
                             }
                             if room == .narrow {
                                 if let alarm = data.alarm { AlarmCard(alarm: alarm, reload: load) }
-                                cameras(data.cameras, columns: 1)
+                                cameras(data, columns: 1)
                                 SensorsCard(sensors: data.sensors)
                             } else {
                                 HStack(alignment: .top, spacing: 16) {
@@ -29,7 +29,7 @@ struct SecurityScreen: View {
                                         SensorsCard(sensors: data.sensors)
                                     }
                                     .frame(maxWidth: 440)
-                                    cameras(data.cameras, columns: room == .wide ? 2 : 1)
+                                    cameras(data, columns: room == .wide ? 2 : 1)
                                 }
                             }
                         }
@@ -47,16 +47,17 @@ struct SecurityScreen: View {
             }
         }
         // Moonlight says when the alarm or a sensor changes.
-        .task(id: model.rev("security", "settings")) { await load() }
+        .task(id: model.rev("security", "security_alert", "settings")) { await load() }
         .fullScreenCover(item: $watching) { CameraFull(cam: $0) }
     }
 
     @ViewBuilder
-    private func cameras(_ cams: [SecurityOverview.Camera], columns: Int) -> some View {
+    private func cameras(_ data: SecurityOverview, columns: Int) -> some View {
+        let cams = data.cameras
         if !cams.isEmpty {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
                 ForEach(cams) { cam in
-                    Button { watching = cam } label: { CameraTile(cam: cam) }
+                    Button { watching = cam } label: { CameraTile(cam: cam, person: data.seesPerson(cam)) }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Watch \(cam.name)")
                 }
@@ -70,15 +71,7 @@ struct SecurityScreen: View {
     }
 }
 
-/// "3 min ago" from Home Assistant's ISO time (which has microseconds, more than the parser takes).
-private func ago(_ iso: String?) -> String? {
-    guard let iso else { return nil }
-    let trimmed = iso.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-    guard let date = ISO8601DateFormatter().date(from: trimmed) else { return nil }
-    let f = RelativeDateTimeFormatter()
-    f.unitsStyle = .short
-    return f.localizedString(for: date, relativeTo: .now)
-}
+private func ago(_ iso: String?) -> String? { SecurityOverview.ago(iso) }
 
 /// The alarm: its state, who changed it and when, what's open, and buttons to arm it in each mode it offers or to
 /// disarm it. Disarming asks for the alarm code; arming asks only if the panel needs one.
@@ -90,8 +83,6 @@ private struct AlarmCard: View {
     @State private var code = ""
     @State private var message: String?
     @State private var busy = false
-
-    private static let modeLabel = ["away": "Arm away", "home": "Arm home", "night": "Arm night", "vacation": "Arm vacation"]
 
     private var color: Color {
         if !alarm.available { return Theme.muted }
@@ -127,7 +118,7 @@ private struct AlarmCard: View {
                 if alarm.state == "disarmed" {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
                         ForEach(alarm.modes, id: \.self) { mode in
-                            Button(Self.modeLabel[mode] ?? "Arm \(mode)") { start(mode) }
+                            Button(SecurityOverview.armLabel[mode] ?? "Arm \(mode)") { start(mode) }
                                 .buttonStyle(.borderedProminent)
                                 .frame(maxWidth: .infinity)
                         }
@@ -218,33 +209,9 @@ private struct SensorsCard: View {
     }
 }
 
-/// A camera's picture, fetched again every couple of seconds while it's on screen.
-private struct CameraStill: View {
-    @Environment(AppModel.self) private var model
-    let path: String
-    let width: Int
-    var contentMode: ContentMode = .fill
-    @State private var image: UIImage?
-
-    var body: some View {
-        ZStack {
-            Color.black
-            if let image { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
-        }
-        .task(id: path) {
-            while !Task.isCancelled {
-                if let api = model.api, let url = api.resolve("\(path)?width=\(width)"),
-                   let data = try? await api.data(for: api.request(url)), let img = UIImage(data: data) {
-                    image = img
-                }
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
-    }
-}
-
 private struct CameraTile: View {
     let cam: SecurityOverview.Camera
+    let person: Bool
 
     var body: some View {
         CameraStill(path: cam.snapshot_url, width: 800)
@@ -256,7 +223,7 @@ private struct CameraTile: View {
                     .padding(10)
             }
             .overlay(alignment: .topTrailing) {
-                if cam.person {
+                if person {
                     Text("Person").font(Theme.text(.caption, .heavy)).foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 5)
                         .background(Theme.danger, in: Capsule())

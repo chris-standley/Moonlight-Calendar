@@ -41,6 +41,7 @@ struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @State private var nursery = false
     @State private var energy = false
+    @State private var security = false
 
     var body: some View {
         TabView {
@@ -50,10 +51,15 @@ struct MainTabs: View {
             Tab("Rewards", systemImage: "star") { RewardsView() }
             Tab("Meals", systemImage: "fork.knife") { MealsView() }
             Tab("Lists", systemImage: "list.bullet") { ListsView() }
-            // Once Tapestry is connected in Settings › Nursery on a wall screen.
-            if nursery { Tab("Nursery", systemImage: "figure.and.child.holdinghands") { NurseryView() } }
-            // Once Home Assistant has something for the house picture (Settings › Energy on a wall screen).
-            if energy { Tab("Energy", systemImage: "bolt") { EnergyView() } }
+            // A tab builder takes at most ten entries, so the sections that come and go share one.
+            Group {
+                // Once Tapestry is connected in Settings › Nursery on a wall screen.
+                if nursery { Tab("Nursery", systemImage: "figure.and.child.holdinghands") { NurseryView() } }
+                // Once Home Assistant has an alarm or a camera to show (Settings › Security on a wall screen).
+                if security { Tab("Security", systemImage: "lock.shield") { SecurityView() } }
+                // Once Home Assistant has something for the house picture (Settings › Energy on a wall screen).
+                if energy { Tab("Energy", systemImage: "bolt") { EnergyView() } }
+            }
             Tab("Photos", systemImage: "photo.on.rectangle") { PhotosView() }
             Tab("Settings", systemImage: "gearshape") { SettingsView() }
         }
@@ -65,6 +71,9 @@ struct MainTabs: View {
         }
         .task(id: model.rev("settings")) {
             if let e = await model.call({ try await $0.energy() }) { energy = e.configured && !e.isEmpty }
+            if let s = await model.call({ try await $0.security() }) {
+                security = s.configured && (s.alarm != nil || !s.cameras.isEmpty || !s.sensors.isEmpty)
+            }
         }
         // The remote's Play/Pause controls this screen's speaker from anywhere (Photos uses it for the slideshow).
         .onPlayPauseCommand {

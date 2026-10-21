@@ -75,7 +75,6 @@ struct SecurityOverview: Codable {
         let entity_id: String
         let name: String
         var available = true
-        var person = false
         let snapshot_url: String
         var video_url: String?
         var video_hd_url: String?
@@ -86,8 +85,25 @@ struct SecurityOverview: Codable {
     var alarm: Alarm?
     var sensors: [Sensor] = []
     var cameras: [Camera] = []
+    /// Cameras that see a person right now (a camera's own `person` field only says it has a person sensor).
+    var alerts: [SecurityAlert] = []
 
-    enum CodingKeys: String, CodingKey { case configured, reachable, alarm, sensors, cameras }
+    func seesPerson(_ cam: Camera) -> Bool { alerts.contains { $0.camera == cam.entity_id } }
+
+    /// Button labels for the alarm's arm modes.
+    static let armLabel = ["away": "Arm away", "home": "Arm home", "night": "Arm night", "vacation": "Arm vacation"]
+
+    /// "3 min ago" from Home Assistant's ISO time (which has microseconds, more than the parser takes).
+    static func ago(_ iso: String?) -> String? {
+        guard let iso else { return nil }
+        let trimmed = iso.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
+        guard let date = ISO8601DateFormatter().date(from: trimmed) else { return nil }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: date, relativeTo: .now)
+    }
+
+    enum CodingKeys: String, CodingKey { case configured, reachable, alarm, sensors, cameras, alerts }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         configured = try c.decode(Bool.self, forKey: .configured)
@@ -95,6 +111,7 @@ struct SecurityOverview: Codable {
         alarm = try c.decodeIfPresent(Alarm.self, forKey: .alarm)
         sensors = try c.decodeIfPresent([Sensor].self, forKey: .sensors) ?? []
         cameras = try c.decodeIfPresent([Camera].self, forKey: .cameras) ?? []
+        alerts = try c.decodeIfPresent([SecurityAlert].self, forKey: .alerts) ?? []
     }
 }
 
