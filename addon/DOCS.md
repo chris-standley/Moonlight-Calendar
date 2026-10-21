@@ -118,6 +118,31 @@ stream of the camera. For a lighter stream on a Raspberry Pi, enable each camera
 Home Assistant: compact screens then play it, while large screens and the Apple TV keep the full resolution. Turning on
 "Preload stream" in each camera entity's settings makes the video start faster. Cameras that can't stream fall back to snapshots about twice a second.
 
+## Energy
+
+The Energy section draws your house with the power running between its parts, live from Home Assistant:
+
+- **Solar**: what the panels make now and so far today. Before they start in the morning it says when they're
+  expected to and how much the day should make (from a Solcast forecast), and after dark what tomorrow should make.
+  The current weather's icon takes the sun's place unless it's sunny.
+- **Battery**: how full it is, and whether it's charging or powering the house.
+- **Grid**: buying or selling right now, and how much was bought and sold today.
+- **Home**: what the house is using now and today.
+- **Car**: plugged in or not, charging or not, how fast, the car's battery and range, and what this charge added.
+- **Heat pump**: whether it's running, what it's doing (heating the house, hot water, defrosting), what it draws,
+  its flow temperature, and its COP: right now and for today, for heating, hot water and overall. Moonlight works
+  COP out itself from the water flow rate and how much warmer the water leaves than it comes back (ESPAltherma's
+  readings, or flow-rate and return-temperature sensors you pick) against the heat pump's power meter. Today's COP
+  builds up while Moonlight is running and starts again at midnight.
+- **Temperatures**: inside and the hot water tank, each on the picture (outside is in the top bar).
+- **Predbat**: if Predbat is installed, a row under the picture with its status, the price now, the export price, the
+  cost so far today, how long the battery will last, and when it next charges the battery.
+
+Moonlight finds the sensors itself, starting with the ones in Home Assistant's Energy dashboard (Settings > Dashboards >
+Energy), then by name (for example a myenergi zappi's plug status, or a heat pump's "Operation" sensor). Settings >
+Energy shows what it picked for each and lets you choose another sensor or None; leave everything for a part on None
+and it isn't drawn. If the battery or grid arrows point the wrong way, use the **Flip direction** switch there.
+
 ## Notifications and timers
 
 With the Moonlight integration installed in Home Assistant, automations and scripts can put things on the screens:

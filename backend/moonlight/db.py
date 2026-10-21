@@ -282,10 +282,11 @@ DEFAULT_SETTINGS = {
     # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
     "screens": {
         "large": {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery",
-                                                    "security"]},
+                                                    "security", "energy"]},
         "compact": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists",
-                                                   "security"]},
-        "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists"]},
+                                                   "security", "energy"]},
+        "phone": {"start": "today", "sections": ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists",
+                                                 "energy"]},
     },
     "timezone": "Europe/London",  # overridden by MOONLIGHT_TIMEZONE, see default_settings()
 }
@@ -386,6 +387,7 @@ def init_db() -> None:
         _add_recipes_section(c)
         _add_security_section(c)
         _add_nursery_section(c)
+        _add_energy_section(c)
 
 
 # Screen styles were named after rooms until 0.3.8.
@@ -488,12 +490,39 @@ def _add_nursery_section(c: sqlite3.Connection) -> None:
     set_setting(c, NURSERY_MARKER, True)
 
 
+# Energy (solar, battery, grid, car and heat pump from Home Assistant) arrived in 0.8.0. Once, add it to every
+# style's menu; the marker keeps a later choice to hide it.
+ENERGY_MARKER = "energy_section_added"
+
+
+def _add_energy_section(c: sqlite3.Connection) -> None:
+    if get_setting(c, ENERGY_MARKER):
+        return
+    screens = get_setting(c, "screens")
+    if isinstance(screens, dict):
+        for conf in screens.values():
+            if isinstance(conf, dict) and isinstance(conf.get("sections"), list) and conf["sections"] \
+                    and "energy" not in conf["sections"]:
+                conf["sections"] = conf["sections"] + ["energy"]
+        set_setting(c, "screens", screens)
+    for d in c.execute("SELECT id, setup FROM displays WHERE setup IS NOT NULL").fetchall():
+        try:
+            setup = json.loads(d["setup"])
+        except ValueError:
+            continue
+        if isinstance(setup, dict) and isinstance(setup.get("sections"), list) and setup["sections"] \
+                and "energy" not in setup["sections"]:
+            setup["sections"].append("energy")
+            c.execute("UPDATE displays SET setup = ? WHERE id = ?", (json.dumps(setup), d["id"]))
+    set_setting(c, ENERGY_MARKER, True)
+
+
 def is_empty() -> bool:
     with connect() as c:
         n = c.execute(
             "SELECT (SELECT COUNT(*) FROM people) + (SELECT COUNT(*) FROM settings "
-            "WHERE key NOT IN ('instance_id', ?, ?, ?))",
-            (RECIPES_MARKER, SECURITY_MARKER, NURSERY_MARKER),
+            "WHERE key NOT IN ('instance_id', ?, ?, ?, ?))",
+            (RECIPES_MARKER, SECURITY_MARKER, NURSERY_MARKER, ENERGY_MARKER),
         ).fetchone()[0]
     return n == 0
 

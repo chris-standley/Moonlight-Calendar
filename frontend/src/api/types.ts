@@ -27,15 +27,17 @@ export interface Settings {
   holidays?: HolidayRegion;
   /** Settings > Security: the alarm panel ("" = none, absent = automatic), per-camera choices, pop-up per style. */
   security?: SecuritySettings;
+  /** Settings > Energy: entity per slot ("" = none, absent = automatic) and sign flips. */
+  energy?: EnergySettings;
 }
 export interface HolidayRegion { country: string; subdiv: string }
 export interface Holiday { date: string; name: string }
 export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
-export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security";
-export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security"];
+export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security" | "energy";
+export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security", "energy"];
 export interface ScreenSetup { start: Section; sections: Section[] }
 export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
-  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security"] },
+  large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security", "energy"] },
   compact: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery") },
   phone: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery" && s !== "security") },
 };
@@ -217,7 +219,7 @@ export interface NurseryUpdate {
   children: { name: string; person_id: string | null; color: string | null }[];
   photos: NurseryPhoto[]; comments: { author: string; date: string | null; text: string }[]; added_at: string;
 }
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery" | "alerts";
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery" | "alerts" | "energy";
 
 // Security (see API.md "Security"): the alarm, Alarmo's sensors and the cameras, from Home Assistant.
 /** Where a camera that sees a person pops up: each screen style, and the Apple TV app on its own. */
@@ -267,6 +269,47 @@ export interface SecurityOptions {
   person_sensors: { entity_id: string; name: string }[];
   sensors_source: "alarmo" | "none"; sensor_count: number;
   popup: Record<PopupTarget, boolean>;
+}
+
+// Energy (see API.md "Energy"): solar, battery, grid, car and heat pump from Home Assistant, drawn as a house.
+export type EnergySlot =
+  | "solar_power" | "solar_today" | "solar_forecast" | "solar_forecast_tomorrow" | "battery_soc" | "battery_power" | "grid_power" | "grid_import_today" | "grid_export_today"
+  | "home_power" | "home_today" | "car_plug" | "car_status" | "car_power" | "car_soc" | "car_range" | "car_session"
+  | "heat_pump_mode" | "heat_pump_power" | "heat_pump_today" | "heat_pump_flow" | "heat_pump_return" | "heat_pump_flow_rate"
+  | "heat_pump_details" | "inside_temp" | "outdoor_temp" | "heat_pump_tank"
+  | "plan_status" | "plan_cost_today" | "plan_rate_now" | "plan_rate_export" | "plan_battery_hours"
+  | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end";
+export type EnergyKind = "power" | "energy" | "percent" | "temperature" | "number" | "state";
+export type EnergyGroup = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "temperatures" | "plan";
+export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean }
+export interface EnergySettingsPatch { entities?: Partial<Record<EnergySlot, string | null>>; battery_invert?: boolean | null; grid_invert?: boolean | null }
+/** Power in watts, energy in kWh; null when the sensor has no reading. Each part is null when nothing is set for it. */
+export interface EnergyOverview {
+  configured: boolean; reachable: boolean; error: string | null; updated: string | null;
+  /** forecast_*: kWh expected; starts/ends: when today's forecast has the panels producing (ISO). */
+  solar: { power: number | null; today: number | null; forecast_today: number | null; forecast_tomorrow: number | null; starts: string | null; ends: string | null } | null;
+  /** power: positive = discharging into the house, negative = charging. */
+  battery: { soc: number | null; power: number | null; state: "charging" | "discharging" | "idle" | null } | null;
+  /** power: positive = importing, negative = exporting. */
+  grid: { power: number | null; state: "importing" | "exporting" | "idle" | null; import_today: number | null; export_today: number | null } | null;
+  /** computed: no home sensor, so worked out from solar + battery + grid. */
+  home: { power: number | null; today: number | null; computed: boolean } | null;
+  car: { plugged_in: boolean | null; charging: boolean | null; status: string | null; power: number | null; soc: number | null; range: number | null; range_unit: string | null; session: number | null } | null;
+  /** doing: "Heating the house", "Heating hot water", "Defrosting", "Idle"... */
+  /** heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight. */
+  heat_pump: { running: boolean; doing: string; power: number | null; today: number | null; flow_temp: number | null; heat: number | null; cop: number | null;
+    cop_today: { heating: number | null; hot_water: number | null; overall: number | null } | null } | null;
+  temperatures: { inside: number | null; outside: number | null; tank: number | null } | null;
+  /** From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO. */
+  plan: { status: string | null; cost_today: number | null; cost_unit: string | null; rate_now: number | null; rate_export: number | null; rate_unit: string | null;
+    battery_hours: number | null; charge: EnergyWindow | null; cheap: EnergyWindow | null } | null;
+}
+export interface EnergyWindow { start: string; end: string | null; rate: number | null }
+export interface EnergyCandidate { entity_id: string; name: string; state: string | null; unit: string | null }
+export interface EnergyOptions {
+  slots: Record<EnergySlot, { kind: EnergyKind; group: EnergyGroup; entities: string[]; auto: boolean; suggested: string[] }>;
+  battery_invert: boolean; grid_invert: boolean;
+  candidates: Record<EnergyKind, EnergyCandidate[]>;
 }
 
 /** GET /api/media/now-playing: the speaker set for this screen's layout (see API.md "Music"). */
@@ -360,7 +403,7 @@ export interface Api {
   dismissAlert(id: string): Promise<void>;
   settings(): Promise<Settings>;
   /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
-  updateSettings(patch: Partial<Omit<Settings, "screens" | "security">> & { security?: SecuritySettingsPatch; screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
+  updateSettings(patch: Partial<Omit<Settings, "screens" | "security" | "energy">> & { security?: SecuritySettingsPatch; energy?: EnergySettingsPatch; screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
   verifyPin(pin: string): Promise<boolean>;
   people(): Promise<Person[]>;
   createPerson(p: PersonIn): Promise<Person>;
@@ -495,5 +538,9 @@ export interface Api {
   securityOptions(refresh?: boolean): Promise<SecurityOptions>;
   /** Pop a camera up on the screens for a few seconds, as if someone were there. */
   testSecurityAlert(camera: string, pin: string): Promise<void>;
+  // Energy (see API.md "Energy")
+  energy(): Promise<EnergyOverview>;
+  /** For Settings > Energy; `refresh` asks Home Assistant again. */
+  energyOptions(refresh?: boolean): Promise<EnergyOptions>;
   resetDemo?(): Promise<void>;
 }

@@ -248,6 +248,51 @@ struct Photo: Codable, Identifiable, Hashable {
     }
 }
 
+/// Energy (GET /api/energy): solar, battery, grid, car and heat pump from Home Assistant. Power in watts, energy in
+/// kWh; each part is nil when nothing is set for it in Settings › Energy.
+struct EnergyOverview: Codable {
+    /// forecast_*: kWh expected; starts/ends: when today's forecast has the panels producing (ISO).
+    struct Solar: Codable {
+        var power: Double?; var today: Double?
+        var forecast_today: Double?; var forecast_tomorrow: Double?; var starts: String?; var ends: String?
+    }
+    /// power: positive = discharging into the house, negative = charging.
+    struct Battery: Codable { var soc: Double?; var power: Double?; var state: String? }
+    /// power: positive = importing, negative = exporting.
+    struct Grid: Codable { var power: Double?; var state: String?; var import_today: Double?; var export_today: Double? }
+    struct Home: Codable { var power: Double?; var today: Double?; var computed: Bool? }
+    struct Car: Codable {
+        var plugged_in: Bool?; var charging: Bool?; var status: String?; var power: Double?
+        var soc: Double?; var range: Double?; var range_unit: String?; var session: Double?
+    }
+    /// heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight.
+    struct HeatPump: Codable {
+        struct Cop: Codable { var heating: Double?; var hot_water: Double?; var overall: Double? }
+        var running: Bool; var doing: String; var power: Double?; var today: Double?
+        var flow_temp: Double?; var heat: Double?; var cop: Double?; var cop_today: Cop?
+    }
+    struct Temperatures: Codable { var inside: Double?; var outside: Double?; var tank: Double? }
+    /// From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO.
+    struct Plan: Codable {
+        struct Window: Codable { var start: String; var end: String?; var rate: Double? }
+        var status: String?; var cost_today: Double?; var cost_unit: String?
+        var rate_now: Double?; var rate_export: Double?; var rate_unit: String?
+        var battery_hours: Double?; var charge: Window?; var cheap: Window?
+    }
+    var configured: Bool
+    var reachable: Bool = true
+    var solar: Solar?
+    var battery: Battery?
+    var grid: Grid?
+    var home: Home?
+    var car: Car?
+    var heat_pump: HeatPump?
+    var temperatures: Temperatures?
+    var plan: Plan?
+
+    var isEmpty: Bool { solar == nil && battery == nil && grid == nil && home == nil && car == nil && heat_pump == nil }
+}
+
 /// Nursery updates from Tapestry (GET /api/nursery and /api/nursery/updates).
 struct NurseryConfig: Codable {
     let configured: Bool

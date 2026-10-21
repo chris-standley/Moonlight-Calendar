@@ -585,7 +585,7 @@ def test_list_and_reward_edit(client):
 def test_screen_sections_setting(client):
     s = client.get("/api/settings").json()["screens"]
     assert s["large"] == {"start": "calendar", "sections": ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery",
-                                                                    "security"]}
+                                                                    "security", "energy"]}
     r = client.patch("/api/settings", json={"pin": PIN, "screens": {
         "kitchen": {"sections": ["lists", "today", "meals"], "start": "meals"}}})
     assert r.status_code == 200, r.text
