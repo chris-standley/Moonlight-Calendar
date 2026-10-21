@@ -165,6 +165,16 @@ CREATE TABLE IF NOT EXISTS recipe_drafts (
     status   TEXT NOT NULL DEFAULT 'ready',
     UNIQUE (batch_id, piece)
 );
+-- Cookbooks found by their barcode (cookbooks.py), so recipes filed under a book can show its cover and author.
+CREATE TABLE IF NOT EXISTS cookbooks (
+    isbn       TEXT PRIMARY KEY,  -- ISBN-13
+    title      TEXT NOT NULL,     -- what recipes.book holds for recipes from this book
+    authors    TEXT NOT NULL DEFAULT '',
+    publisher  TEXT NOT NULL DEFAULT '',
+    year       INTEGER,
+    cover      TEXT,              -- an id in the images table
+    created_at TEXT NOT NULL
+);
 """
 
 # Pictures uploaded from the screens and apps (recipe and step photos). Kept in the database so a backup has them.

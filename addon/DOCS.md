@@ -218,6 +218,10 @@ Save all. Pages that couldn't be read can be tried again. Each page is one reque
 slower** to pay half: Anthropic then reads the pages when it has room (usually within the hour, at most a day) and
 the recipes all turn up together.
 
+On the iPhone the scan starts with the camera looking for the barcode on the back of the book (or type its ISBN).
+Moonlight looks the book up in Open Library, then Google Books, for its title, author and cover, then the camera
+moves on to the pages. Every recipe found is filed under that book, and By cookbook in the sort menu shows its cover.
+
 To move recipes to or from another app, use Settings > Recipes on a wall screen or in the browser (or the sort menu
 and + on the iPhone's Recipes). Send to another app makes a file of the whole recipe box, pictures included, for Mela,
 Paprika or any app that reads schema.org recipes. Bring in from another app takes a Mela, Paprika or schema.org file

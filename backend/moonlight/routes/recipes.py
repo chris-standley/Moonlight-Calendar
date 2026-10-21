@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response
 
-from .. import db, recipe_batch, recipe_exchange, recipe_import, recipe_text
+from .. import cookbooks, db, recipe_batch, recipe_exchange, recipe_import, recipe_text
 from ..common import as_date, as_int, bad, body_dict, hub, not_found, opt_str, req_str, require_pin
 from .lists import insert_item
 
@@ -62,7 +62,8 @@ def tidy_images(c) -> None:
     cutoff = (datetime.now() - timedelta(days=1)).replace(microsecond=0).isoformat()
     for (iid,) in c.execute("SELECT id FROM images WHERE created_at < ?", (cutoff,)).fetchall():
         used = c.execute("SELECT 1 FROM recipes WHERE photo = ? OR steps LIKE ? UNION ALL "
-                         "SELECT 1 FROM recipe_batch_pages WHERE image = ? LIMIT 1", (iid, f'%"{iid}"%', iid)).fetchone()
+                         "SELECT 1 FROM recipe_batch_pages WHERE image = ? UNION ALL "
+                         "SELECT 1 FROM cookbooks WHERE cover = ? LIMIT 1", (iid, f'%"{iid}"%', iid, iid)).fetchone()
         if not used:
             c.execute("DELETE FROM images WHERE id = ?", (iid,))
 
@@ -524,6 +525,45 @@ def batch_out(c, bid: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------- cookbooks
+
+def cookbook_out(c, r) -> dict:
+    n = c.execute("SELECT COUNT(*) FROM recipes WHERE book = ?", (r["title"],)).fetchone()[0]
+    return {"isbn": r["isbn"], "title": r["title"], "authors": r["authors"], "publisher": r["publisher"],
+            "year": r["year"], "cover": r["cover"], "cover_url": image_url(r["cover"]), "recipes": n}
+
+
+@router.get("/cookbooks")
+def list_cookbooks():
+    """Cookbooks found by their barcode, A to Z. Recipes from one have its title in `book`."""
+    with db.connect() as c:
+        return [cookbook_out(c, r) for r in db.rows(c, "SELECT * FROM cookbooks ORDER BY title COLLATE NOCASE")]
+
+
+@router.get("/cookbooks/{isbn}")
+async def find_cookbook(isbn: str):
+    """The cookbook with this ISBN (the number under the barcode, 10 or 13 digits): one found before, or looked up
+    in Open Library, then Google Books, and kept with its cover. 404 when neither knows it."""
+    code = cookbooks.isbn13(isbn)
+    if not code:
+        raise bad("That isn't a book's barcode (an ISBN starts 978 or 979)")
+    with db.connect() as c:
+        r = db.row(c, "SELECT * FROM cookbooks WHERE isbn = ?", (code,))
+        if r:
+            return cookbook_out(c, r)
+    found = await cookbooks.lookup(code)
+    if not found:
+        raise not_found("Couldn't find that book. Type its name instead.")
+    pic = await _download_image(found["cover_url"])
+    with db.connect() as c:
+        c.execute("INSERT OR IGNORE INTO cookbooks(isbn, title, authors, publisher, year, cover, created_at) "
+                  "VALUES(?,?,?,?,?,?,?)", (code, found["title"], found["authors"], found["publisher"], found["year"],
+                                            pic and pic["id"], db.now_iso()))
+        out = cookbook_out(c, db.row(c, "SELECT * FROM cookbooks WHERE isbn = ?", (code,)))
+    await hub.broadcast("recipes")
+    return out
+
+
 def _batches(c) -> list[dict]:
     return [batch_out(c, r["id"]) for r in c.execute("SELECT id FROM recipe_batches ORDER BY created_at")]
 
@@ -537,7 +577,8 @@ def list_batches():
 
 @router.post("/recipes-batches")
 async def create_batch(body: dict = Body(...)):
-    """{images: [ids], cheaper?: bool, book?: the cookbook's name, given to every recipe found}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads
+    """{images: [ids], cheaper?: bool, book?: the cookbook's name, given to every recipe found, isbn?: the book found
+    with GET /api/cookbooks/{isbn}}: the pages of a cookbook, in order (uploaded with POST /api/images). Claude reads
     them in the background; the recipes found turn up in GET /api/recipes-batches to check and save. `cheaper` sends
     them as an Anthropic Message Batch: half the price, usually done within the hour, at most a day."""
     body = body_dict(body)
@@ -553,8 +594,17 @@ async def create_batch(body: dict = Body(...)):
         for iid in ids:
             if not isinstance(iid, str) or not c.execute("SELECT 1 FROM images WHERE id = ?", (iid,)).fetchone():
                 raise bad("images must be uploaded pictures (POST /api/images)")
-    book = body.get("book") if isinstance(body.get("book"), str) else ""
-    bid = recipe_batch.create(ids, cheaper=body.get("cheaper") is True, book=book.strip()[:200])
+    book = (body.get("book") if isinstance(body.get("book"), str) else "").strip()[:200]
+    isbn = cookbooks.isbn13(body["isbn"]) if isinstance(body.get("isbn"), str) else None
+    if isbn:  # a book found by its barcode: its name, or the name typed over it (which renames the book)
+        with db.connect() as c:
+            found = db.row(c, "SELECT title FROM cookbooks WHERE isbn = ?", (isbn,))
+            if found and not book:
+                book = found["title"]
+            elif found and book != found["title"]:
+                c.execute("UPDATE cookbooks SET title = ? WHERE isbn = ?", (book, isbn))
+                c.execute("UPDATE recipes SET book = ? WHERE book = ?", (book, found["title"]))
+    bid = recipe_batch.create(ids, cheaper=body.get("cheaper") is True, book=book)
     with db.connect() as c:
         out = batch_out(c, bid)
     await hub.broadcast("recipes")

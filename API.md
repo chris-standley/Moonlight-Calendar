@@ -264,10 +264,15 @@ last_cooked: date|null, created_at, updated_at, course: str|null, book: str ("" 
   Batch = `{id, pages, read, reading: bool, cheaper: bool, book, failed: [{page, error}], saved, drafts: [{id, pages: [int] (from 1),
   recipe: Recipe (id null)}]}`. Every change sends `recipes`.
   - `GET /api/recipes-batches` -> [Batch]; `POST /api/recipes-batches` `{images: [image ids], in page order, up to 200,
-    cheaper?: bool, book?: the cookbook's name, given to every recipe found}` -> Batch (409 when no key is set). `cheaper` sends the pages as one Anthropic Message Batch: half
+    cheaper?: bool, book?: the cookbook's name, given to every recipe found, isbn?: a book from `GET /api/cookbooks/{isbn}`,
+    whose title is used when `book` is empty (a different `book` renames it and its recipes)}` -> Batch (409 when no key is set). `cheaper` sends the pages as one Anthropic Message Batch: half
     the price, read when Anthropic has room (usually within the hour, at most a day); Moonlight checks on it every two
     minutes, cancels it when the scan is cleared, and failed pages tried again go as a new batch.
   - `POST /api/recipes-batches/{id}/retry` -> Batch: read the failed pages again.
+  - Cookbook = `{isbn (ISBN-13), title, authors, publisher, year, cover (image id), cover_url, recipes: count}`.
+    `GET /api/cookbooks` -> [Cookbook], A to Z. `GET /api/cookbooks/{isbn}` (10 or 13 digits, from the barcode on the
+    back) -> Cookbook: one found before, or looked up in Open Library, then Google Books, and kept with its cover
+    (400 when it isn't an ISBN, 404 when neither knows the book).
   - `POST /api/recipe-drafts/{id}/save` (optionally a full recipe body, as checked in the editor) -> Recipe;
     `DELETE /api/recipe-drafts/{id}`: don't keep it. `POST /api/recipes-batches/{id}/save-all` -> `{saved}`.
   - `DELETE /api/recipes-batches/{id}`: stop reading and drop the recipes not saved yet. A batch goes by itself once
