@@ -9,16 +9,16 @@ struct Header: View {
         TimelineView(.everyMinute) { ctx in
             VStack(alignment: .leading, spacing: 0) {
                 Text(model.dates.clock(ctx.date))
-                    .font(Theme.font(44, .heavy))
+                    .font(Theme.font(38, .heavy))
                     .foregroundStyle(Theme.text)
                 HStack(spacing: 8) {
                     Text(model.dates.shortDate(ctx.date))
                     if let w = model.weather {
-                        WeatherGlyph(condition: w.current.condition, size: 20)
+                        WeatherGlyph(condition: w.current.condition, size: 18)
                         Text("\(w.current.temp)°").foregroundStyle(Theme.text)
                     }
                 }
-                .font(Theme.font(20, .bold))
+                .font(Theme.font(18, .bold))
                 .foregroundStyle(Theme.muted)
             }
             .lineLimit(1)
@@ -74,10 +74,12 @@ struct Screen<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             // Up in the corner level with the tab bar, which floats in the middle of the top edge.
             .overlay(alignment: .topLeading) {
+                // Measured from the screen's edge rather than the safe area, so it clears the left end of the tab bar
+                // even with every section's tab showing.
                 Header()
-                    .padding(.leading, Theme.gutter)
-                    .padding(.top, 40)
-                    .ignoresSafeArea(edges: .top)
+                    .padding(.leading, 64)
+                    .padding(.top, 44)
+                    .ignoresSafeArea(edges: [.top, .leading])
             }
             .background(Theme.bg.ignoresSafeArea())
     }
