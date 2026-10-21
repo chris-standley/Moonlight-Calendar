@@ -6,6 +6,7 @@ import WidgetKit
 struct CookingWidgets: WidgetBundle {
     var body: some Widget {
         CookingActivityWidget()
+        EnergyWidget()
     }
 }
 

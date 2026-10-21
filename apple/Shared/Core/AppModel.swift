@@ -49,6 +49,7 @@ final class AppModel {
         }
         self.api = api
         phase = .ready
+        Credentials.shareWithWidget()
         await loadBasics()
         await rememberPublicAddress()
         connectLive()
@@ -80,6 +81,7 @@ final class AppModel {
         socket?.cancel(with: .goingAway, reason: nil)
         Credentials.token = nil
         Credentials.remote = nil
+        Credentials.shareWithWidget()
         api = nil
         people = []
         settings = nil

@@ -6,7 +6,7 @@ Native SwiftUI apps in one Xcode project (`Moonlight.xcodeproj`), in the same lo
 |---|---|---|
 | `Moonlight` | iPhone and iPad (iOS/iPadOS 18+) | **Moonlight** |
 | `MoonlightTV` | Apple TV (tvOS 18+) | **Moonlight TV** |
-| `CookingWidget` | Inside the iPhone app: the cooking Live Activity | (built with **Moonlight**) |
+| `CookingWidget` | Inside the iPhone app: the cooking Live Activity and the Energy home screen widget | (built with **Moonlight**) |
 
 Both share one bundle id, so a future App Store listing can be a single universal purchase.
 
@@ -72,8 +72,18 @@ Say these (or find them in the Shortcuts app and Spotlight). They use the app's 
 
 Settings › Reminders: a notification a chosen time before each event (for everyone, or only chosen people), and an
 evening "chores left" nudge. They are worked out on the phone from the calendar, rescheduled whenever anything
-changes, and kept fresh by background app refresh, so no push server is needed. Widgets are planned separately (they
-need a paid developer account for the shared app group).
+changes, and kept fresh by background app refresh, so no push server is needed.
+
+### Energy widget
+
+Add the **Energy** widget to the Home Screen (touch and hold the Home Screen › Edit › Add Widget › Moonlight). It
+draws the same house as the Energy tab with the headline numbers: medium is the picture on its own, large (and extra
+large on iPad) adds the car's charge target and the next cheap-rate slots under it. It asks Moonlight for fresh
+readings about every 15 minutes and whenever the app is opened; tap it to open the app.
+
+The widget reads the app's pairing from the Keychain it shares with the app (the `CookingWidget.entitlements`
+keychain group), so it needs no app group and works with a free Apple ID. Open the app once after installing so it
+copies its address over, and pair the app first if it isn't.
 
 ### Away from home
 
