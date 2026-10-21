@@ -323,11 +323,11 @@ enum Energy {
         if c.plugged_in == false { return "Not plugged in" }
         return c.status ?? "–"
     }
-    /// "To 80% by 7am".
+    /// "Charging to 80% by 7am".
     static func carTarget(_ c: EnergyOverview.Car) -> String? {
         switch (c.limit, c.ready) {
-        case let (l?, r?): return "To \(Int(l.rounded()))% by \(time(r))"
-        case let (l?, nil): return "To \(Int(l.rounded()))%"
+        case let (l?, r?): return "Charging to \(Int(l.rounded()))% by \(time(r))"
+        case let (l?, nil): return "Charging to \(Int(l.rounded()))%"
         case let (nil, r?): return "Ready by \(time(r))"
         default: return nil
         }

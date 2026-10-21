@@ -132,7 +132,7 @@ The Energy section draws your house with the power running between its parts, li
 - **Grid**: buying or selling right now, and how much was bought and sold today.
 - **Home**: what the house is using now and today.
 - **Car**: plugged in or not, charging or not, how fast, the car's battery and range, what this charge added, and
-  the charge limit and ready-by time (from Intelligent Octopus's charge target and target time, or the car's own).
+  the charge limit and ready-by time (the car's own limit, and Intelligent Octopus's target time).
 - **Heat pump**: whether it's running, what it's doing (heating the house, hot water, defrosting), what it draws,
   its flow temperature, and its COP: right now and for today, for heating, hot water and overall. Moonlight works
   COP out itself from the water flow rate and how much warmer the water leaves than it comes back (ESPAltherma's

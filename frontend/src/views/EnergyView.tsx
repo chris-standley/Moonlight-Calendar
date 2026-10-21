@@ -123,10 +123,10 @@ function Plan({ plan, tariff }: { plan: EnergyOverview["plan"]; tariff: EnergyTa
   );
 }
 
-/** "To 80% by 7am". */
+/** "Charging to 80% by 7am". */
 function carTarget(car: NonNullable<EnergyOverview["car"]>): string | null {
   if (car.limit == null && !car.ready) return null;
-  return [car.limit != null && `To ${car.limit}%`, car.ready && `by ${fmtTime(car.ready)}`].filter(Boolean).join(" ").replace(/^by/, "Ready by");
+  return [car.limit != null && `Charging to ${car.limit}%`, car.ready && `by ${fmtTime(car.ready)}`].filter(Boolean).join(" ").replace(/^by/, "Ready by");
 }
 
 /** A small reading on the picture: a title over a value. */

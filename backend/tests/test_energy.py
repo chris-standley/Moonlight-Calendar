@@ -226,7 +226,7 @@ def test_suggest_from_energy_dashboard_and_names():
     assert one["solar_forecast_tomorrow"] == "sensor.fairfields_solar_forecast_forecast_tomorrow"
     assert one["plan_status"] == "predbat.status" and one["plan_charge_start"] == "predbat.best_charge_start"
     assert "plan_cheap_start" not in auto  # not in this Home Assistant
-    assert one["car_limit"] == "number.octopus_energy_00000000_abc_intelligent_charge_target"  # what smart charging stops at
+    assert one["car_limit"] == "number.e_niro_ac_charging_limit"  # the car's own, not Octopus's target or a home battery
     assert one["car_ready"] == "select.octopus_energy_00000000_abc_intelligent_target_time"
     assert one["cheap_off_peak"] == "binary_sensor.octopus_energy_electricity_123_456_off_peak"  # not the export one
     assert one["cheap_dispatches"] == "binary_sensor.octopus_energy_00000000_abc_intelligent_dispatching"
@@ -299,7 +299,7 @@ def test_car_limit_ready_and_cheap_slots():
     auto, flags = energy.suggest(list(by.values()), PREFS)
     eff = energy.effective(auto, flags, {})
     r = energy.build(eff, by, now=datetime(2026, 10, 21, 20, 15, tzinfo=timezone.utc))  # 21:15 in London
-    assert r["car"]["limit"] == 35 and r["car"]["ready"] == "2026-10-22T06:00:00+01:00"
+    assert r["car"]["limit"] == 80 and r["car"]["ready"] == "2026-10-22T06:00:00+01:00"
     t = r["tariff"]
     assert t["cheap_now"] is False and t["dispatching"] is False
     assert t["next"] == {"start": "2026-10-21T23:30:00+01:00", "end": "2026-10-22T06:00:00+01:00"}

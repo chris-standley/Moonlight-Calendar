@@ -388,7 +388,8 @@ heat_pump_flow_rate, heat_pump_details, inside_temp, outdoor_temp, heat_pump_tan
 plan_rate_now, plan_rate_export, plan_battery_hours, plan_charge_start, plan_charge_end, plan_cheap_start,
 plan_cheap_end, cheap_off_peak, cheap_dispatches`. `cheap_off_peak` and `cheap_dispatches` are the Octopus Energy
 integration's off-peak and intelligent dispatching binary sensors (the latter found by its `planned_dispatches`
-attribute); `car_limit` prefers Octopus Intelligent's charge target, `car_ready` its target time. `heat_pump_details` is one entity carrying a controller's readings as attributes (ESPAltherma's
+attribute); `car_limit` prefers the car's own (AC) charge limit, then Intelligent Octopus's charge target; `car_ready`
+prefers Intelligent Octopus's target time. `heat_pump_details` is one entity carrying a controller's readings as attributes (ESPAltherma's
 flow rate, leaving and inlet water, tank, indoor, outdoor, 3-way valve, defrost); the `plan_*` slots are Predbat's
 `predbat.*` entities, found by id. A slot is automatic
 until picked: HA's Energy dashboard first (`energy/get_prefs`: the solar, battery and grid `stat_rate` power sensors
