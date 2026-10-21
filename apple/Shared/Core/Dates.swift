@@ -48,6 +48,7 @@ struct Dates {
     func dayNum(_ s: String) -> String { String(calendar.component(.day, from: date(s))) }
     func dayMonth(_ s: String) -> String { formatter("d MMM").string(from: date(s)) }
     func longDate(_ d: Date) -> String { formatter("EEEE d MMMM").string(from: d) }
+    func shortDate(_ d: Date) -> String { formatter("EEE d MMM").string(from: d) }
 
     /// "9am", "8:30pm" as the wall screens write times.
     func time(_ s: String) -> String {

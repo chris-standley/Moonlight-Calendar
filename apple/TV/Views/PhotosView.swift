@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// The family's photos (from Immich, via Moonlight) as a full-screen slideshow with the clock, like the screensaver
-/// on the wall screens: everything shuffled, or one album from start to finish.
+/// The family's photos (from Immich, via Moonlight) as a full-screen slideshow: everything shuffled, or one album
+/// from start to finish. Just the photos and their details; the clock and weather are only on the screensaver.
 struct PhotosView: View {
     @Environment(AppModel.self) private var model
     @State private var photos: [Photo] = []
@@ -18,7 +18,7 @@ struct PhotosView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     Text(photos.isEmpty
                          ? "Connect Immich in Moonlight Settings › Screensaver photos to show your family's albums here."
-                         : "\(photos.count) photos from your albums, with the time and what's playing.")
+                         : "\(photos.count) photos from your albums.")
                         .font(Theme.font(28, .bold)).foregroundStyle(Theme.muted)
                     Button { play(photos.shuffled()) } label: { Label("Play all", systemImage: "shuffle") }
                         .buttonStyle(.pillProminent)
@@ -32,7 +32,7 @@ struct PhotosView: View {
                             }
                             .padding(14)
                         }
-                        .scrollClipDisabled()
+                        .clipTopAndBottom()  // rows scroll under the Albums heading, not over it
                         .padding(-14)
                         .focusSection()
                     }
@@ -136,26 +136,6 @@ struct Slideshow: View {
                 .ignoresSafeArea()
                 .id(slide.index)
                 .transition(.opacity)
-            }
-            TimelineView(.everyMinute) { ctx in
-                VStack(alignment: .leading, spacing: 4) {
-                    // Weather on top, then the clock and date, as on the screens' photo screensaver.
-                    if let w = model.weather {
-                        HStack(spacing: 12) {
-                            WeatherGlyph(condition: w.current.condition, size: 44)
-                            Text("\(w.current.temp)°").font(Theme.font(44, .heavy))
-                            if let d = w.day(model.dates.today) {
-                                Text("\(d.high)° / \(d.low)°").font(Theme.font(30, .bold)).opacity(0.9)
-                            }
-                        }
-                        .padding(.bottom, 6)
-                    }
-                    Text(model.dates.clock(ctx.date)).font(Theme.font(96, .heavy))
-                    Text(model.dates.longDate(ctx.date)).font(Theme.font(34, .bold)).opacity(0.85)
-                }
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.5), radius: 16)
-                .padding(70)
             }
             if model.settings?.photo_details != false, !photos.isEmpty {
                 let photo = photos[index % photos.count]
