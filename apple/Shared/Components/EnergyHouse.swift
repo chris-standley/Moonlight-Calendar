@@ -7,6 +7,8 @@ import UIKit
 struct EnergyHouse: View {
     let data: EnergyOverview
     var compact = false
+    /// The weather now: its icon takes the sun's place unless it's sunny.
+    var sky: Weather.Current? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -15,9 +17,15 @@ struct EnergyHouse: View {
                 TimelineView(.animation) { tl in
                     Canvas { ctx, _ in
                         ctx.scaleBy(x: s, y: s)
-                        EnergyScene(data: data, time: tl.date.timeIntervalSinceReferenceDate).draw(&ctx)
+                        EnergyScene(data: data, time: tl.date.timeIntervalSinceReferenceDate, drawSun: drawSun).draw(&ctx)
                     }
                 }
+                if !drawSun, let sky {
+                    WeatherGlyph(condition: sky.condition, size: 120 * s)
+                        .frame(width: 1, height: 1)
+                        .position(x: 120 * s, y: 96 * s)
+                }
+                tags(s)
                 chips(s)
             }
         }
@@ -26,23 +34,51 @@ struct EnergyHouse: View {
         .accessibilityElement(children: .combine)
     }
 
+    private var drawSun: Bool { sky == nil || sky?.condition == "sunny" }
+
+    @ViewBuilder
+    private func tags(_ s: CGFloat) -> some View {
+        if !compact {
+            let t = data.temperatures
+            if let out = t?.outside ?? sky.map({ Double($0.temp) }) { tag(s, 120, 192, "Outside", Energy.degrees(out)) }
+            if let v = t?.inside { tag(s, 642, 346, "Inside", Energy.degrees(v)) }
+            if let v = t?.tank { tag(s, 642, 430, "Tank", Energy.degrees(v)) }
+        }
+    }
+
+    private func tag(_ s: CGFloat, _ x: CGFloat, _ y: CGFloat, _ title: String, _ value: String) -> some View {
+        let size = max(12 * s, 9)
+        return VStack(spacing: 0) {
+            Text(title.uppercased()).font(.system(size: size * 0.8, weight: .heavy, design: .rounded))
+                .tracking(size * 0.05).foregroundStyle(Theme.muted)
+            Text(value).font(.system(size: size * 1.35, weight: .heavy, design: .rounded)).foregroundStyle(Theme.text)
+        }
+        .padding(.horizontal, size * 0.6)
+        .padding(.vertical, size * 0.3)
+        .fixedSize()
+        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: size * 0.7, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        .frame(width: 1, height: 1)
+        .position(x: x * s, y: y * s)
+    }
+
     @ViewBuilder
     private func chips(_ s: CGFloat) -> some View {
         let d = data
         if let solar = d.solar {
-            chip(s, 185, 96, .leading, EnergyColors.solar, "Solar", Energy.watts(solar.power),
-                 [compact ? nil : solar.today.map { "\(Energy.kwh($0)) today" }])
+            chip(s, 185, 96, .leading, EnergyColors.solar, "Solar", Energy.solarValue(solar, short: compact),
+                 compact ? [] : Energy.solarLines(solar))
         }
         if let b = d.battery {
-            chip(s, compact ? 370 : 380, compact ? 300 : 340, .center, EnergyColors.battery, "Battery",
+            chip(s, compact ? 338 : 342, compact ? 352 : 362, .leading, EnergyColors.battery, "Battery",
                  b.soc.map { "\(Int($0.rounded()))%" } ?? "–", [compact ? nil : Energy.batteryLine(b)])
         }
         if let h = d.home {
-            chip(s, compact ? 515 : 545, compact ? 245 : 268, .center, Theme.accent, compact ? "Home" : "Home is using",
+            chip(s, compact ? 610 : 510, compact ? 125 : 128, .center, Theme.accent, compact ? "Home" : "Home is using",
                  Energy.watts(h.power), [compact ? nil : h.today.map { "\(Energy.kwh($0)) today" }])
         }
         if let g = d.grid {
-            chip(s, compact ? 990 : 980, 150, .trailing, EnergyColors.grid, "Grid", Energy.gridValue(g, short: compact),
+            chip(s, compact ? 990 : 985, compact ? 160 : 150, .trailing, EnergyColors.grid, "Grid", Energy.gridValue(g, short: compact),
                  compact ? [] : [g.import_today.map { "\(Energy.kwh($0)) bought today" }, g.export_today.map { "\(Energy.kwh($0)) sold today" }])
         }
         if let c = d.car {
@@ -52,11 +88,9 @@ struct EnergyHouse: View {
                   compact ? nil : c.session.flatMap { $0 > 0 ? "\(Energy.kwh($0)) added" : nil }])
         }
         if let hp = d.heat_pump {
-            chip(s, 790, compact ? 375 : 372, .center, EnergyColors.heat, "Heat pump",
+            chip(s, compact ? 800 : 712, compact ? 375 : 370, compact ? .center : .leading, EnergyColors.heat, "Heat pump",
                  compact ? (hp.running ? Energy.watts(hp.power) : "Idle") : (hp.running ? hp.doing : "Idle"),
-                 compact ? [hp.running ? Energy.shortDoing(hp.doing) : nil]
-                         : [hp.power.map { Energy.watts($0) }, Energy.join([hp.flow_temp.map { "Flow \(Energy.temp($0))" }, hp.tank_temp.map { "Tank \(Energy.temp($0))" }]),
-                            Energy.join([hp.outdoor_temp.map { "Outside \(Energy.temp($0))" }, hp.today.map { "\(Energy.kwh($0)) today" }])])
+                 compact ? [Energy.heatPumpShort(hp)] : Energy.heatPumpLines(hp))
         }
     }
 
@@ -86,6 +120,65 @@ struct EnergyHouse: View {
     }
 }
 
+/// Predbat's plan under the picture: what it's doing, the price now, today's cost and the next cheap charge.
+struct EnergyPlan: View {
+    let plan: EnergyOverview.Plan
+    var titleSize: CGFloat = 11
+    var valueSize: CGFloat = 15
+
+    var body: some View {
+        CenteredWrap(spacing: 8) {
+            ForEach(Array(Energy.planItems(plan).enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(item.0.uppercased()).font(.system(size: titleSize, weight: .heavy, design: .rounded))
+                        .tracking(0.8).foregroundStyle(Theme.muted)
+                    Text(item.1).font(.system(size: valueSize, weight: .heavy, design: .rounded)).foregroundStyle(Theme.text)
+                }
+                .padding(.horizontal, valueSize * 0.8)
+                .padding(.vertical, valueSize * 0.4)
+                .background(Theme.surface, in: Capsule())
+            }
+        }
+    }
+}
+
+/// Lays its children out left to right, wrapping onto new lines, each line centred.
+struct CenteredWrap: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(proposal.width ?? .infinity, subviews)
+        let width = rows.map { r in r.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(r.count - 1, 0)) }.max() ?? 0
+        let height = rows.map { $0.map(\.height).max() ?? 0 }.reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY, i = 0
+        for row in arrange(bounds.width, subviews) {
+            let w = row.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(row.count - 1, 0))
+            var x = bounds.minX + (bounds.width - w) / 2
+            let h = row.map(\.height).max() ?? 0
+            for size in row {
+                subviews[i].place(at: CGPoint(x: x, y: y + (h - size.height) / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing; i += 1
+            }
+            y += h + spacing
+        }
+    }
+
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> [[CGSize]] {
+        var rows: [[CGSize]] = [[]], x: CGFloat = 0
+        for v in subviews {
+            let size = v.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width { rows.append([]); x = 0 }
+            rows[rows.count - 1].append(size)
+            x += size.width + spacing
+        }
+        return rows
+    }
+}
+
 /// Words and numbers shared by the picture and the phone's cards.
 enum Energy {
     /// "774 W", "2.45 kW".
@@ -97,6 +190,95 @@ enum Energy {
     }
     static func kwh(_ v: Double) -> String { String(format: v < 100 ? "%.1f kWh" : "%.0f kWh", v) }
     static func temp(_ v: Double) -> String { "\(Int(v.rounded()))°" }
+    /// "19.5°", "9°".
+    static func degrees(_ v: Double) -> String {
+        let r = (v * 10).rounded() / 10
+        return r == r.rounded() ? "\(Int(r))°" : String(format: "%.1f°", r)
+    }
+    static func cop(_ v: Double) -> String { String(format: "%.1f", v) }
+    /// "9am", "11:30pm" from an ISO time, at the household's wall clock.
+    static func time(_ iso: String) -> String { Dates(timezone: nil).time(iso) }
+    static func parse(_ iso: String?) -> Date? {
+        guard let iso else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        if let d = f.date(from: iso) { return d }
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: iso)
+    }
+    /// "34.7p", "£1.66".
+    static func money(_ v: Double, _ unit: String?) -> String {
+        switch unit {
+        case "p", nil: return abs(v) >= 100 ? String(format: "£%.2f", v / 100) : String(format: "%gp", (v * 10).rounded() / 10)
+        case "£", "GBP": return String(format: "£%.2f", v)
+        default: return String(format: "%g %@", (v * 100).rounded() / 100, unit!)
+        }
+    }
+
+    static func solarValue(_ s: EnergyOverview.Solar, short: Bool) -> String {
+        switch solarPhase(s) {
+        case .before: if let start = s.starts { return (short ? "From " : "Starts ") + time(start) }
+        case .after: if !short { return "Done for today" }
+        case .day: break
+        }
+        return watts(s.power)
+    }
+    static func solarLines(_ s: EnergyOverview.Solar) -> [String?] {
+        switch solarPhase(s) {
+        case .before:
+            return [s.forecast_today.map { "\(kwh($0)) expected today" }]
+        case .after:
+            return [s.today.map { "\(kwh($0)) today" }, s.forecast_tomorrow.map { "Tomorrow \(kwh($0)) expected" }]
+        case .day:
+            guard let today = s.today else { return [] }
+            if let f = s.forecast_today { return [String(format: "%.1f of %@ today", today, kwh(f))] }
+            return ["\(kwh(today)) today"]
+        }
+    }
+    static func heatPumpShort(_ hp: EnergyOverview.HeatPump) -> String? {
+        if let c = hp.cop { return "COP \(cop(c))" }
+        return hp.running ? shortDoing(hp.doing) : nil
+    }
+    static func heatPumpLines(_ hp: EnergyOverview.HeatPump) -> [String?] {
+        let now: [String?] = [hp.power.map { watts($0) }, hp.cop.map { "COP \(cop($0)) now" }]
+        let flow: [String?] = [hp.flow_temp.map { "Flow \(temp($0))" }, hp.today.map { "\(kwh($0)) today" }]
+        let split: [String?] = [hp.cop_today?.heating.map { "Heat \(cop($0))" }, hp.cop_today?.hot_water.map { "Water \(cop($0))" }]
+        return [join(now), join(flow), hp.cop_today?.overall.map { "COP today \(cop($0))" }, join(split)]
+    }
+
+    enum SolarPhase { case before, day, after }
+    /// Before the panels start, producing, or done for today (from the forecast).
+    static func solarPhase(_ s: EnergyOverview.Solar, now: Date = Date()) -> SolarPhase {
+        if (s.power ?? 0) >= 30 { return .day }
+        if let start = parse(s.starts), now < start { return .before }
+        if let end = parse(s.ends), now >= end { return .after }
+        if s.starts == nil, s.forecast_tomorrow != nil, Calendar.current.component(.hour, from: now) >= 15 { return .after }
+        return .day
+    }
+
+    static func planItems(_ p: EnergyOverview.Plan, now: Date = Date()) -> [(String, String)] {
+        let unit = p.rate_unit ?? "p"
+        func soon(_ w: EnergyOverview.Plan.Window?) -> EnergyOverview.Plan.Window? {
+            guard let w else { return nil }
+            if let end = parse(w.end), end <= now { return nil }
+            return w
+        }
+        let charge = soon(p.charge), cheap = soon(p.cheap)
+        var out: [(String, String)] = []
+        if let s = p.status { out.append(("Predbat", s)) }
+        if let v = p.rate_now { out.append(("Price now", money(v, unit))) }
+        if let v = p.rate_export { out.append(("Export", money(v, unit))) }
+        if let v = p.cost_today { out.append(("Cost today", money(v, p.cost_unit ?? unit))) }
+        if let h = p.battery_hours, h > 0 { out.append(("Battery lasts", h < 10 ? String(format: "%.1f h", h) : "\(Int(h.rounded())) h")) }
+        if let c = charge {
+            out.append(("Charging battery", time(c.start) + (c.end.map { "–" + time($0) } ?? "") + (c.rate.map { " at " + money($0, unit) } ?? "")))
+        }
+        if let c = cheap, c.start != charge?.start {
+            let when = (parse(c.start).map { $0 <= now } ?? false) ? "now" : "from " + time(c.start)
+            out.append(("Cheap rate", when + (c.rate.map { " at " + money($0, unit) } ?? "")))
+        }
+        return out
+    }
     static func join(_ parts: [String?]) -> String? {
         let p = parts.compactMap { $0 }
         return p.isEmpty ? nil : p.joined(separator: " · ")
@@ -150,8 +332,6 @@ enum EnergyColors {
     static let line = dynamic(0xA99F92, 0x646A7A)
     static let roof = dynamic(0xC9775A, 0x7C4A3B)
     static let glass = dynamic(0xDBE7F3, 0x34405A)
-    static let lit = dynamic(0xFFE3A1, 0xB08A3C)
-    static let door = dynamic(0x8A6A52, 0x5C4636)
     static let body = dynamic(0xE7E9EF, 0x3A3E4C)
     static let metal = Color(hex: "#8C909C")
     static let faint = dynamic(0xC9C3B9, 0x555967)
@@ -161,6 +341,7 @@ enum EnergyColors {
 private struct EnergyScene {
     let data: EnergyOverview
     let time: TimeInterval
+    var drawSun = true
 
     let idle = 30.0
 
@@ -175,8 +356,8 @@ private struct EnergyScene {
                  with: .linearGradient(Gradient(colors: [c.sky1, c.sky2]), startPoint: .zero, endPoint: CGPoint(x: 0, y: 600)))
         ctx.fill(Path(CGRect(x: 0, y: 500, width: 1000, height: 100)), with: .color(c.grass))
 
-        // Sun
-        if solar != nil {
+        // Sun (the weather's icon is drawn over the picture instead when it isn't sunny)
+        if drawSun {
             let sun = sunny ? Color(hex: "#FFC24A") : c.faint
             let pulse = sunny ? 0.7 + 0.3 * sin(time * 2.1) : 1
             for i in 0..<12 {
@@ -189,98 +370,87 @@ private struct EnergyScene {
             ctx.fill(Path(ellipseIn: CGRect(x: 78, y: 54, width: 84, height: 84)), with: .color(sun))
         }
 
-        // Pylon and its wire
-        let gridWire = path { p in
-            p.move(to: CGPoint(x: 882, y: 290)); p.addQuadCurve(to: CGPoint(x: 690, y: 312), control: CGPoint(x: 790, y: 305))
-        }
+        // Pylon, its cable running under the garden into the house
         if grid != nil {
             let pylon = path { p in
-                p.move(to: CGPoint(x: 890, y: 500)); p.addLine(to: CGPoint(x: 915, y: 250)); p.addLine(to: CGPoint(x: 940, y: 500))
+                p.move(to: CGPoint(x: 950, y: 500)); p.addLine(to: CGPoint(x: 975, y: 250)); p.addLine(to: CGPoint(x: 1000, y: 500))
                 for (y, half) in [(430.0, 18.0), (360, 12), (300, 7)] {
-                    p.move(to: CGPoint(x: 915 - half, y: y)); p.addLine(to: CGPoint(x: 915 + half, y: y))
+                    p.move(to: CGPoint(x: 975 - half, y: y)); p.addLine(to: CGPoint(x: 975 + half, y: y))
                 }
-                p.move(to: CGPoint(x: 890, y: 500)); p.addLine(to: CGPoint(x: 927, y: 360))
-                p.move(to: CGPoint(x: 940, y: 500)); p.addLine(to: CGPoint(x: 903, y: 360))
-                p.move(to: CGPoint(x: 897, y: 430)); p.addLine(to: CGPoint(x: 922, y: 300))
-                p.move(to: CGPoint(x: 933, y: 430)); p.addLine(to: CGPoint(x: 908, y: 300))
-                p.move(to: CGPoint(x: 875, y: 268)); p.addLine(to: CGPoint(x: 955, y: 268))
-                p.move(to: CGPoint(x: 882, y: 290)); p.addLine(to: CGPoint(x: 948, y: 290))
+                p.move(to: CGPoint(x: 950, y: 500)); p.addLine(to: CGPoint(x: 987, y: 360))
+                p.move(to: CGPoint(x: 1000, y: 500)); p.addLine(to: CGPoint(x: 963, y: 360))
+                p.move(to: CGPoint(x: 957, y: 430)); p.addLine(to: CGPoint(x: 982, y: 300))
+                p.move(to: CGPoint(x: 993, y: 430)); p.addLine(to: CGPoint(x: 968, y: 300))
+                p.move(to: CGPoint(x: 935, y: 268)); p.addLine(to: CGPoint(x: 1015, y: 268))
+                p.move(to: CGPoint(x: 942, y: 290)); p.addLine(to: CGPoint(x: 1008, y: 290))
             }
             ctx.stroke(pylon, with: .color(c.metal), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-            ctx.stroke(gridWire, with: .color(c.metal), lineWidth: 2.5)
         }
 
-        // House
+        // House, from its long side: the roof a slope above the walls with the panels on it
         let outline = StrokeStyle(lineWidth: 4, lineJoin: .round)
         let walls = path { p in
-            p.move(to: CGPoint(x: 330, y: 305)); p.addLine(to: CGPoint(x: 330, y: 500))
-            p.addLine(to: CGPoint(x: 690, y: 500)); p.addLine(to: CGPoint(x: 690, y: 305))
+            p.move(to: CGPoint(x: 330, y: 320)); p.addLine(to: CGPoint(x: 330, y: 500))
+            p.addLine(to: CGPoint(x: 690, y: 500)); p.addLine(to: CGPoint(x: 690, y: 320))
         }
         ctx.fill(walls, with: .color(c.wall)); ctx.stroke(walls, with: .color(c.line), style: outline)
-        let roof = path { p in
-            p.move(to: CGPoint(x: 300, y: 312)); p.addLine(to: CGPoint(x: 510, y: 150)); p.addLine(to: CGPoint(x: 720, y: 312))
-        }
+        let roof = line([(300, 322), (365, 182), (655, 182), (720, 322)], close: true)
         ctx.fill(roof, with: .color(c.roof)); ctx.stroke(roof, with: .color(c.line), style: outline)
-        let chimney = Path(CGRect(x: 585, y: 178, width: 34, height: 62))
-        ctx.fill(chimney, with: .color(c.wall)); ctx.stroke(chimney, with: .color(c.line), style: outline)
-        ctx.fill(Path(roundedRect: CGRect(x: 560, y: 410, width: 58, height: 90), cornerRadius: 6), with: .color(c.door))
-        let window = Path(roundedRect: CGRect(x: 610, y: 335, width: 52, height: 45), cornerRadius: 6)
-        ctx.fill(window, with: .color((data.home?.power ?? 0) > 0 ? c.lit : c.glass))
-        ctx.stroke(window, with: .color(c.line), lineWidth: 3)
-
-        // Solar panels along the roof
         if solar != nil {
-            var panels = ctx
-            panels.translateBy(x: 338, y: 284)
-            panels.rotate(by: .degrees(-37.6))
-            let r = Path(roundedRect: CGRect(x: 0, y: -34, width: 170, height: 30), cornerRadius: 3)
-            panels.fill(r, with: .color(Color(hex: "#2C3E66")))
-            panels.stroke(r, with: .color(Color(hex: "#9FB1D6")), lineWidth: 2.5)
-            let cells = path { p in
-                for x in [42.0, 85, 128] { p.move(to: CGPoint(x: x, y: -34)); p.addLine(to: CGPoint(x: x, y: -4)) }
-                p.move(to: CGPoint(x: 0, y: -19)); p.addLine(to: CGPoint(x: 170, y: -19))
+            for i in 0..<12 {
+                let r = Path(roundedRect: CGRect(x: 384 + Double(i % 6) * 44, y: i < 6 ? 198 : 254, width: 40, height: 50), cornerRadius: 3)
+                ctx.fill(r, with: .color(Color(hex: sunny ? "#31477A" : "#2C3E66")))
+                ctx.stroke(r, with: .color(Color(hex: "#9FB1D6")), lineWidth: 2.5)
             }
-            panels.stroke(cells, with: .color(Color(hex: "#7F93BD")), lineWidth: 2)
+        }
+
+        // Hot water tank
+        if let tank = data.temperatures?.tank {
+            let r = Path(roundedRect: CGRect(x: 612, y: 378, width: 60, height: 104), cornerRadius: 16)
+            ctx.fill(r, with: .color(Color(hex: tank >= 45 ? "#E8674F" : tank >= 35 ? "#F2A33A" : "#6AA6E8").opacity(0.9)))
+            ctx.stroke(r, with: .color(c.line), lineWidth: 4)
         }
 
         // Flows, all through the home
         if let solar {
-            flow(&ctx, line([(420, 230), (475, 330), (500, 420)]), solar.power, c.solar)
+            flow(&ctx, line([(520, 304), (520, 429)]), solar.power, c.solar)
         }
         if let battery {
-            flow(&ctx, line([(395, 440), (520, 440)]), battery.power, c.battery, back: (battery.power ?? 0) < 0)
+            flow(&ctx, line([(395, 440), (509, 440)]), battery.power, c.battery, back: (battery.power ?? 0) < 0)
         }
         if let grid {
-            var p = gridWire
-            p.addLine(to: CGPoint(x: 620, y: 380)); p.addLine(to: CGPoint(x: 560, y: 440))
+            let p = path { p in
+                p.move(to: CGPoint(x: 958, y: 500)); p.addQuadCurve(to: CGPoint(x: 930, y: 524), control: CGPoint(x: 956, y: 524))
+                p.addLine(to: CGPoint(x: 548, y: 524)); p.addLine(to: CGPoint(x: 526, y: 451))
+            }
             flow(&ctx, p, grid.power, c.grid, back: (grid.power ?? 0) < 0)
         }
         if let car {
             let w = car.charging == true ? (car.power ?? 2000) : 0
-            flow(&ctx, line([(500, 455), (330, 470), (262, 470)]), w, c.car)
+            flow(&ctx, line([(510, 448), (330, 470), (262, 470)]), w, c.car)
             if plugged {
                 flow(&ctx, path { p in p.move(to: CGPoint(x: 262, y: 470)); p.addQuadCurve(to: CGPoint(x: 205, y: 476), control: CGPoint(x: 240, y: 500)) }, w, c.car)
             }
         }
         if let hp {
-            flow(&ctx, line([(560, 470), (690, 470), (728, 470)]), hp.running ? (hp.power ?? 500) : 0, c.heat)
+            flow(&ctx, line([(530, 449), (556, 488), (728, 488)]), hp.running ? (hp.power ?? 500) : 0, c.heat)
         }
-        let hub = Path(ellipseIn: CGRect(x: 519, y: 429, width: 22, height: 22))
+        let hub = Path(ellipseIn: CGRect(x: 509, y: 429, width: 22, height: 22))
         ctx.fill(hub, with: .color(Theme.accent)); ctx.stroke(hub, with: .color(c.wall), lineWidth: 4)
 
         // Battery
         if let battery {
-            let x = 350.0, y = 395.0
+            let x = 350.0, y = 410.0
             ctx.fill(Path(roundedRect: CGRect(x: x + 9, y: y - 8, width: 18, height: 10), cornerRadius: 3), with: .color(c.line))
-            let body = Path(roundedRect: CGRect(x: x, y: y, width: 36, height: 96), cornerRadius: 7)
+            let body = Path(roundedRect: CGRect(x: x, y: y, width: 36, height: 82), cornerRadius: 7)
             ctx.fill(body, with: .color(c.wall)); ctx.stroke(body, with: .color(c.line), lineWidth: 4)
             if let soc = battery.soc {
                 let f = min(100, max(0, soc)) / 100
-                ctx.fill(Path(roundedRect: CGRect(x: x + 4, y: y + 4 + 88 * (1 - f), width: 28, height: 88 * f), cornerRadius: 4),
+                ctx.fill(Path(roundedRect: CGRect(x: x + 4, y: y + 4 + 74 * (1 - f), width: 28, height: 74 * f), cornerRadius: 4),
                          with: .color(soc < 20 ? Color(hex: "#E2902B") : c.battery))
             }
             if battery.state == "charging" {
-                let bolt = line([(x + 20, y + 30), (x + 12, y + 52), (x + 19, y + 52), (x + 15, y + 70), (x + 26, y + 44), (x + 19, y + 44)], close: true)
+                let bolt = line([(x + 20, y + 22), (x + 12, y + 44), (x + 19, y + 44), (x + 15, y + 62), (x + 26, y + 36), (x + 19, y + 36)], close: true)
                 ctx.fill(bolt, with: .color(.white))
             }
         }
@@ -375,6 +545,8 @@ private struct EnergyScene {
 /// The details under the picture on a narrow screen.
 struct EnergyCards: View {
     let data: EnergyOverview
+    /// The weather's temperature, when there's no outside sensor.
+    var outside: Double? = nil
     var columns = 2
     var titleFont: Font = Theme.text(.caption, .heavy)
     var valueFont: Font = Theme.text(.headline, .heavy)
@@ -406,7 +578,12 @@ struct EnergyCards: View {
         var out: [Item] = []
         let d = data
         if let s = d.solar {
-            out.append(Item(tint: EnergyColors.solar, title: "Solar", value: Energy.watts(s.power), lines: [s.today.map { "\(Energy.kwh($0)) today" }].compactMap { $0 }))
+            let phase = Energy.solarPhase(s)
+            out.append(Item(tint: EnergyColors.solar, title: "Solar",
+                            value: phase == .before && s.starts != nil ? "Starts \(Energy.time(s.starts!))" : Energy.watts(s.power), lines: [
+                s.today.map { "\(Energy.kwh($0)) today" }, s.forecast_today.map { "\(Energy.kwh($0)) expected today" },
+                phase == .after ? s.forecast_tomorrow.map { "\(Energy.kwh($0)) expected tomorrow" } : nil,
+            ].compactMap { $0 }))
         }
         if let b = d.battery {
             out.append(Item(tint: EnergyColors.battery, title: "Battery", value: b.soc.map { "\(Int($0.rounded()))%" } ?? "–", lines: [Energy.batteryLine(b)].compactMap { $0 }))
@@ -428,9 +605,17 @@ struct EnergyCards: View {
         }
         if let hp = d.heat_pump {
             out.append(Item(tint: EnergyColors.heat, title: "Heat pump", value: hp.running ? hp.doing : "Idle", lines: [
-                hp.power.map { Energy.watts($0) }, hp.flow_temp.map { "Flow \(Energy.temp($0))" }, hp.tank_temp.map { "Hot water tank \(Energy.temp($0))" },
-                hp.outdoor_temp.map { "Outside \(Energy.temp($0))" }, hp.today.map { "\(Energy.kwh($0)) today" },
+                hp.power.map { Energy.watts($0) }, hp.cop.map { "COP \(Energy.cop($0)) now" }, hp.flow_temp.map { "Flow \(Energy.temp($0))" },
+                hp.today.map { "\(Energy.kwh($0)) today" }, hp.cop_today?.overall.map { "COP today \(Energy.cop($0))" },
+                hp.cop_today?.heating.map { "Heating \(Energy.cop($0))" }, hp.cop_today?.hot_water.map { "Hot water \(Energy.cop($0))" },
             ].compactMap { $0 }))
+        }
+        let t = d.temperatures, outsideT = t?.outside ?? outside
+        if t?.inside != nil || t?.tank != nil || outsideT != nil {
+            let inside = t?.inside.map { "\(Energy.degrees($0)) inside" }
+            let outdoors = outsideT.map { "\(Energy.degrees($0)) outside" }
+            out.append(Item(tint: Color(hex: "#6AA6E8"), title: "Temperatures", value: inside ?? outdoors ?? "–",
+                            lines: [inside != nil ? outdoors : nil, t?.tank.map { "Hot water tank \(Energy.degrees($0))" }].compactMap { $0 }))
         }
         return out
     }

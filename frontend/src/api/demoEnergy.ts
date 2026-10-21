@@ -7,6 +7,8 @@ type Extras = Pick<Api, "energy" | "energyOptions">;
 const SLOTS: Record<EnergySlot, [EnergyKind, string, string]> = {
   solar_power: ["power", "sensor.inverter_pv_power", "Inverter PV power"],
   solar_today: ["energy", "sensor.inverter_pv_energy_today", "Inverter PV energy today"],
+  solar_forecast: ["energy", "sensor.solar_forecast_today", "Solar forecast today"],
+  solar_forecast_tomorrow: ["energy", "sensor.solar_forecast_tomorrow", "Solar forecast tomorrow"],
   battery_soc: ["percent", "sensor.inverter_soc", "Inverter battery SOC"],
   battery_power: ["power", "sensor.inverter_battery_power", "Inverter battery power"],
   grid_power: ["power", "sensor.inverter_grid_power", "Inverter grid power"],
@@ -24,10 +26,31 @@ const SLOTS: Record<EnergySlot, [EnergyKind, string, string]> = {
   heat_pump_power: ["power", "sensor.heat_pump_power", "Heat pump power"],
   heat_pump_today: ["energy", "sensor.heat_pump_energy_today", "Heat pump energy today"],
   heat_pump_flow: ["temperature", "sensor.heat_pump_flow_temperature", "Heat pump flow temperature"],
-  heat_pump_tank: ["temperature", "sensor.hot_water_tank_temperature", "Hot water tank temperature"],
+  heat_pump_return: ["temperature", "sensor.heat_pump_return_temperature", "Heat pump return temperature"],
+  heat_pump_flow_rate: ["number", "sensor.heat_pump_flow_rate", "Heat pump flow rate"],
+  heat_pump_details: ["state", "sensor.heat_pump_controller", "Heat pump controller"],
+  inside_temp: ["temperature", "sensor.living_room_temperature", "Living room temperature"],
   outdoor_temp: ["temperature", "sensor.heat_pump_outdoor_temperature", "Heat pump outdoor temperature"],
+  heat_pump_tank: ["temperature", "sensor.hot_water_tank_temperature", "Hot water tank temperature"],
+  plan_status: ["state", "predbat.status", "Predbat status"],
+  plan_cost_today: ["number", "predbat.cost_today", "Cost so far today"],
+  plan_rate_now: ["number", "predbat.rates", "Import rates"],
+  plan_rate_export: ["number", "predbat.rates_export", "Export rates"],
+  plan_battery_hours: ["number", "predbat.battery_hours_left", "Predicted battery hours left"],
+  plan_charge_start: ["state", "predbat.best_charge_start", "Predicted charge start time"],
+  plan_charge_end: ["state", "predbat.best_charge_end", "Predicted charge end time"],
+  plan_cheap_start: ["state", "predbat.low_rate_start", "Next low rate start"],
+  plan_cheap_end: ["state", "predbat.low_rate_end", "Next low rate end"],
 };
-const GROUP = (s: EnergySlot) => (s.startsWith("heat_pump") || s === "outdoor_temp" ? "heat_pump" : s.split("_")[0]) as EnergyOptions["slots"][EnergySlot]["group"];
+const GROUP = (s: EnergySlot) => (s === "inside_temp" || s === "outdoor_temp" || s === "heat_pump_tank" ? "temperatures"
+  : s.startsWith("heat_pump") ? "heat_pump" : s.split("_")[0]) as EnergyOptions["slots"][EnergySlot]["group"];
+
+/** Today at hh:mm local, as ISO with the offset (the way Home Assistant sends times). */
+function at(h: number, m: number, days = 0): string {
+  const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + days);
+  const off = -d.getTimezoneOffset(), sign = off >= 0 ? "+" : "-", pad = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(h)}:${pad(m)}:00${sign}${pad(off / 60)}:${pad(off % 60)}`;
+}
 
 export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => EnergySettings | undefined): Extras {
   let tick = 0;
@@ -36,25 +59,41 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
   const on = (slot: EnergySlot) => (settings()?.entities?.[slot] ?? SLOTS[slot][1]) !== "";
   return {
     async energy(): Promise<EnergyOverview> {
-      const solar = wobble(3150, 180, 0);
+      // The sun follows the clock: up from 7:40 to 17:30, strongest at lunchtime.
+      const now = new Date(), hour = now.getHours() + now.getMinutes() / 60;
+      const sun = Math.max(0, Math.sin(Math.PI * (hour - 7.67) / (17.5 - 7.67)));
+      const solar = sun > 0 ? Math.round(3600 * sun + Math.sin(tick / 2) * 180 * sun) : 0;
+      const today = +(11.4 * Math.min(1, Math.max(0, (hour - 7.67) / (17.5 - 7.67)))).toFixed(1);
       const hp = wobble(780, 40, 1);
-      const car = wobble(2150, 120, 2);
-      const battery = -wobble(900, 60, 3); // charging
+      const car = solar > 1500 ? wobble(2150, 120, 2) : 0;
+      const battery = solar > 1500 ? -wobble(900, 60, 3) : wobble(450, 40, 3); // charging from spare solar, else helping out
       const home = 1050 + hp + car + wobble(0, 40, 4);
       const grid = home - solar - battery; // what solar and the battery don't cover comes from the grid
       const g = settings()?.grid_invert ? -grid : grid;
       const b = settings()?.battery_invert ? -battery : battery;
+      const heat = hp * (3.9 + Math.sin(tick / 3) * 0.2);
       return {
         configured: true, reachable: true, error: null, updated: new Date().toISOString(),
-        solar: on("solar_power") || on("solar_today") ? { power: on("solar_power") ? solar : null, today: on("solar_today") ? 11.4 : null } : null,
+        solar: on("solar_power") || on("solar_today")
+          ? { power: on("solar_power") ? solar : null, today: on("solar_today") ? today : null, forecast_today: on("solar_forecast") ? 12.6 : null,
+            forecast_tomorrow: on("solar_forecast_tomorrow") ? 9.8 : null, starts: on("solar_forecast") ? at(7, 40) : null, ends: on("solar_forecast") ? at(17, 30) : null }
+          : null,
         battery: on("battery_soc") || on("battery_power") ? { soc: on("battery_soc") ? 72 : null, power: on("battery_power") ? b : null, state: on("battery_power") ? (b < -30 ? "charging" : b > 30 ? "discharging" : "idle") : null } : null,
         grid: on("grid_power") ? { power: g, state: g > 30 ? "importing" : g < -30 ? "exporting" : "idle", import_today: on("grid_import_today") ? 6.2 : null, export_today: on("grid_export_today") ? 3.9 : null } : null,
         home: on("home_power") || on("home_today") ? { power: on("home_power") ? home : null, today: on("home_today") ? 14.8 : null, computed: false } : null,
         car: on("car_plug") || on("car_status") || on("car_power") || on("car_soc")
-          ? { plugged_in: true, charging: true, status: "Charging", power: on("car_power") ? car : null, soc: on("car_soc") ? 64 : null, range: on("car_range") ? 168 : null, range_unit: "mi", session: on("car_session") ? 5.3 : null }
+          ? { plugged_in: true, charging: car > 0, status: car > 0 ? "Charging" : "Plugged in · waiting", power: on("car_power") ? car : null, soc: on("car_soc") ? 64 : null, range: on("car_range") ? 168 : null, range_unit: "mi", session: on("car_session") ? 5.3 : null }
           : null,
         heat_pump: on("heat_pump_mode") || on("heat_pump_power")
-          ? { running: true, doing: "Heating the house", power: on("heat_pump_power") ? hp : null, today: on("heat_pump_today") ? 6.1 : null, flow_temp: on("heat_pump_flow") ? 34.5 : null, tank_temp: on("heat_pump_tank") ? 47 : null, outdoor_temp: on("outdoor_temp") ? 9 : null }
+          ? { running: true, doing: "Heating the house", power: on("heat_pump_power") ? hp : null, today: on("heat_pump_today") ? 6.1 : null, flow_temp: on("heat_pump_flow") ? 34.5 : null,
+            heat: Math.round(heat), cop: +(heat / hp).toFixed(1), cop_today: { heating: 3.8, hot_water: 2.7, overall: 3.5 } }
+          : null,
+        temperatures: on("inside_temp") || on("outdoor_temp") || on("heat_pump_tank")
+          ? { inside: on("inside_temp") ? 19.5 : null, outside: on("outdoor_temp") ? 9 : null, tank: on("heat_pump_tank") ? 47 : null }
+          : null,
+        plan: on("plan_status")
+          ? { status: "Demand", cost_today: 138, cost_unit: "p", rate_now: hour >= 23.5 || hour < 5.5 ? 6.6 : 34.69, rate_export: 12, rate_unit: "p", battery_hours: 4.5,
+            charge: { start: at(23, 30), end: at(5, 30, 1), rate: 6.6 }, cheap: { start: at(23, 30), end: at(5, 30, 1), rate: 6.6 } }
           : null,
       };
     },

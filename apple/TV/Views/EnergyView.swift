@@ -14,9 +14,13 @@ struct EnergyView: View {
                 }
             }
             if let data, !data.isEmpty {
-                EnergyHouse(data: data)
+                EnergyHouse(data: data, sky: model.weather?.current)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.bottom, 40)
+                if let plan = data.plan {
+                    EnergyPlan(plan: plan, titleSize: 18, valueSize: 26)
+                        .frame(maxWidth: .infinity)
+                }
+                Spacer().frame(height: 30)
             } else if data != nil {
                 FamilyPrompt(text: "Pick your solar, battery, car and heat pump sensors in Moonlight Settings › Energy on a wall screen.")
             }

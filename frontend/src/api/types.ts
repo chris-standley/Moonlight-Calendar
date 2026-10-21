@@ -273,17 +273,21 @@ export interface SecurityOptions {
 
 // Energy (see API.md "Energy"): solar, battery, grid, car and heat pump from Home Assistant, drawn as a house.
 export type EnergySlot =
-  | "solar_power" | "solar_today" | "battery_soc" | "battery_power" | "grid_power" | "grid_import_today" | "grid_export_today"
+  | "solar_power" | "solar_today" | "solar_forecast" | "solar_forecast_tomorrow" | "battery_soc" | "battery_power" | "grid_power" | "grid_import_today" | "grid_export_today"
   | "home_power" | "home_today" | "car_plug" | "car_status" | "car_power" | "car_soc" | "car_range" | "car_session"
-  | "heat_pump_mode" | "heat_pump_power" | "heat_pump_today" | "heat_pump_flow" | "heat_pump_tank" | "outdoor_temp";
+  | "heat_pump_mode" | "heat_pump_power" | "heat_pump_today" | "heat_pump_flow" | "heat_pump_return" | "heat_pump_flow_rate"
+  | "heat_pump_details" | "inside_temp" | "outdoor_temp" | "heat_pump_tank"
+  | "plan_status" | "plan_cost_today" | "plan_rate_now" | "plan_rate_export" | "plan_battery_hours"
+  | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end";
 export type EnergyKind = "power" | "energy" | "percent" | "temperature" | "number" | "state";
-export type EnergyGroup = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump";
+export type EnergyGroup = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "temperatures" | "plan";
 export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean }
 export interface EnergySettingsPatch { entities?: Partial<Record<EnergySlot, string | null>>; battery_invert?: boolean | null; grid_invert?: boolean | null }
 /** Power in watts, energy in kWh; null when the sensor has no reading. Each part is null when nothing is set for it. */
 export interface EnergyOverview {
   configured: boolean; reachable: boolean; error: string | null; updated: string | null;
-  solar: { power: number | null; today: number | null } | null;
+  /** forecast_*: kWh expected; starts/ends: when today's forecast has the panels producing (ISO). */
+  solar: { power: number | null; today: number | null; forecast_today: number | null; forecast_tomorrow: number | null; starts: string | null; ends: string | null } | null;
   /** power: positive = discharging into the house, negative = charging. */
   battery: { soc: number | null; power: number | null; state: "charging" | "discharging" | "idle" | null } | null;
   /** power: positive = importing, negative = exporting. */
@@ -292,8 +296,15 @@ export interface EnergyOverview {
   home: { power: number | null; today: number | null; computed: boolean } | null;
   car: { plugged_in: boolean | null; charging: boolean | null; status: string | null; power: number | null; soc: number | null; range: number | null; range_unit: string | null; session: number | null } | null;
   /** doing: "Heating the house", "Heating hot water", "Defrosting", "Idle"... */
-  heat_pump: { running: boolean; doing: string; power: number | null; today: number | null; flow_temp: number | null; tank_temp: number | null; outdoor_temp: number | null } | null;
+  /** heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight. */
+  heat_pump: { running: boolean; doing: string; power: number | null; today: number | null; flow_temp: number | null; heat: number | null; cop: number | null;
+    cop_today: { heating: number | null; hot_water: number | null; overall: number | null } | null } | null;
+  temperatures: { inside: number | null; outside: number | null; tank: number | null } | null;
+  /** From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO. */
+  plan: { status: string | null; cost_today: number | null; cost_unit: string | null; rate_now: number | null; rate_export: number | null; rate_unit: string | null;
+    battery_hours: number | null; charge: EnergyWindow | null; cheap: EnergyWindow | null } | null;
 }
+export interface EnergyWindow { start: string; end: string | null; rate: number | null }
 export interface EnergyCandidate { entity_id: string; name: string; state: string | null; unit: string | null }
 export interface EnergyOptions {
   slots: Record<EnergySlot, { kind: EnergyKind; group: EnergyGroup; entities: string[]; auto: boolean; suggested: string[] }>;

@@ -3,14 +3,20 @@ import { ApiError, EnergyCandidate, EnergyGroup, EnergyOptions, EnergySettingsPa
 import { useApp } from "../state";
 
 const GROUPS: { key: EnergyGroup; label: string; slots: [EnergySlot, string][] }[] = [
-  { key: "solar", label: "Solar", slots: [["solar_power", "Power now"], ["solar_today", "Today"]] },
+  { key: "solar", label: "Solar", slots: [["solar_power", "Power now"], ["solar_today", "Today"], ["solar_forecast", "Forecast today"],
+    ["solar_forecast_tomorrow", "Forecast tomorrow"]] },
   { key: "battery", label: "Battery", slots: [["battery_soc", "Charge level"], ["battery_power", "Power in or out"]] },
   { key: "grid", label: "Grid", slots: [["grid_power", "Power in or out"], ["grid_import_today", "Bought today"], ["grid_export_today", "Sold today"]] },
   { key: "home", label: "Home", slots: [["home_power", "Using now"], ["home_today", "Used today"]] },
   { key: "car", label: "Car", slots: [["car_plug", "Plugged in"], ["car_status", "Charger status"], ["car_power", "Charging power"],
     ["car_soc", "Car battery"], ["car_range", "Range"], ["car_session", "Added this charge"]] },
   { key: "heat_pump", label: "Heat pump", slots: [["heat_pump_mode", "What it's doing"], ["heat_pump_power", "Power"], ["heat_pump_today", "Used today"],
-    ["heat_pump_flow", "Flow temperature"], ["heat_pump_tank", "Hot water tank"], ["outdoor_temp", "Outside temperature"]] },
+    ["heat_pump_flow", "Flow temperature"], ["heat_pump_return", "Return temperature"], ["heat_pump_flow_rate", "Water flow rate"],
+    ["heat_pump_details", "Controller readings (ESPAltherma)"]] },
+  { key: "temperatures", label: "Temperatures", slots: [["inside_temp", "Inside"], ["outdoor_temp", "Outside"], ["heat_pump_tank", "Hot water tank"]] },
+  { key: "plan", label: "Predbat", slots: [["plan_status", "Status"], ["plan_cost_today", "Cost today"], ["plan_rate_now", "Price now"],
+    ["plan_rate_export", "Export price"], ["plan_battery_hours", "Battery hours left"], ["plan_charge_start", "Battery charge starts"],
+    ["plan_charge_end", "Battery charge ends"], ["plan_cheap_start", "Cheap rate starts"], ["plan_cheap_end", "Cheap rate ends"]] },
 ];
 
 const reading = (c: EnergyCandidate | undefined) => (c?.state == null ? "" : ` (${c.state}${c.unit ? ` ${c.unit}` : ""})`);

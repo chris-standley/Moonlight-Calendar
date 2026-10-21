@@ -147,8 +147,10 @@ served by `httpx.MockTransport`).
   Home Assistant); a camera that sees a person pops up live (smooth video from Home Assistant) in the corner of the wall screens, or in place of the screensaver photo.
 - Energy: an Energy section drawn as a house: solar on the roof (now and today), the home battery's charge and
   whether it's charging or powering the house, buying from or selling to the grid, whether the car is plugged in and
-  charging, and what the heat pump is doing and drawing, with the power running between them. Sensors are found
-  from Home Assistant's Energy dashboard and their names, and can be changed in Settings > Energy.
+  charging, and what the heat pump is doing and drawing with its COP (worked out from the water flow and
+  temperatures), inside, outside and tank temperatures, the solar forecast before sunrise, the weather in the sky
+  and Predbat's plan underneath, with the power running between them. Sensors are found from Home Assistant's Energy
+  dashboard and their names, and can be changed in Settings > Energy.
 - Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
   energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.
 - Chores from automations: the integration's `moonlight.add_chore` action adds a one-off chore, for example

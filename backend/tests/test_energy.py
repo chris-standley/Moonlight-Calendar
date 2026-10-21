@@ -28,8 +28,8 @@ def W(eid, v, name, unit="W"):
     return st(eid, str(v), unit_of_measurement=unit, device_class="power", friendly_name=name)
 
 
-def KWH(eid, v, name, unit="kWh"):
-    return st(eid, str(v), unit_of_measurement=unit, device_class="energy", friendly_name=name)
+def KWH(eid, v, name, unit="kWh", **attrs):
+    return st(eid, str(v), unit_of_measurement=unit, device_class="energy", friendly_name=name, **attrs)
 
 
 def ha_states():
@@ -78,6 +78,24 @@ def ha_states():
         st("sensor.altherma_climatecontrol_leaving_water_temperature", "28", unit_of_measurement="°C", friendly_name="Altherma ClimateControl Leaving water temperature"),
         st("sensor.altherma_domestichotwatertank_tank_temperature", "45", unit_of_measurement="°C", friendly_name="Altherma DomesticHotWaterTank Tank temperature"),
         st("sensor.altherma_climatecontrol_outdoor_temperature", "9", unit_of_measurement="°C", friendly_name="Altherma ClimateControl Outdoor temperature"),
+        st("sensor.altherma_climatecontrol_room_temperature", "19.2", unit_of_measurement="°C", friendly_name="Altherma ClimateControl Room temperature"),
+        st("sensor.living_room_room_temperature", "19.9", unit_of_measurement="°C", friendly_name="Living room Room temperature"),
+        st("sensor.althermasensors", "Online", **{
+            "friendly_name": "EspAltherma AlthermaSensors", "R1T-Outdoor air temp.": 8.6, "3way valve(On:DHW_Off:Space)": "OFF",
+            "Defrost Operation": "OFF", "Leaving water temp. before BUH (R1T)": 34, "Leaving water temp. after BUH (R2T)": 33.9,
+            "Inlet water temp.(R4T)": 29.1, "DHW tank temp. (R5T)": 44, "Indoor ambient temp. (R1T)": 19.2, "Flow sensor (l/min)": 11.4}),
+        KWH("sensor.fairfields_solar_forecast_forecast_today", 8.04, "Fairfields Solar Forecast Forecast Today",
+            detailedForecast=[{"period_start": f"2026-10-21T{h:02d}:{m:02d}:00+01:00", "pv_estimate": 0.4 if 8 <= h < 17 else 0.02}
+                              for h in range(24) for m in (0, 30)]),
+        KWH("sensor.fairfields_solar_forecast_forecast_tomorrow", 21.88, "Fairfields Solar Forecast Forecast Tomorrow"),
+        KWH("sensor.fairfields_solar_forecast_forecast_remaining_today", 0.1, "Fairfields Solar Forecast Forecast Remaining Today"),
+        st("predbat.status", "Demand", friendly_name="Status"),
+        st("predbat.cost_today", "165.76", unit_of_measurement="p", friendly_name="Cost so far today"),
+        st("predbat.rates", "34.69", unit_of_measurement="p", friendly_name="Import rates"),
+        st("predbat.rates_export", "12.0", unit_of_measurement="p", friendly_name="Export rates"),
+        st("predbat.battery_hours_left", "0.5", unit_of_measurement="hours", friendly_name="Predicted Battery Hours left"),
+        st("predbat.best_charge_start", "23:30:00", timestamp="2026-10-21T23:30:00+0100", rate=6.6, device_class="timestamp"),
+        st("predbat.best_charge_end", "05:30:00", timestamp="2026-10-22T05:30:00+0100", rate=6.6, device_class="timestamp"),
         st("light.kitchen", "on", friendly_name="Kitchen"),
     ]
 
@@ -191,6 +209,12 @@ def test_suggest_from_energy_dashboard_and_names():
     assert one["heat_pump_flow"] == "sensor.altherma_climatecontrol_leaving_water_temperature"
     assert one["heat_pump_tank"] == "sensor.altherma_domestichotwatertank_tank_temperature"
     assert one["outdoor_temp"] == "sensor.altherma_climatecontrol_outdoor_temperature"
+    assert one["inside_temp"] == "sensor.altherma_climatecontrol_room_temperature"
+    assert one["heat_pump_details"] == "sensor.althermasensors"
+    assert one["solar_forecast"] == "sensor.fairfields_solar_forecast_forecast_today"
+    assert one["solar_forecast_tomorrow"] == "sensor.fairfields_solar_forecast_forecast_tomorrow"
+    assert one["plan_status"] == "predbat.status" and one["plan_charge_start"] == "predbat.best_charge_start"
+    assert "plan_cheap_start" not in auto  # not in this Home Assistant
 
 
 def test_suggest_without_energy_dashboard():
@@ -231,7 +255,9 @@ def test_plug_and_charging_words():
 def test_overview(client):
     r = client.get("/api/energy").json()
     assert r["configured"] and r["reachable"]
-    assert r["solar"] == {"power": 2450, "today": 7.0}
+    solar = r["solar"]
+    assert solar["power"] == 2450 and solar["today"] == 7.0
+    assert solar["forecast_today"] == 8.04 and solar["forecast_tomorrow"] == 21.88
     assert r["battery"] == {"soc": 64, "power": 1518, "state": "discharging"}
     assert r["grid"]["power"] == -120 and r["grid"]["state"] == "exporting"
     assert r["grid"]["import_today"] == 12.9 and r["grid"]["export_today"] == 1.8
@@ -241,7 +267,52 @@ def test_overview(client):
     assert car["soc"] == 50 and car["range"] == 129 and car["range_unit"] == "mi"
     hp = r["heat_pump"]
     assert hp["running"] is True and hp["doing"] == "Heating the house" and hp["power"] == 774
-    assert hp["today"] == 7.0 and hp["flow_temp"] == 28.0 and hp["tank_temp"] == 45.0 and hp["outdoor_temp"] == 9.0
+    assert hp["today"] == 7.0 and hp["flow_temp"] == 28.0
+    # 11.4 l/min leaving at 33.9° and back at 29.1°: 3.8 kW of heat for 774 W
+    assert hp["heat"] == 3818 and hp["cop"] == 4.9
+    assert r["temperatures"] == {"inside": 19.2, "outside": 9.0, "tank": 45.0}
+    plan = r["plan"]
+    assert plan["status"] == "Demand" and plan["cost_today"] == 165.76 and plan["cost_unit"] == "p"
+    assert plan["rate_now"] == 34.69 and plan["rate_export"] == 12.0 and plan["battery_hours"] == 0.5
+    assert plan["charge"] == {"start": "2026-10-21T23:30:00+01:00", "end": "2026-10-22T05:30:00+01:00", "rate": 6.6}
+    assert plan["cheap"] is None
+
+
+def test_solar_window():
+    from datetime import datetime, timezone
+    s = ha_states()
+    fc = next(x for x in s if x["entity_id"] == "sensor.fairfields_solar_forecast_forecast_today")
+    starts, ends = energy.solar_window(fc, datetime(2026, 10, 21, 5, 0, tzinfo=timezone.utc))
+    assert starts == "2026-10-21T08:00:00+01:00" and ends == "2026-10-21T17:00:00+01:00"
+    assert energy.solar_window(fc, datetime(2026, 10, 22, 5, 0, tzinfo=timezone.utc)) == (None, None)  # yesterday's
+    assert energy.solar_window(st("sensor.x", "3"), datetime.now(timezone.utc)) == (None, None)
+
+
+def test_heat_pump_details_and_hot_water():
+    d = energy.details(st("sensor.esp", "Online", **{"3way valve(On:DHW_Off:Space)": "ON", "Flow sensor (l/min)": "12",
+                                                     "Leaving water temp. after BUH (R2T)": 50, "Inlet water temp.(R4T)": 45}))
+    assert d == {"flow_rate": 12.0, "flow_temp": 50.0, "return_temp": 45.0, "hot_water": True}
+
+
+def test_cop_day():
+    day = energy.CopDay()
+    run = {"heat": 4000.0, "power": 1000.0, "hot_water": False, "defrost": False}
+    day.sample(0, "2026-10-21", run, True)
+    day.sample(3600 * 0 + 60, "2026-10-21", run, True)              # a minute of heating
+    day.sample(120, "2026-10-21", run | {"heat": 2000.0, "hot_water": True}, True)  # a minute of hot water
+    day.sample(1000, "2026-10-21", run, True)                       # a gap: not counted
+    day.sample(1060, "2026-10-21", {"heat": 0.0, "power": 20.0, "hot_water": False, "defrost": False}, False)
+    assert round(day.heat["heating"], 2) == 66.67 and round(day.elec["heating"], 2) == 16.67
+    assert round(day.heat["hot_water"], 2) == 33.33 and round(day.elec["idle"], 3) == 0.333
+    again = energy.CopDay(day.as_dict())
+    assert again.as_dict() == day.as_dict()
+    again.sample(1100, "2026-10-22", run, True)                     # midnight: starts again
+    assert again.heat["heating"] == 0 and again.day == "2026-10-22"
+    r = energy.build({"entities": {s: [] for s in energy.SLOTS} | {"heat_pump_power": ["sensor.p"]},
+                      "battery_invert": False, "grid_invert": False, "auto": {}},
+                     {"sensor.p": W("sensor.p", 1000, "P")},
+                     {"day": "x", "heat": {"heating": 9000, "hot_water": 2000}, "elec": {"heating": 2400, "hot_water": 800, "idle": 50}})
+    assert r["heat_pump"]["cop_today"] == {"heating": 3.8, "hot_water": 2.5, "overall": 3.4}
 
 
 def test_car_charging_and_heat_pump_idle(client, fake):

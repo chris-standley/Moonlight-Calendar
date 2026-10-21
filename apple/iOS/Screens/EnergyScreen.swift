@@ -19,9 +19,10 @@ struct EnergyScreen: View {
                             if !data.reachable {
                                 Text("Can't reach Home Assistant").font(Theme.text(.subheadline, .heavy)).foregroundStyle(Theme.danger)
                             }
-                            EnergyHouse(data: data, compact: room == .narrow)
+                            EnergyHouse(data: data, compact: room == .narrow, sky: model.weather?.current)
                                 .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
-                            if room == .narrow { EnergyCards(data: data) }
+                            if let plan = data.plan { EnergyPlan(plan: plan) }
+                            if room == .narrow { EnergyCards(data: data, outside: model.weather.map { Double($0.current.temp) }) }
                         }
                     } else {
                         ProgressView().padding(40)

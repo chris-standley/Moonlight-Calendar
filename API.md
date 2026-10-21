@@ -376,21 +376,35 @@ person broadcasts `security_alert`.
 
 ## Energy (solar, battery, grid, car and heat pump from Home Assistant)
 Read-only; the screens draw it as a house with the power flowing between its parts. Each value is a slot filled by
-one HA entity: `solar_power, solar_today, battery_soc, battery_power, grid_power, grid_import_today,
-grid_export_today, home_power, home_today, car_plug, car_status, car_power, car_soc, car_range, car_session,
-heat_pump_mode, heat_pump_power, heat_pump_today, heat_pump_flow, heat_pump_tank, outdoor_temp`. A slot is automatic
+one HA entity: `solar_power, solar_today, solar_forecast, solar_forecast_tomorrow, battery_soc, battery_power,
+grid_power, grid_import_today, grid_export_today, home_power, home_today, car_plug, car_status, car_power, car_soc,
+car_range, car_session, heat_pump_mode, heat_pump_power, heat_pump_today, heat_pump_flow, heat_pump_return,
+heat_pump_flow_rate, heat_pump_details, inside_temp, outdoor_temp, heat_pump_tank, plan_status, plan_cost_today,
+plan_rate_now, plan_rate_export, plan_battery_hours, plan_charge_start, plan_charge_end, plan_cheap_start,
+plan_cheap_end`. `heat_pump_details` is one entity carrying a controller's readings as attributes (ESPAltherma's
+flow rate, leaving and inlet water, tank, indoor, outdoor, 3-way valve, defrost); the `plan_*` slots are Predbat's
+`predbat.*` entities, found by id. A slot is automatic
 until picked: HA's Energy dashboard first (`energy/get_prefs`: the solar, battery and grid `stat_rate` power sensors
 with HA's signs, and devices named car or heat pump), then entity ids and names, preferring the same device as what
 was found (an inverter's `..._soc` beside its `..._battery_power`; a heat pump's power from the meter its "Heat Pump"
 energy sensor is named after). `heat_pump_today` may add two sensors up (heating and hot water). Read again every 5
 minutes (or with `refresh`).
-- `GET /api/energy` -> `{configured, reachable, error, updated, solar: {power, today} | null,
+- `GET /api/energy` -> `{configured, reachable, error, updated, solar: {power, today, forecast_today,
+  forecast_tomorrow, starts, ends} | null,
   battery: {soc, power (+ discharging, - charging), state: "charging"|"discharging"|"idle"|null} | null,
   grid: {power (+ importing, - exporting), state: "importing"|"exporting"|"idle"|null, import_today, export_today} | null,
   home: {power, today, computed} | null, car: {plugged_in, charging, status, power, soc, range, range_unit, session} | null,
   heat_pump: {running, doing ("Heating the house", "Heating hot water", "Defrosting", "Cooling", "Running", "Idle"),
-  power, today, flow_temp, tank_temp, outdoor_temp} | null}`. Power in W (kW sensors converted), energy in kWh. A part
-  is null when none of its slots has an entity. Under 30 W counts as idle; a heat pump runs from 100 W; a car is
+  power, today, flow_temp, heat, cop, cop_today: {heating, hot_water, overall} | null} | null,
+  temperatures: {inside, outside, tank} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
+  battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null}`. Power in W (kW sensors
+  converted), energy in kWh. A part is null when none of its slots has an entity. `solar.starts`/`ends` (ISO): the
+  first and last half hour of today's forecast with any output (a Solcast-style `detailedForecast` attribute).
+  `heat_pump.heat` (W) = water flow × 4186 × (leaving − return temperature), from the controller's readings or the
+  flow-rate and return slots; `cop` = heat ÷ power while running. `cop_today`: heat and electricity added up every
+  10 seconds since local midnight (kept across restarts), split by the 3-way valve (or the mode) into heating and hot
+  water; electricity while idle counts only in `overall`; null until 50 Wh has been used. A temperature with nothing
+  picked falls back to the controller's reading. Under 30 W counts as idle; a heat pump runs from 100 W; a car is
   charging from 200 W or when its status says so. `home.computed`: no home sensor, so solar + battery + grid.
   `configured: false` without Home Assistant.
 - `GET /api/energy/options?refresh=false` -> `{slots: {slot: {kind: "power"|"energy"|"percent"|"temperature"|"number"|"state",
