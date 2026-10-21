@@ -84,7 +84,8 @@ struct EnergyHouse: View {
             chip(s, compact ? 120 : 135, compact ? 300 : 330, .center, EnergyColors.car, "Car", Energy.carValue(c),
                  [c.soc.map { soc in "\(Int(soc.rounded()))%" + (!compact ? c.range.map { " · \(Int($0.rounded())) \(c.range_unit ?? "")" } ?? "" : "") },
                   compact ? nil : (c.charging == true ? "Charging" : nil),
-                  compact ? nil : c.session.flatMap { $0 > 0 ? "\(Energy.kwh($0)) added" : nil }])
+                  compact ? nil : c.session.flatMap { $0 > 0 ? "\(Energy.kwh($0)) added" : nil },
+                  compact ? nil : Energy.carTarget(c)])
         }
         if let hp = d.heat_pump {
             chip(s, compact ? 800 : 712, compact ? 375 : 370, compact ? .center : .leading, EnergyColors.heat, "Heat pump",
@@ -121,13 +122,14 @@ struct EnergyHouse: View {
 
 /// Predbat's plan under the picture: what it's doing, the price now, today's cost and the next cheap charge.
 struct EnergyPlan: View {
-    let plan: EnergyOverview.Plan
+    let plan: EnergyOverview.Plan?
+    var tariff: EnergyOverview.Tariff? = nil
     var titleSize: CGFloat = 11
     var valueSize: CGFloat = 15
 
     var body: some View {
         CenteredWrap(spacing: 8) {
-            ForEach(Array(Energy.planItems(plan).enumerated()), id: \.offset) { _, item in
+            ForEach(Array(Energy.planItems(plan, tariff).enumerated()), id: \.offset) { _, item in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(item.0.uppercased()).font(.system(size: titleSize, weight: .heavy, design: .rounded))
                         .tracking(0.8).foregroundStyle(Theme.muted)
@@ -255,7 +257,24 @@ enum Energy {
         return .day
     }
 
-    static func planItems(_ p: EnergyOverview.Plan, now: Date = Date()) -> [(String, String)] {
+    static func planItems(_ p: EnergyOverview.Plan?, _ t: EnergyOverview.Tariff?, now: Date = Date()) -> [(String, String)] {
+        var out: [(String, String)] = []
+        if let p { out = predbatItems(p, now: now) }
+        if let t {
+            func span(_ s: EnergyOverview.Tariff.Slot) -> String { time(s.start) + "–" + time(s.end) }
+            var cheap: [(String, String)] = []
+            if t.cheap_now { cheap.append(("Cheap rate", t.cheap_until.map { "now until " + time($0) } ?? "now")) }
+            else if let n = t.next { cheap.append(("Next cheap", span(n))) }
+            cheap += t.bonus.prefix(2).map { ("Bonus slot", span($0)) }
+            // In place of Predbat's own cheap-rate item, before its battery charge
+            out.removeAll { $0.0 == "Cheap rate" }
+            let at = out.firstIndex { $0.0 == "Charging battery" } ?? out.count
+            out.insert(contentsOf: cheap, at: at)
+        }
+        return out
+    }
+
+    private static func predbatItems(_ p: EnergyOverview.Plan, now: Date) -> [(String, String)] {
         let unit = p.rate_unit ?? "p"
         func soon(_ w: EnergyOverview.Plan.Window?) -> EnergyOverview.Plan.Window? {
             guard let w else { return nil }
@@ -303,6 +322,15 @@ enum Energy {
         if c.plugged_in == true { return "Plugged in" }
         if c.plugged_in == false { return "Not plugged in" }
         return c.status ?? "–"
+    }
+    /// "To 80% by 7am".
+    static func carTarget(_ c: EnergyOverview.Car) -> String? {
+        switch (c.limit, c.ready) {
+        case let (l?, r?): return "To \(Int(l.rounded()))% by \(time(r))"
+        case let (l?, nil): return "To \(Int(l.rounded()))%"
+        case let (nil, r?): return "Ready by \(time(r))"
+        default: return nil
+        }
     }
     static func shortDoing(_ doing: String) -> String? {
         switch doing {
@@ -597,7 +625,7 @@ struct EnergyCards: View {
             out.append(Item(tint: EnergyColors.car, title: "Car", value: value, lines: [
                 c.charging == true ? c.power.map { Energy.watts($0) } : nil,
                 c.soc.map { soc in "\(Int(soc.rounded()))%" + (c.range.map { " · \(Int($0.rounded())) \(c.range_unit ?? "")" } ?? "") },
-                c.session.flatMap { $0 > 0 ? "\(Energy.kwh($0)) added" : nil },
+                c.session.flatMap { $0 > 0 ? "\(Energy.kwh($0)) added" : nil }, Energy.carTarget(c),
             ].compactMap { $0 }))
         }
         if let hp = d.heat_pump {

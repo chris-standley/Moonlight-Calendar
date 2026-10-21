@@ -22,6 +22,8 @@ const SLOTS: Record<EnergySlot, [EnergyKind, string, string]> = {
   car_soc: ["percent", "sensor.car_ev_battery_level", "Car EV battery level"],
   car_range: ["number", "sensor.car_ev_range", "Car EV range"],
   car_session: ["energy", "sensor.charger_session_energy", "Charger session energy"],
+  car_limit: ["percent", "number.car_charge_limit", "Car charge limit"],
+  car_ready: ["state", "select.car_ready_time", "Car ready time"],
   heat_pump_mode: ["state", "sensor.heat_pump_operation", "Heat pump operation"],
   heat_pump_power: ["power", "sensor.heat_pump_power", "Heat pump power"],
   heat_pump_today: ["energy", "sensor.heat_pump_energy_today", "Heat pump energy today"],
@@ -41,6 +43,8 @@ const SLOTS: Record<EnergySlot, [EnergyKind, string, string]> = {
   plan_charge_end: ["state", "predbat.best_charge_end", "Predicted charge end time"],
   plan_cheap_start: ["state", "predbat.low_rate_start", "Next low rate start"],
   plan_cheap_end: ["state", "predbat.low_rate_end", "Next low rate end"],
+  cheap_off_peak: ["state", "binary_sensor.octopus_off_peak", "Octopus off peak"],
+  cheap_dispatches: ["state", "binary_sensor.octopus_intelligent_dispatching", "Octopus intelligent dispatching"],
 };
 const GROUP = (s: EnergySlot) => (s === "inside_temp" || s === "outdoor_temp" || s === "heat_pump_tank" ? "temperatures"
   : s.startsWith("heat_pump") ? "heat_pump" : s.split("_")[0]) as EnergyOptions["slots"][EnergySlot]["group"];
@@ -82,7 +86,8 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
         grid: on("grid_power") ? { power: g, state: g > 30 ? "importing" : g < -30 ? "exporting" : "idle", import_today: on("grid_import_today") ? 6.2 : null, export_today: on("grid_export_today") ? 3.9 : null } : null,
         home: on("home_power") || on("home_today") ? { power: on("home_power") ? home : null, today: on("home_today") ? 14.8 : null, computed: false } : null,
         car: on("car_plug") || on("car_status") || on("car_power") || on("car_soc")
-          ? { plugged_in: true, charging: car > 0, status: car > 0 ? "Charging" : "Plugged in · waiting", power: on("car_power") ? car : null, soc: on("car_soc") ? 64 : null, range: on("car_range") ? 168 : null, range_unit: "mi", session: on("car_session") ? 5.3 : null }
+          ? { plugged_in: true, charging: car > 0, status: car > 0 ? "Charging" : "Plugged in · waiting", power: on("car_power") ? car : null, soc: on("car_soc") ? 64 : null, range: on("car_range") ? 168 : null, range_unit: "mi", session: on("car_session") ? 5.3 : null,
+            limit: on("car_limit") ? 80 : null, ready: on("car_ready") ? at(7, 0, hour >= 7 ? 1 : 0) : null }
           : null,
         heat_pump: on("heat_pump_mode") || on("heat_pump_power")
           ? { running: true, doing: "Heating the house", power: on("heat_pump_power") ? hp : null, today: on("heat_pump_today") ? 6.1 : null, flow_temp: on("heat_pump_flow") ? 34.5 : null,
@@ -94,6 +99,10 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
         plan: on("plan_status")
           ? { status: "Demand", cost_today: 138, cost_unit: "p", rate_now: hour >= 23.5 || hour < 5.5 ? 6.6 : 34.69, rate_export: 12, rate_unit: "p", battery_hours: 4.5,
             charge: { start: at(23, 30), end: at(5, 30, 1), rate: 6.6 }, cheap: { start: at(23, 30), end: at(5, 30, 1), rate: 6.6 } }
+          : null,
+        tariff: on("cheap_off_peak") || on("cheap_dispatches")
+          ? { cheap_now: hour >= 23.5 || hour < 6, cheap_until: hour >= 23.5 || hour < 6 ? at(6, 0, hour >= 23.5 ? 1 : 0) : null,
+            next: hour >= 23.5 || hour < 6 ? null : { start: at(23, 30), end: at(6, 0, 1) }, bonus: [{ start: at(5, 30, hour >= 6 ? 1 : 0), end: at(6, 0, hour >= 6 ? 1 : 0) }], dispatching: false }
           : null,
       };
     },

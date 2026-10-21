@@ -264,6 +264,8 @@ struct EnergyOverview: Codable {
     struct Car: Codable {
         var plugged_in: Bool?; var charging: Bool?; var status: String?; var power: Double?
         var soc: Double?; var range: Double?; var range_unit: String?; var session: Double?
+        /// limit: the % charging stops at; ready: when it should be done by (ISO).
+        var limit: Double?; var ready: String?
     }
     /// heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight.
     struct HeatPump: Codable {
@@ -289,6 +291,13 @@ struct EnergyOverview: Codable {
     var heat_pump: HeatPump?
     var temperatures: Temperatures?
     var plan: Plan?
+    var tariff: Tariff?
+
+    /// Cheap electricity from the Octopus Energy integration; bonus: car-charging slots outside the usual night hours.
+    struct Tariff: Codable {
+        struct Slot: Codable { var start: String; var end: String }
+        var cheap_now: Bool; var cheap_until: String?; var next: Slot?; var bonus: [Slot] = []; var dispatching: Bool?
+    }
 
     var isEmpty: Bool { solar == nil && battery == nil && grid == nil && home == nil && car == nil && heat_pump == nil }
 }
