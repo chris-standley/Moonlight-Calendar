@@ -184,8 +184,10 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
         </nav>
         <main className="main">
           {/* A compact screen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
-          <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")}
-            nursery={setup.sections.includes("nursery") ? null : nursery} />
+          {/* Energy on a wall screen fills the screen and carries its own clock. */}
+          {!(tab === "energy" && layout !== "phone") &&
+            <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")}
+              nursery={setup.sections.includes("nursery") ? null : nursery} />}
           {ready && <SyncBanner onOpen={() => setTab("settings")} />}
           <div className={"content" + (lift > 0 ? " lifted" : "")} ref={content} style={lift ? { marginTop: -lift } : undefined}>
             {ready && <>
