@@ -1,3 +1,3 @@
 """Moonlight: a self-hosted family wall calendar backend."""
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

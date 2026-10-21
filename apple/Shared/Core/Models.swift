@@ -248,6 +248,35 @@ struct Photo: Codable, Identifiable, Hashable {
     }
 }
 
+/// Energy (GET /api/energy): solar, battery, grid, car and heat pump from Home Assistant. Power in watts, energy in
+/// kWh; each part is nil when nothing is set for it in Settings › Energy.
+struct EnergyOverview: Codable {
+    struct Solar: Codable { var power: Double?; var today: Double? }
+    /// power: positive = discharging into the house, negative = charging.
+    struct Battery: Codable { var soc: Double?; var power: Double?; var state: String? }
+    /// power: positive = importing, negative = exporting.
+    struct Grid: Codable { var power: Double?; var state: String?; var import_today: Double?; var export_today: Double? }
+    struct Home: Codable { var power: Double?; var today: Double?; var computed: Bool? }
+    struct Car: Codable {
+        var plugged_in: Bool?; var charging: Bool?; var status: String?; var power: Double?
+        var soc: Double?; var range: Double?; var range_unit: String?; var session: Double?
+    }
+    struct HeatPump: Codable {
+        var running: Bool; var doing: String; var power: Double?; var today: Double?
+        var flow_temp: Double?; var tank_temp: Double?; var outdoor_temp: Double?
+    }
+    var configured: Bool
+    var reachable: Bool = true
+    var solar: Solar?
+    var battery: Battery?
+    var grid: Grid?
+    var home: Home?
+    var car: Car?
+    var heat_pump: HeatPump?
+
+    var isEmpty: Bool { solar == nil && battery == nil && grid == nil && home == nil && car == nil && heat_pump == nil }
+}
+
 /// Nursery updates from Tapestry (GET /api/nursery and /api/nursery/updates).
 struct NurseryConfig: Codable {
     let configured: Bool

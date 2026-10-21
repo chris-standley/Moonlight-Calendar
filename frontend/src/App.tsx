@@ -4,7 +4,7 @@ import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
-  IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
+  IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -21,10 +21,11 @@ import { RecipesView } from "./views/RecipesView";
 import { NurseryButton, NurseryFeed, NurseryView, useNurseryFeed } from "./views/NurseryView";
 
 import { SecurityView } from "./views/SecurityView";
+import { EnergyView } from "./views/EnergyView";
 import { SecurityAlerts } from "./views/SecurityAlerts";
 import { ScreenAlerts } from "./views/ScreenAlerts";
 
-type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security" | "settings";
+type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security" | "energy" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { key: "today", label: "Today", icon: IconHome },
   { key: "calendar", label: "Calendar", icon: IconCalendar },
@@ -35,6 +36,7 @@ const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode 
   { key: "lists", label: "Lists", icon: IconLists },
   { key: "nursery", label: "Nursery", icon: IconNursery },
   { key: "security", label: "Security", icon: IconShield },
+  { key: "energy", label: "Energy", icon: IconBolt },
   { key: "settings", label: "Settings", icon: IconSettings },
 ];
 const THEME_KEY = "moonlight-theme";
@@ -196,6 +198,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
               {tab === "lists" && <ListsView />}
               {tab === "nursery" && <NurseryView feed={nursery} />}
               {tab === "security" && <SecurityView />}
+              {tab === "energy" && <EnergyView />}
               {tab === "settings" && <SettingsView onScreensaver={() => setSaver(true)} />}
             </>}
           </div>

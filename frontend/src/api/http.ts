@@ -196,5 +196,7 @@ export function httpApi(base = ""): Api {
     securityAlerts: async () => (await get<SecurityAlert[]>("/api/security/alerts")).map(cam),
     securityOptions: (refresh = false) => get("/api/security/options" + (refresh ? "?refresh=true" : "")),
     testSecurityAlert: async (camera, pin) => { await req("POST", "/api/security/test-alert", { camera, pin }); },
+    energy: () => get("/api/energy"),
+    energyOptions: (refresh = false) => get("/api/energy/options" + (refresh ? "?refresh=true" : "")),
   };
 }

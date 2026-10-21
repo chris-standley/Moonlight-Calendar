@@ -40,6 +40,7 @@ struct RootView: View {
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @State private var nursery = false
+    @State private var energy = false
 
     var body: some View {
         TabView {
@@ -51,6 +52,8 @@ struct MainTabs: View {
             Tab("Lists", systemImage: "list.bullet") { ListsView() }
             // Once Tapestry is connected in Settings › Nursery on a wall screen.
             if nursery { Tab("Nursery", systemImage: "figure.and.child.holdinghands") { NurseryView() } }
+            // Once Home Assistant has something for the house picture (Settings › Energy on a wall screen).
+            if energy { Tab("Energy", systemImage: "bolt") { EnergyView() } }
             Tab("Photos", systemImage: "photo.on.rectangle") { PhotosView() }
             Tab("Settings", systemImage: "gearshape") { SettingsView() }
         }
@@ -59,6 +62,9 @@ struct MainTabs: View {
         .task { await model.refreshWeatherPeriodically() }
         .task(id: model.rev("nursery")) {
             if let c = await model.call({ try await $0.nursery() }) { nursery = c.configured }
+        }
+        .task(id: model.rev("settings")) {
+            if let e = await model.call({ try await $0.energy() }) { energy = e.configured && !e.isEmpty }
         }
         // The remote's Play/Pause controls this screen's speaker from anywhere (Photos uses it for the slideshow).
         .onPlayPauseCommand {

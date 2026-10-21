@@ -145,6 +145,10 @@ served by `httpx.MockTransport`).
   show a small player in the top bar only if given a speaker.
 - Security: a Security section with the alarm (Alarmo), Alarmo's sensors and the cameras (UniFi Protect through
   Home Assistant); a camera that sees a person pops up live (smooth video from Home Assistant) in the corner of the wall screens, or in place of the screensaver photo.
+- Energy: an Energy section drawn as a house: solar on the roof (now and today), the home battery's charge and
+  whether it's charging or powering the house, buying from or selling to the grid, whether the car is plugged in and
+  charging, and what the heat pump is doing and drawing, with the power running between them. Sensors are found
+  from Home Assistant's Energy dashboard and their names, and can be changed in Settings > Energy.
 - Calendars: Settings > Calendars > Home Assistant shows any HA calendar entity (bin collections, Workday,
   energy saving sessions) on Moonlight, read-only and refreshed every 15 minutes.
 - Chores from automations: the integration's `moonlight.add_chore` action adds a one-off chore, for example

@@ -15,7 +15,7 @@ implementation of the same contract, used for the published preview). Keep them 
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
   media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv},
-  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}}`
+  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}, energy: {entities?, battery_invert?, grid_invert?}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
@@ -27,19 +27,22 @@ implementation of the same contract, used for the published preview). Keep them 
   `media_players` = the speaker (HA `media_player.*` entity id, `""` = none) each style shows; compact defaults to
   `MOONLIGHT_MEDIA_ENTITY` if set (development), the others to none.
   `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
-  chores, rewards, meals, recipes, lists, security` (Settings is always shown), and the one it opens on (default large
-  `{start: "calendar", sections: all but today}`, compact `{start: "today", sections: all}`, phone the same without
-  security). Upgrading to 0.6.0 adds `security` once to the large and compact menus.
+  chores, rewards, meals, recipes, lists, nursery, security, energy` (Settings is always shown), and the one it opens on (default large
+  `{start: "calendar", sections: all but today}`, compact `{start: "today", sections: all but nursery}`, phone the same without
+  security). Upgrading to 0.6.0 adds `security` once to the large and compact menus; upgrading to 0.8.0 adds `energy`
+  once to every style's menu.
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
   `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
   code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
   (otherwise none). Dates come from the `holidays` package (see Public holidays).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, theme, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security`, plus `pin` (required) -> settings.
+  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security, energy`, plus `pin` (required) -> settings.
   `security` (merged, see Security): `alarm_entity` an `alarm_control_panel.*` id, `""` none, null automatic;
   `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
   `popup: {large?, compact?, phone?, tv?: bool}` (default large and compact on; `tv` is the Apple TV app, off). Broadcasts `security` and `security_alert`.
+  `energy` (merged, see Energy): `entities: {slot: entity id | "" (none) | null (automatic)}`, `battery_invert`,
+  `grid_invert`: bool or null (automatic). Broadcasts `energy`.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
@@ -370,6 +373,32 @@ offers is read again every 5 minutes (or with `refresh`). Screens only ever name
 Live updates: the panel, the sensors and the shown cameras' person sensors are followed over HA's WebSocket like the
 speakers (polling `/api/states` while it's down). Any change broadcasts `security`; a change in which cameras have a
 person broadcasts `security_alert`.
+
+## Energy (solar, battery, grid, car and heat pump from Home Assistant)
+Read-only; the screens draw it as a house with the power flowing between its parts. Each value is a slot filled by
+one HA entity: `solar_power, solar_today, battery_soc, battery_power, grid_power, grid_import_today,
+grid_export_today, home_power, home_today, car_plug, car_status, car_power, car_soc, car_range, car_session,
+heat_pump_mode, heat_pump_power, heat_pump_today, heat_pump_flow, heat_pump_tank, outdoor_temp`. A slot is automatic
+until picked: HA's Energy dashboard first (`energy/get_prefs`: the solar, battery and grid `stat_rate` power sensors
+with HA's signs, and devices named car or heat pump), then entity ids and names, preferring the same device as what
+was found (an inverter's `..._soc` beside its `..._battery_power`; a heat pump's power from the meter its "Heat Pump"
+energy sensor is named after). `heat_pump_today` may add two sensors up (heating and hot water). Read again every 5
+minutes (or with `refresh`).
+- `GET /api/energy` -> `{configured, reachable, error, updated, solar: {power, today} | null,
+  battery: {soc, power (+ discharging, - charging), state: "charging"|"discharging"|"idle"|null} | null,
+  grid: {power (+ importing, - exporting), state: "importing"|"exporting"|"idle"|null, import_today, export_today} | null,
+  home: {power, today, computed} | null, car: {plugged_in, charging, status, power, soc, range, range_unit, session} | null,
+  heat_pump: {running, doing ("Heating the house", "Heating hot water", "Defrosting", "Cooling", "Running", "Idle"),
+  power, today, flow_temp, tank_temp, outdoor_temp} | null}`. Power in W (kW sensors converted), energy in kWh. A part
+  is null when none of its slots has an entity. Under 30 W counts as idle; a heat pump runs from 100 W; a car is
+  charging from 200 W or when its status says so. `home.computed`: no home sensor, so solar + battery + grid.
+  `configured: false` without Home Assistant.
+- `GET /api/energy/options?refresh=false` -> `{slots: {slot: {kind: "power"|"energy"|"percent"|"temperature"|"number"|"state",
+  group, entities: [ids in use], auto: bool, suggested: [ids automatic would use]}}, battery_invert, grid_invert,
+  candidates: {kind: [{entity_id, name, state, unit}]}}` for Settings > Energy. 409 without HA.
+
+Live updates: the entities in use are followed over HA's WebSocket; changes broadcast `energy`, at most every 4
+seconds.
 
 ## Notifications and timers (from Home Assistant)
 Put up by the Home Assistant integration (`moonlight.show_notification`, `moonlight.start_timer`) or any paired

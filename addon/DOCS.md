@@ -118,6 +118,23 @@ stream of the camera. For a lighter stream on a Raspberry Pi, enable each camera
 Home Assistant: compact screens then play it, while large screens and the Apple TV keep the full resolution. Turning on
 "Preload stream" in each camera entity's settings makes the video start faster. Cameras that can't stream fall back to snapshots about twice a second.
 
+## Energy
+
+The Energy section draws your house with the power running between its parts, live from Home Assistant:
+
+- **Solar**: what the panels make now and so far today.
+- **Battery**: how full it is, and whether it's charging or powering the house.
+- **Grid**: buying or selling right now, and how much was bought and sold today.
+- **Home**: what the house is using now and today.
+- **Car**: plugged in or not, charging or not, how fast, the car's battery and range, and what this charge added.
+- **Heat pump**: whether it's running, what it's doing (heating the house, hot water, defrosting), what it draws,
+  and its flow, tank and outside temperatures.
+
+Moonlight finds the sensors itself, starting with the ones in Home Assistant's Energy dashboard (Settings > Dashboards >
+Energy), then by name (for example a myenergi zappi's plug status, or a heat pump's "Operation" sensor). Settings >
+Energy shows what it picked for each and lets you choose another sensor or None; leave everything for a part on None
+and it isn't drawn. If the battery or grid arrows point the wrong way, use the **Flip direction** switch there.
+
 ## Notifications and timers
 
 With the Moonlight integration installed in Home Assistant, automations and scripts can put things on the screens:

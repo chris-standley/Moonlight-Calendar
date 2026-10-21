@@ -31,6 +31,9 @@ export const IconHome = ({ size, ...p }: P) => (
 export const IconShield = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" /><path d="M8.8 12l2.3 2.3 4.2-4.4" /></svg>
 );
+export const IconBolt = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}><path d="M13.5 2.5L5 13.5h6l-1 8 8.5-11h-6z" /></svg>
+);
 export const IconCctv = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><rect x="3" y="6.5" width="13" height="11" rx="2.5" /><path d="M16 10.5l5-3v9l-5-3" /></svg>
 );

@@ -11,6 +11,7 @@ import { HolidayPicker } from "./HolidaySettings";
 import { RecipesPanel } from "./RecipeSettings";
 import { NurseryPanel } from "./NurserySettings";
 import { SecurityPanel } from "./SecuritySettings";
+import { EnergyPanel } from "./EnergySettings";
 import { useHolidayRegionName } from "../components/holidays";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
@@ -106,6 +107,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
         <RecipesPanel />
         <NurseryPanel />
         <SecurityPanel />
+        <EnergyPanel />
         <SampleDataPanel />
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />
