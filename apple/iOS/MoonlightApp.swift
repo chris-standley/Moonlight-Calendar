@@ -66,6 +66,8 @@ struct MainTabs: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .defaultAdaptableTabBarPlacement(.tabBar)
+        // Notifications and timers from Home Assistant, sent to every device or to this one by name.
+        .overlay { ScreenAlertsOverlay() }
         .task { await model.refreshWeatherPeriodically() }
         // Keep reminders and Siri's list of people and lists in step with the family's data.
         .task(id: model.rev("events", "chores", "people", "settings", "reminders")) {

@@ -24,6 +24,9 @@
     "complete_chore": { "service": "mdi:check-bold" },
     "award_stars": { "service": "mdi:star-plus" },
     "add_chore": { "service": "mdi:broom" },
-    "add_list_item": { "service": "mdi:playlist-plus" }
+    "add_list_item": { "service": "mdi:playlist-plus" },
+    "show_notification": { "service": "mdi:message-alert" },
+    "start_timer": { "service": "mdi:timer-outline" },
+    "clear_notifications": { "service": "mdi:notification-clear-all" }
   }
 }

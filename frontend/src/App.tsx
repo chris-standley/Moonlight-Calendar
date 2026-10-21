@@ -22,6 +22,7 @@ import { NurseryButton, NurseryFeed, NurseryView, useNurseryFeed } from "./views
 
 import { SecurityView } from "./views/SecurityView";
 import { SecurityAlerts } from "./views/SecurityAlerts";
+import { ScreenAlerts } from "./views/ScreenAlerts";
 
 type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
@@ -204,6 +205,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
         <div className="toasts">{toasts.map((t) => <div key={t.id} className="toast">{t.msg}</div>)}</div>
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
         {ready && <SecurityAlerts saver={saver}>{saver && <Screensaver onWake={() => setSaver(false)} />}</SecurityAlerts>}
+        <ScreenAlerts />
        </MediaProvider>
       </div>
     </AppProvider>

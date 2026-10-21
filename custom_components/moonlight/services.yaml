@@ -118,3 +118,171 @@ add_list_item:
       selector:
         config_entry:
           integration: moonlight
+
+show_notification:
+  fields:
+    title:
+      required: false
+      example: Dinner's ready
+      selector:
+        text:
+    message:
+      required: false
+      example: Come to the table, everyone
+      selector:
+        text:
+          multiline: true
+    screens:
+      required: false
+      example: Kitchen
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - all
+            - large
+            - compact
+            - phone
+            - app
+    style:
+      required: false
+      default: fullscreen
+      selector:
+        select:
+          options:
+            - fullscreen
+            - toast
+    duration:
+      required: false
+      example: "00:00:30"
+      selector:
+        duration:
+    icon:
+      required: false
+      example: "🍝"
+      selector:
+        text:
+    image:
+      required: false
+      example: https://example.com/picture.jpg
+      selector:
+        text:
+          type: url
+    dismissible:
+      required: false
+      default: true
+      selector:
+        boolean:
+    chime:
+      required: false
+      default: false
+      selector:
+        boolean:
+    id:
+      required: false
+      example: dinner
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight
+
+start_timer:
+  fields:
+    label:
+      required: true
+      example: Pizza
+      selector:
+        text:
+    description:
+      required: false
+      example: Take it out of the oven
+      selector:
+        text:
+    duration:
+      required: false
+      example: "00:12:00"
+      selector:
+        duration:
+    until:
+      required: false
+      selector:
+        datetime:
+    screens:
+      required: false
+      example: Kitchen
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - all
+            - large
+            - compact
+            - phone
+            - app
+    style:
+      required: false
+      default: toast
+      selector:
+        select:
+          options:
+            - fullscreen
+            - toast
+    finished_for:
+      required: false
+      selector:
+        duration:
+    icon:
+      required: false
+      example: "🍕"
+      selector:
+        text:
+    dismissible:
+      required: false
+      default: true
+      selector:
+        boolean:
+    chime:
+      required: false
+      default: true
+      selector:
+        boolean:
+    id:
+      required: false
+      example: pizza
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight
+
+clear_notifications:
+  fields:
+    id:
+      required: false
+      example: pizza
+      selector:
+        text:
+          multiple: true
+    screens:
+      required: false
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - large
+            - compact
+            - phone
+            - app
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: moonlight

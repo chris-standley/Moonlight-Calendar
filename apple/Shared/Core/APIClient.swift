@@ -139,6 +139,11 @@ struct APIClient: Sendable {
     func nursery() async throws -> NurseryConfig { try await get("/api/nursery") }
     func nurseryUpdates() async throws -> [NurseryUpdate] { try await get("/api/nursery/updates") }
     func securityAlerts() async throws -> [SecurityAlert] { try await get("/api/security/alerts") }
+    func alerts() async throws -> AlertsNow { try await get("/api/alerts") }
+    /// Tapped away here: gone from every screen.
+    func dismissAlert(_ id: String) async throws {
+        let _: Ignored = try await send("POST", "/api/alerts/\(id)/dismiss")
+    }
 
     // MARK: Editing (phone and tablet; the TV only ticks things off)
 

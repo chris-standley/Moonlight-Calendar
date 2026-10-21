@@ -1,0 +1,244 @@
+import AudioToolbox
+import SwiftUI
+
+/// Notifications and timers from Home Assistant (`/api/alerts`), as the wall screens show them: full screen ones
+/// cover the app, toasts and small timers sit in the top corner. Dismissing one closes it on every screen; a full
+/// screen one can also be put away on this device only (Menu on the Apple TV remote, or "Make small" for a timer).
+struct ScreenAlertsOverlay: View {
+    @Environment(AppModel.self) private var model
+    @State private var alerts: [ScreenAlert] = []
+    @State private var skew: Double = 0 // add-on clock minus this one, in ms
+    @State private var small: Set<String> = []
+    @State private var chimed: Set<String> = []
+    @State private var cover: ScreenAlert?
+
+    private var tv: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let t = context.date.timeIntervalSince1970 * 1000 + skew
+            let live = alerts.filter { ($0.expires_at ?? .infinity) > t }
+            let corner = Array(live.filter { !$0.isFullScreen || small.contains($0.key) }.reversed().prefix(3))
+            VStack(alignment: .trailing, spacing: tv ? 20 : 10) {
+                ForEach(corner) { a in
+                    AlertCard(alert: a, now: t, tv: tv) { dismiss(a) }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: tv ? 640 : 420)
+            .padding(.top, tv ? 50 : 8)
+            .padding(.trailing, tv ? Theme.gutter : 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .animation(.easeInOut(duration: 0.3), value: corner.map(\.key))
+            .onChange(of: Int(t / 1000)) { chime(live, t) }
+            .onChange(of: live.last { $0.isFullScreen && !small.contains($0.key) }?.key) { _, _ in
+                cover = live.last { $0.isFullScreen && !small.contains($0.key) }
+            }
+        }
+        .fullScreenCover(item: $cover, onDismiss: {}) { a in
+            FullScreenAlert(alert: a, skew: skew, tv: tv,
+                            dismiss: { dismiss(a) }, putAway: { small.insert(a.key); cover = nil })
+                .environment(model)
+        }
+        .task(id: model.rev("alerts")) { await load() }
+        .task {
+            // In case a push was missed.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                await load()
+            }
+        }
+    }
+
+    private func load() async {
+        guard let now = await model.call({ try await $0.alerts() }) else { return }
+        skew = now.server_time - Date().timeIntervalSince1970 * 1000
+        alerts = now.alerts
+        let t = now.server_time
+        let top = alerts.last { $0.isFullScreen && !small.contains($0.key) && ($0.expires_at ?? .infinity) > t }
+        if top?.key != cover?.key { cover = top }
+        chime(alerts, t)
+    }
+
+    private func dismiss(_ a: ScreenAlert) {
+        alerts.removeAll { $0.id == a.id }
+        if cover?.id == a.id { cover = nil }
+        Task {
+            _ = await model.call { try await $0.dismissAlert(a.id) }
+            await load()
+        }
+    }
+
+    /// A chime for a new notification that asks for one, and for a timer reaching zero (not for old ones on launch).
+    private func chime(_ live: [ScreenAlert], _ t: Double) {
+        for a in live where a.chime && !chimed.contains(a.key) {
+            let at = a.isTimer ? (a.ends_at ?? 0) : a.created_at
+            guard at <= t else { continue }
+            chimed.insert(a.key)
+            if t - at < 30_000 {
+                #if os(iOS)
+                AudioServicesPlayAlertSound(SystemSoundID(1005))
+                #endif
+            }
+        }
+    }
+}
+
+/// Time left: 4:05, 1:02:03, or for a countdown to a day "3 days 4 hr".
+func timeLeft(_ ms: Double) -> String {
+    let s = max(0, Int((ms / 1000).rounded(.up)))
+    if s >= 86_400 {
+        let d = s / 86_400, h = (s % 86_400) / 3600
+        return "\(d) \(d == 1 ? "day" : "days")" + (h > 0 ? " \(h) hr" : "")
+    }
+    let h = s / 3600, m = (s % 3600) / 60, r = s % 60
+    return h > 0 ? String(format: "%d:%02d:%02d", h, m, r) : String(format: "%d:%02d", m, r)
+}
+
+private struct AlertCard: View {
+    let alert: ScreenAlert
+    let now: Double
+    let tv: Bool
+    let dismiss: () -> Void
+
+    var body: some View {
+        let done = alert.isTimer && now >= (alert.ends_at ?? 0)
+        HStack(spacing: tv ? 18 : 10) {
+            if !alert.icon.isEmpty { Text(alert.icon).font(.system(size: tv ? 44 : 28)) }
+            VStack(alignment: .leading, spacing: 2) {
+                if alert.isTimer {
+                    Text(done ? "Time's up" : timeLeft((alert.ends_at ?? 0) - now))
+                        .font(tv ? Theme.font(40, .heavy) : Theme.text(.title2, .heavy)).monospacedDigit()
+                        .foregroundStyle(done ? Theme.starText : Theme.text)
+                    Text([alert.label, alert.description].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
+                        .font(tv ? Theme.font(24, .semibold) : Theme.text(.footnote, .semibold))
+                        .foregroundStyle(Theme.muted).lineLimit(1)
+                } else {
+                    if let title = alert.title, !title.isEmpty {
+                        Text(title).font(tv ? Theme.font(30, .heavy) : Theme.text(.headline, .heavy))
+                    }
+                    if let message = alert.message, !message.isEmpty {
+                        Text(message).font(tv ? Theme.font(24, .semibold) : Theme.text(.subheadline, .semibold))
+                            .foregroundStyle(Theme.muted).lineLimit(3)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            // The TV can't focus the corner, so there it goes when its time is up or Home Assistant clears it.
+            if alert.dismissible && !tv {
+                Button(action: dismiss) {
+                    Image(systemName: "xmark").font(.footnote.weight(.heavy)).frame(width: 32, height: 32)
+                        .background(Theme.surface2, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(done || !alert.isTimer ? "Dismiss" : "Cancel timer")
+            }
+        }
+        .padding(.vertical, tv ? 20 : 12)
+        .padding(.horizontal, tv ? 26 : 14)
+        .background(done ? Theme.starBg : Theme.surface, in: RoundedRectangle(cornerRadius: tv ? 28 : 18, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: tv ? 24 : 14, y: 6)
+        .allowsHitTesting(!tv)
+    }
+}
+
+private struct FullScreenAlert: View {
+    let alert: ScreenAlert
+    let skew: Double
+    let tv: Bool
+    let dismiss: () -> Void
+    let putAway: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let t = context.date.timeIntervalSince1970 * 1000 + skew
+            VStack(spacing: tv ? 50 : 28) {
+                Spacer(minLength: 0)
+                if alert.isTimer { timer(t) } else { note }
+                HStack(spacing: tv ? 40 : 14) {
+                    if alert.isTimer {
+                        Button("Make small", action: putAway)
+                    }
+                    if alert.dismissible {
+                        Button(alert.isTimer && t < (alert.ends_at ?? 0) ? "Cancel timer" : "Dismiss", action: dismiss)
+                    }
+                }
+                .font(tv ? Theme.font(30) : Theme.text(.headline))
+                #if os(iOS)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                #endif
+                Spacer(minLength: 0)
+            }
+            .padding(tv ? 80 : 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .multilineTextAlignment(.center)
+            .background {
+                ZStack {
+                    Theme.bg
+                    RadialGradient(colors: [Theme.accent.opacity(0.14), .clear], center: .init(x: 0.5, y: 0.35),
+                                   startRadius: 0, endRadius: tv ? 900 : 500)
+                }
+                .ignoresSafeArea()
+            }
+        }
+        #if os(tvOS)
+        .onExitCommand(perform: putAway) // Menu puts it away on this TV only
+        #endif
+        .interactiveDismissDisabled()
+    }
+
+    private var note: some View {
+        VStack(spacing: tv ? 30 : 16) {
+            if !alert.icon.isEmpty { Text(alert.icon).font(.system(size: tv ? 150 : 90)) }
+            if let title = alert.title, !title.isEmpty {
+                Text(title).font(tv ? Theme.font(80, .heavy) : Theme.text(.largeTitle, .heavy))
+            }
+            if let message = alert.message, !message.isEmpty {
+                Text(message).font(tv ? Theme.font(40, .semibold) : Theme.text(.title3, .semibold)).foregroundStyle(Theme.muted)
+            }
+            if let image = alert.image {
+                RemoteImage(path: image, contentMode: .fit)
+                    .frame(maxWidth: tv ? 1100 : 500, maxHeight: tv ? 450 : 280)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            }
+        }
+    }
+
+    private func timer(_ t: Double) -> some View {
+        let ends = alert.ends_at ?? 0
+        let left = ends - t
+        let total = max(1, ends - (alert.started_at ?? ends))
+        let done = left <= 0
+        let size: CGFloat = tv ? 520 : 260
+        return VStack(spacing: tv ? 30 : 14) {
+            ZStack {
+                Circle().stroke(Theme.surface2, lineWidth: tv ? 26 : 14)
+                Circle()
+                    .trim(from: 0, to: done ? 1 : CGFloat(min(1, max(0, 1 - left / total))))
+                    .stroke(done ? Theme.starText : Theme.accent, style: StrokeStyle(lineWidth: tv ? 26 : 14, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 1), value: Int(t / 1000))
+                VStack(spacing: 6) {
+                    if !alert.icon.isEmpty { Text(alert.icon).font(.system(size: tv ? 80 : 44)) }
+                    Text(done ? "Time's up" : timeLeft(left))
+                        .font(.system(size: tv ? 110 : 54, weight: .heavy, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(done ? Theme.starText : Theme.text)
+                        .minimumScaleFactor(0.5).lineLimit(1)
+                        .padding(.horizontal, tv ? 50 : 24)
+                }
+            }
+            .frame(width: size, height: size)
+            Text(alert.label ?? "").font(tv ? Theme.font(70, .heavy) : Theme.text(.largeTitle, .heavy))
+            if let d = alert.description, !d.isEmpty {
+                Text(d).font(tv ? Theme.font(36, .semibold) : Theme.text(.title3, .semibold)).foregroundStyle(Theme.muted)
+            }
+        }
+    }
+}

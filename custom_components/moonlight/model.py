@@ -226,6 +226,21 @@ def is_change_message(text: str) -> bool:
     return isinstance(msg, dict) and msg.get("type") == "changed"
 
 
+ALERT_EVENTS = ("finished", "dismissed")
+
+
+def parse_alert_event(text: str) -> dict | None:
+    """Moonlight's {"type":"alert","event":"finished"|"dismissed",...} message as event data, else None."""
+    try:
+        msg = json.loads(text)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(msg, dict) or msg.get("type") != "alert" or msg.get("event") not in ALERT_EVENTS:
+        return None
+    return {"event": msg["event"], "id": str(msg.get("id") or ""), "kind": msg.get("kind"),
+            "title": msg.get("title") or "", "screen": msg.get("screen")}
+
+
 def backoff(attempt: int, base: float = 1.0, cap: float = 300.0) -> float:
     """Reconnect delay: 1, 2, 4, ... seconds, capped at 5 minutes."""
     return min(cap, base * 2 ** max(0, min(attempt, 20)))

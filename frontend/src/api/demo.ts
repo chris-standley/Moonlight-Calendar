@@ -9,6 +9,7 @@ import { demoExtras } from "./demoPhotos";
 import { demoMedia } from "./demoMedia";
 import { demoNursery } from "./demoNursery";
 import { demoSecurity } from "./demoSecurity";
+import { demoAlerts } from "./demoAlerts";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 import { COURSES } from "../recipes/courses";
@@ -730,6 +731,7 @@ export function demoApi(): Api {
     ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
     ...demoNursery(checkPin, emit, () => st.people), // a pretend Tapestry account
     ...demoSecurity(emit, () => st.settings.security, checkPin), // a pretend alarm and cameras
+    ...demoAlerts(emit), // notifications and timers, as Home Assistant would send them
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {
       checkPin(a.pin);

@@ -204,6 +204,128 @@
           "description": "Which Moonlight to use, if you have more than one."
         }
       }
+    },
+    "show_notification": {
+      "name": "Show notification",
+      "description": "Shows a notification on Moonlight's screens, full screen or as a toast, for a while or until it is dismissed on a screen or cleared from Home Assistant.",
+      "fields": {
+        "title": {
+          "name": "Title",
+          "description": "The headline."
+        },
+        "message": {
+          "name": "Message",
+          "description": "The text under it."
+        },
+        "screens": {
+          "name": "Screens",
+          "description": "Where to show it: all (the default), screen names as in Moonlight's Settings › Screens, or a style: large, compact, phone, or app (the iPhone and iPad apps)."
+        },
+        "style": {
+          "name": "Style",
+          "description": "Full screen, or a toast in the corner."
+        },
+        "duration": {
+          "name": "Show for",
+          "description": "How long it stays up. Left out: a toast goes after 10 seconds and a full screen one stays. 0 stays until dismissed or cleared."
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "An emoji shown with it."
+        },
+        "image": {
+          "name": "Image",
+          "description": "A picture to show with it: a web address the screens can open."
+        },
+        "dismissible": {
+          "name": "Can be dismissed",
+          "description": "Whether a tap on the screen can close it. Off: only Home Assistant can clear it."
+        },
+        "chime": {
+          "name": "Chime",
+          "description": "Play a chime when it appears."
+        },
+        "id": {
+          "name": "ID",
+          "description": "Your own name for it, to replace it or clear it later. Left out, Moonlight makes one (returned in the response)."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    },
+    "start_timer": {
+      "name": "Start timer",
+      "description": "Shows a timer or a countdown on Moonlight's screens. When it gets to zero it says time's up (and fires a moonlight_alert event).",
+      "fields": {
+        "label": {
+          "name": "Label",
+          "description": "What the timer is for."
+        },
+        "description": {
+          "name": "Description",
+          "description": "A line of detail under the label."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long the timer runs. Give this or Until."
+        },
+        "until": {
+          "name": "Until",
+          "description": "Count down to this date and time instead."
+        },
+        "screens": {
+          "name": "Screens",
+          "description": "Where to show it: all (the default), screen names as in Moonlight's Settings › Screens, or a style: large, compact, phone, or app (the iPhone and iPad apps)."
+        },
+        "style": {
+          "name": "Style",
+          "description": "Full screen, or a toast in the corner."
+        },
+        "finished_for": {
+          "name": "Keep time's up for",
+          "description": "How long time's up stays once it gets to zero. Left out or 0: until dismissed or cleared."
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "An emoji shown with it."
+        },
+        "dismissible": {
+          "name": "Can be dismissed",
+          "description": "Whether a tap on the screen can close it. Off: only Home Assistant can clear it."
+        },
+        "chime": {
+          "name": "Chime",
+          "description": "Play a chime when it gets to zero."
+        },
+        "id": {
+          "name": "ID",
+          "description": "Your own name for it, to replace it or clear it later. Left out, Moonlight makes one (returned in the response)."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
+    },
+    "clear_notifications": {
+      "name": "Clear notifications",
+      "description": "Takes notifications and timers off Moonlight's screens: the ones with these IDs, or everything shown on some screens, or everything.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "Which ones to clear, by the ID they were given."
+        },
+        "screens": {
+          "name": "Screens",
+          "description": "Without an ID: clear everything shown on these screens (names or styles). Left out: clear everything."
+        },
+        "config_entry_id": {
+          "name": "Moonlight",
+          "description": "Which Moonlight to use, if you have more than one."
+        }
+      }
     }
   }
 }

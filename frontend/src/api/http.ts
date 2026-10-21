@@ -1,4 +1,4 @@
-import { Api, ApiError, Display, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
+import { AlertsNow, Api, ApiError, Display, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -79,6 +79,12 @@ export function httpApi(base = ""): Api {
       if (!ws) connect();
       return () => listeners.delete(fn);
     },
+    async alerts() {
+      const r = await get<AlertsNow>("/api/alerts");
+      return { ...r, alerts: r.alerts.map((a) => ({ ...a, image: a.image?.startsWith("/") ? base + a.image : a.image })) };
+    },
+    createAlert: (a) => req("POST", "/api/alerts", a),
+    dismissAlert: async (id) => { await req("POST", `/api/alerts/${encodeURIComponent(id)}/dismiss`); },
     settings: () => get("/api/settings"),
     updateSettings: (patch) => req("PATCH", "/api/settings", patch),
     verifyPin: async (pin) => (await req<{ ok: boolean }>("POST", "/api/pin/verify", { pin })).ok,
