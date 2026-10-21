@@ -21,7 +21,7 @@ struct EnergyScreen: View {
                             }
                             EnergyHouse(data: data, compact: room == .narrow, sky: model.weather?.current)
                                 .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
-                            if let plan = data.plan { EnergyPlan(plan: plan) }
+                            if data.plan != nil || data.tariff != nil { EnergyPlan(plan: data.plan, tariff: data.tariff) }
                             if room == .narrow { EnergyCards(data: data) }
                         }
                     } else {

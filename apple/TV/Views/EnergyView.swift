@@ -16,8 +16,8 @@ struct EnergyView: View {
             if let data, !data.isEmpty {
                 EnergyHouse(data: data, sky: model.weather?.current)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let plan = data.plan {
-                    EnergyPlan(plan: plan, titleSize: 18, valueSize: 26)
+                if data.plan != nil || data.tariff != nil {
+                    EnergyPlan(plan: data.plan, tariff: data.tariff, titleSize: 18, valueSize: 26)
                         .frame(maxWidth: .infinity)
                 }
                 Spacer().frame(height: 30)

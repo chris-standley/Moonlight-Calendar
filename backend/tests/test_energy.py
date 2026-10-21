@@ -96,6 +96,17 @@ def ha_states():
         st("predbat.battery_hours_left", "0.5", unit_of_measurement="hours", friendly_name="Predicted Battery Hours left"),
         st("predbat.best_charge_start", "23:30:00", timestamp="2026-10-21T23:30:00+0100", rate=6.6, device_class="timestamp"),
         st("predbat.best_charge_end", "05:30:00", timestamp="2026-10-22T05:30:00+0100", rate=6.6, device_class="timestamp"),
+        st("binary_sensor.octopus_energy_00000000_abc_intelligent_dispatching", "off", friendly_name="Myenergi zappi Intelligent Dispatching",
+           planned_dispatches=[{"start": "2026-10-21T23:30:00+01:00", "end": "2026-10-22T01:00:00+01:00"},
+                               {"start": "2026-10-22T05:30:00+01:00", "end": "2026-10-22T06:00:00+01:00"}]),
+        st("select.octopus_energy_00000000_abc_intelligent_target_time", "06:00", friendly_name="Myenergi zappi Intelligent Target Time"),
+        st("number.octopus_energy_00000000_abc_intelligent_charge_target", "35.0", unit_of_measurement="%", device_class="battery",
+           friendly_name="Myenergi zappi Intelligent Charge Target"),
+        st("number.e_niro_ac_charging_limit", "80", unit_of_measurement="%", friendly_name="E-NIRO AC Charging Limit"),
+        st("number.ef_d30561_charge_limit", "90", unit_of_measurement="%", friendly_name="EF-D30561 Battery Charge Limit"),
+        st("binary_sensor.octopus_energy_electricity_123_456_off_peak", "off", friendly_name="Electricity Meter Off Peak Electricity",
+           next_start="2026-10-21T23:30:00+01:00", next_end="2026-10-22T06:00:00+01:00"),
+        st("binary_sensor.octopus_energy_electricity_123_789_export_off_peak", "off", friendly_name="Electricity Meter Export Off Peak"),
         st("light.kitchen", "on", friendly_name="Kitchen"),
     ]
 
@@ -215,6 +226,10 @@ def test_suggest_from_energy_dashboard_and_names():
     assert one["solar_forecast_tomorrow"] == "sensor.fairfields_solar_forecast_forecast_tomorrow"
     assert one["plan_status"] == "predbat.status" and one["plan_charge_start"] == "predbat.best_charge_start"
     assert "plan_cheap_start" not in auto  # not in this Home Assistant
+    assert one["car_limit"] == "number.e_niro_ac_charging_limit"  # the car's own, not Octopus's target or a home battery
+    assert one["car_ready"] == "select.octopus_energy_00000000_abc_intelligent_target_time"
+    assert one["cheap_off_peak"] == "binary_sensor.octopus_energy_electricity_123_456_off_peak"  # not the export one
+    assert one["cheap_dispatches"] == "binary_sensor.octopus_energy_00000000_abc_intelligent_dispatching"
 
 
 def test_suggest_without_energy_dashboard():
@@ -276,6 +291,28 @@ def test_overview(client):
     assert plan["rate_now"] == 34.69 and plan["rate_export"] == 12.0 and plan["battery_hours"] == 0.5
     assert plan["charge"] == {"start": "2026-10-21T23:30:00+01:00", "end": "2026-10-22T05:30:00+01:00", "rate": 6.6}
     assert plan["cheap"] is None
+
+
+def test_car_limit_ready_and_cheap_slots():
+    from datetime import datetime, timezone
+    by = {x["entity_id"]: x for x in ha_states()}
+    auto, flags = energy.suggest(list(by.values()), PREFS)
+    eff = energy.effective(auto, flags, {})
+    r = energy.build(eff, by, now=datetime(2026, 10, 21, 20, 15, tzinfo=timezone.utc))  # 21:15 in London
+    assert r["car"]["limit"] == 80 and r["car"]["ready"] == "2026-10-22T06:00:00+01:00"
+    t = r["tariff"]
+    assert t["cheap_now"] is False and t["dispatching"] is False
+    assert t["next"] == {"start": "2026-10-21T23:30:00+01:00", "end": "2026-10-22T06:00:00+01:00"}
+    assert t["bonus"] == [{"start": "2026-10-22T05:30:00+01:00", "end": "2026-10-22T06:00:00+01:00"}]  # after 05:30
+    # In the middle of the night: cheap now, until the end of the run of slots
+    r = energy.build(eff, by, now=datetime(2026, 10, 22, 0, 0, tzinfo=timezone.utc))
+    assert r["tariff"]["cheap_now"] is True and r["tariff"]["cheap_until"] == "2026-10-22T06:00:00+01:00"
+    # A daytime dispatch is a bonus slot and the next cheap slot
+    disp = by["binary_sensor.octopus_energy_00000000_abc_intelligent_dispatching"]
+    disp["attributes"]["planned_dispatches"] = [{"start": "2026-10-21T14:00:00+01:00", "end": "2026-10-21T15:30:00+01:00"}]
+    t = energy.build(eff, by, now=datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc))["tariff"]
+    assert t["next"] == {"start": "2026-10-21T14:00:00+01:00", "end": "2026-10-21T15:30:00+01:00"}
+    assert t["bonus"] == [t["next"]]
 
 
 def test_solar_window():

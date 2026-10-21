@@ -38,7 +38,7 @@ log = logging.getLogger("moonlight.energy")
 
 KEY = "energy"
 ENTITY_RE = re.compile(r"^(sensor|binary_sensor|select|input_select|input_number|number|climate|water_heater|switch|"
-                       r"input_boolean|predbat)\.[a-z0-9_]+$")
+                       r"input_boolean|predbat|time)\.[a-z0-9_]+$")
 DISCOVERY_TTL = 300.0
 BROADCAST_EVERY = 4.0        # seconds between `energy` broadcasts while power keeps changing
 IDLE_WATTS = 30.0            # below this a flow is drawn as nothing moving
@@ -64,6 +64,8 @@ SLOTS: dict[str, tuple[str, str]] = {
     "car_soc": ("percent", "car"),
     "car_range": ("number", "car"),
     "car_session": ("energy", "car"),
+    "car_limit": ("percent", "car"),
+    "car_ready": ("state", "car"),
     "heat_pump_mode": ("state", "heat_pump"),
     "heat_pump_power": ("power", "heat_pump"),
     "heat_pump_today": ("energy", "heat_pump"),
@@ -83,6 +85,8 @@ SLOTS: dict[str, tuple[str, str]] = {
     "plan_charge_end": ("state", "plan"),
     "plan_cheap_start": ("state", "plan"),
     "plan_cheap_end": ("state", "plan"),
+    "cheap_off_peak": ("state", "plan"),
+    "cheap_dispatches": ("state", "plan"),
 }
 # Predbat's own entities, found by id.
 PREDBAT = {"plan_status": "predbat.status", "plan_cost_today": "predbat.cost_today", "plan_rate_now": "predbat.rates",
@@ -108,9 +112,11 @@ ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
 TEMP_UNITS = {"°c", "°f", "c", "f"}
 
 HEAT_PUMP_WORDS = r"(heat_?pump|heatpump|ashp|gshp|altherma|ecodan|arotherm|vitocal|aquarea|samsung_ehs|mitsubishi_ecodan)"
+CAR_WORDS = r"(e_niro|niro|ioniq|ev_|car|vehicle|tesla|leaf|enyaq|polestar|model_[3ysx]|id\d|zappi|ohme|wallbox|easee)"
 CAR_EXCLUDE = re.compile(r"(phone|ipad|iphone|watch|tablet|laptop|remote|sensor_battery)")
 
 WATER_HEAT = 4186.0          # J per litre per degree
+CHEAP_WINDOW = (23 * 60 + 30, 5 * 60 + 30)  # minutes past midnight: the night rate every Intelligent Octopus Go night
 COP_MIN_WH = 50.0            # don't give a day's COP on less electricity than this
 COP_KEY = "energy_cop_day"   # settings key holding today's running totals, so a restart doesn't lose them
 COP_SAMPLE_EVERY = 10.0
@@ -210,7 +216,7 @@ def kind_of(entity: str, state: dict | None) -> str | None:
     """Which slots an entity could fill: power, energy, percent, temperature, number or state."""
     domain = entity.split(".", 1)[0]
     unit, dc = _unit(state), str(_attrs(state).get("device_class") or "")
-    if domain in ("select", "input_select", "climate", "water_heater", "binary_sensor", "switch", "input_boolean"):
+    if domain in ("select", "input_select", "climate", "water_heater", "binary_sensor", "switch", "input_boolean", "time"):
         return "state"
     if unit in POWER_UNITS or dc == "power":
         return "power"
@@ -507,7 +513,9 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
                       "soc": _round(soc) if soc is not None else None,
                       "range": _round(rng) if rng is not None else None,
                       "range_unit": _attrs(st("car_range")).get("unit_of_measurement") if rng is not None else None,
-                      "session": energy("car_session")}
+                      "session": energy("car_session"),
+                      "limit": _round(_float(st("car_limit"))) if _float(st("car_limit")) is not None else None,
+                      "ready": _clock_next(st("car_ready"), now)}
     else:
         out["car"] = None
 
@@ -573,7 +581,76 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
                        "cheap": window("plan_cheap_start", "plan_cheap_end")}
     else:
         out["plan"] = None
+
+    out["tariff"] = tariff(st("cheap_off_peak"), st("cheap_dispatches"), now) if has("cheap_off_peak", "cheap_dispatches") else None
     return out
+
+
+def _clock_next(state: dict | None, now: datetime) -> str | None:
+    """A time of day ("06:00", "07:00:00") as its next occurrence (ISO, household time); a full date-time as it is."""
+    if not state:
+        return None
+    raw = str(state.get("state") or "").strip()
+    dt = _parse_dt(raw)
+    if dt is not None:
+        return dt.isoformat()
+    m = re.match(r"^(\d{1,2}):(\d{2})(?::\d{2})?$", raw)
+    if not m or int(m.group(1)) > 23:
+        return None
+    local = now.astimezone(_zone())
+    at = local.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
+    if at <= local:
+        at += timedelta(days=1)
+    return at.isoformat()
+
+
+def _in_standard_window(start: datetime, end: datetime) -> bool:
+    """Inside the tariff's every-night cheap hours (Intelligent Octopus Go: 23:30 to 05:30)."""
+    if end - start > timedelta(hours=6):
+        return False
+    mins = lambda d: d.astimezone(_zone()).hour * 60 + d.astimezone(_zone()).minute  # noqa: E731
+    lo, hi = CHEAP_WINDOW
+
+    def inside(m: int, is_end: bool) -> bool:
+        return m >= lo or (m <= hi if is_end else m < hi)
+    return inside(mins(start), False) and inside(mins(end), True)
+
+
+def tariff(off_peak: dict | None, dispatches: dict | None, now: datetime) -> dict | None:
+    """Cheap electricity: whether it's cheap now and until when, the next cheap slot, and the bonus slots an
+    Intelligent Octopus car charge adds outside the usual night hours. From the Octopus Energy integration's
+    off-peak sensor (current/next start and end) and its intelligent dispatching sensor (planned dispatches)."""
+    slots: list[tuple[datetime, datetime]] = []
+    a = _attrs(off_peak)
+    for s_key, e_key in (("current_start", "current_end"), ("next_start", "next_end")):
+        start, end = _parse_dt(a.get(s_key)), _parse_dt(a.get(e_key))
+        if start and end and end > now:
+            slots.append((start, end))
+    planned: list[tuple[datetime, datetime]] = []
+    for d in _attrs(dispatches).get("planned_dispatches") or []:
+        if not isinstance(d, dict):
+            continue
+        start, end = _parse_dt(d.get("start")), _parse_dt(d.get("end"))
+        if start and end and end > now:
+            planned.append((start, end))
+    slots += planned
+    if not slots and off_peak is None and dispatches is None:
+        return None
+    merged: list[list[datetime]] = []
+    for start, end in sorted(slots):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    current = next((m for m in merged if m[0] <= now < m[1]), None)
+    upcoming = next((m for m in merged if m[0] > now), None)
+    on = str((off_peak or {}).get("state")) == "on" or str((dispatches or {}).get("state")) == "on"
+    bonus = [{"start": s.isoformat(), "end": e.isoformat()} for s, e in sorted(planned) if not _in_standard_window(s, e)]
+    return {"cheap_now": bool(current) or on,
+            "cheap_until": current[1].isoformat() if current else None,
+            "next": {"start": upcoming[0].isoformat(), "end": upcoming[1].isoformat()} if upcoming else None,
+            "bonus": bonus[:3],
+            "dispatching": str(dispatches.get("state")) == "on" if dispatches else None}
 
 
 class CopDay:
@@ -691,6 +768,10 @@ PATTERNS: dict[str, list[str]] = {
                 r"(tesla|ioniq|niro|leaf|id\d|enyaq|model_[3ysx]).*battery_level"],
     "car_range": [r"ev_range", r"(electric|battery|est)_range", r"(vehicle|car)_range"],
     "car_session": [r"charge_added_session", r"session_energy", r"charge_energy_added", r"energy_added"],
+    "car_limit": [CAR_WORDS + r".*ac_charg\w*_limit", r"(?<!dc_)charg\w*_limit", r"intelligent_charge_target",
+                  CAR_WORDS + r".*charg\w*_target"],
+    "car_ready": [r"intelligent_target_time", r"car_charg\w*_plan_time", CAR_WORDS + r".*(ready|target)_time"],
+    "cheap_off_peak": [r"octopus_energy_electricity_\w*_off_peak"],
     "heat_pump_mode": [HEAT_PUMP_WORDS + r".*operation", HEAT_PUMP_WORDS + r".*(mode|state|status)$",
                        HEAT_PUMP_WORDS + r".*3_?way"],
     "heat_pump_power": [HEAT_PUMP_WORDS + r".*power(?!_factor)"],
@@ -717,6 +798,8 @@ EXCLUDE: dict[str, str] = {
     "home_power": r"predbat|median|average|forecast",
     "home_today": r"predbat|forecast|cost",
     "car_status": r"eddi|plug",
+    "car_limit": r"dc_charg|discharge|givac|givtcp|predbat|ecoflow|ef_|powerwall|home_battery",
+    "cheap_off_peak": r"export",
     "car_power": r"eddi|predbat|givac|battery",
     "car_soc": r"car_battery_level|12v|aux",
     "heat_pump_power": r"apparent|reactive|factor",
@@ -763,6 +846,12 @@ def suggest(states: list[dict], prefs: dict | None) -> tuple[dict[str, list[str]
         if slot in PREDBAT:
             if PREDBAT[slot] in usable:
                 out[slot] = [PREDBAT[slot]]
+            continue
+        if slot == "cheap_dispatches":
+            got = next((e for e, s in sorted(usable.items())
+                        if isinstance(_attrs(s).get("planned_dispatches"), list)), None)
+            if got:
+                out[slot] = [got]
             continue
         if slot == "heat_pump_details":
             got = next((e for e, s in sorted(usable.items()) if e.startswith("sensor.") and _is_detail_source(s)), None)
@@ -965,7 +1054,7 @@ async def overview(svc: EnergyService) -> dict:
 
 def not_connected(error: str) -> dict:
     return {"configured": False, "reachable": False, "error": error, "updated": None, "solar": None, "battery": None,
-            "grid": None, "home": None, "car": None, "heat_pump": None, "temperatures": None, "plan": None}
+            "grid": None, "home": None, "car": None, "heat_pump": None, "temperatures": None, "plan": None, "tariff": None}
 
 
 # ---------------------------------------------------------------- module-level service

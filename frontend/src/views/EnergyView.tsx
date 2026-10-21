@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode } from "react";
-import { EnergyOverview, EnergyWindow } from "../api/types";
+import { EnergyOverview, EnergyTariff, EnergyWindow } from "../api/types";
 import { useApp, useData } from "../state";
 import { Empty } from "../components/ui";
 import { WeatherIcon } from "../components/icons";
@@ -89,7 +89,7 @@ export function EnergyView() {
       ) : (
         <div className={"en-body" + (data.plan ? " with-plan" : "")}>
           <House data={data} small={layout === "phone"} sky={weather?.current ?? null} />
-          {data.plan && <Plan plan={data.plan} />}
+          {(data.plan || data.tariff) && <Plan plan={data.plan} tariff={data.tariff} />}
           {layout === "phone" && <Details data={data} />}
         </div>
       )}
@@ -98,25 +98,35 @@ export function EnergyView() {
 }
 
 /** Predbat's plan along the bottom: what it's doing, the price now, today's cost and the next cheap charge. */
-function Plan({ plan }: { plan: NonNullable<EnergyOverview["plan"]> }) {
-  const unit = plan.rate_unit ?? "p";
+function Plan({ plan, tariff }: { plan: EnergyOverview["plan"]; tariff: EnergyTariff | null }) {
+  const unit = plan?.rate_unit ?? "p";
+  const span = (w: { start: string; end: string }) => `${fmtTime(w.start)}–${fmtTime(w.end)}`;
   const soon = (w: EnergyWindow | null) => (w && (!w.end || Date.parse(w.end) > Date.now()) ? w : null);
-  const charge = soon(plan.charge);
-  const cheap = soon(plan.cheap);
+  const charge = soon(plan?.charge ?? null);
+  const cheap = soon(plan?.cheap ?? null);
   const items: [string, string][] = [];
-  if (plan.status) items.push(["Predbat", plan.status]);
-  if (plan.rate_now != null) items.push(["Price now", fmtMoney(plan.rate_now, unit)]);
-  if (plan.rate_export != null) items.push(["Export", fmtMoney(plan.rate_export, unit)]);
-  if (plan.cost_today != null) items.push(["Cost today", fmtMoney(plan.cost_today, plan.cost_unit ?? unit)]);
-  if (plan.battery_hours != null && plan.battery_hours > 0) items.push(["Battery lasts", `${plan.battery_hours < 10 ? plan.battery_hours.toFixed(1) : Math.round(plan.battery_hours)} h`]);
+  if (plan?.status) items.push(["Predbat", plan.status]);
+  if (plan?.rate_now != null) items.push(["Price now", fmtMoney(plan.rate_now, unit)]);
+  if (plan?.rate_export != null) items.push(["Export", fmtMoney(plan.rate_export, unit)]);
+  if (plan?.cost_today != null) items.push(["Cost today", fmtMoney(plan.cost_today, plan.cost_unit ?? unit)]);
+  if (plan?.battery_hours != null && plan.battery_hours > 0) items.push(["Battery lasts", `${plan.battery_hours < 10 ? plan.battery_hours.toFixed(1) : Math.round(plan.battery_hours)} h`]);
+  if (tariff?.cheap_now) items.push(["Cheap rate", tariff.cheap_until ? `now until ${fmtTime(tariff.cheap_until)}` : "now"]);
+  else if (tariff?.next) items.push(["Next cheap", span(tariff.next)]);
+  tariff?.bonus.slice(0, 2).forEach((b) => items.push(["Bonus slot", span(b)]));
   if (charge) items.push(["Charging battery", `${fmtTime(charge.start)}${charge.end ? `–${fmtTime(charge.end)}` : ""}${charge.rate != null ? ` at ${fmtMoney(charge.rate, unit)}` : ""}`]);
-  if (cheap && cheap.start !== charge?.start) items.push(["Cheap rate", `${Date.parse(cheap.start) <= Date.now() ? "now" : `from ${fmtTime(cheap.start)}`}${cheap.rate != null ? ` at ${fmtMoney(cheap.rate, unit)}` : ""}`]);
+  if (!tariff && cheap && cheap.start !== charge?.start) items.push(["Cheap rate", `${Date.parse(cheap.start) <= Date.now() ? "now" : `from ${fmtTime(cheap.start)}`}${cheap.rate != null ? ` at ${fmtMoney(cheap.rate, unit)}` : ""}`]);
   if (!items.length) return null;
   return (
     <div className="en-plan">
-      {items.map(([k, v]) => <span key={k} className="en-plan-item"><span>{k}</span><b>{v}</b></span>)}
+      {items.map(([k, v], i) => <span key={i} className="en-plan-item"><span>{k}</span><b>{v}</b></span>)}
     </div>
   );
+}
+
+/** "Charging to 80% by 7am". */
+function carTarget(car: NonNullable<EnergyOverview["car"]>): string | null {
+  if (car.limit == null && !car.ready) return null;
+  return [car.limit != null && `Charging to ${car.limit}%`, car.ready && `by ${fmtTime(car.ready)}`].filter(Boolean).join(" ").replace(/^by/, "Ready by");
 }
 
 /** A small reading on the picture: a title over a value. */
@@ -269,6 +279,7 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
           !small && car.charging && "Charging",
           !small && !car.charging && plugged && car.status && car.status !== "Plugged in" ? car.status.replace(/^Plugged in · /, "").replace(/^./, (c) => c.toUpperCase()) : null,
           !small && car.session != null && car.session > 0 && `${fmtKwh(car.session)} added`,
+          !small && carTarget(car),
         ]} />}
       {hp && <Chip x={small ? 800 : 712} y={small ? 375 : 370} align={small ? "center" : "left"} cls="c-heat" title="Heat pump"
         value={small ? (hp.running ? (hp.power != null ? fmtW(hp.power) : "On") : "Idle") : hp.running ? hp.doing : "Idle"}
@@ -307,7 +318,7 @@ function Details({ data }: { data: EnergyOverview }) {
         [grid.import_today != null && `${fmtKwh(grid.import_today)} bought today`, grid.export_today != null && `${fmtKwh(grid.export_today)} sold today`])}
       {car && card("c-car", "Car", car.charging ? "Charging" : car.plugged_in ? "Plugged in" : car.plugged_in === false ? "Not plugged in" : car.status ?? "–",
         [car.charging && car.power != null && fmtW(car.power), car.soc != null && `${car.soc}%${car.range != null ? ` · ${car.range} ${car.range_unit ?? ""}` : ""}`,
-          car.session != null && car.session > 0 && `${fmtKwh(car.session)} added`])}
+          car.session != null && car.session > 0 && `${fmtKwh(car.session)} added`, carTarget(car)])}
       {hp && card("c-heat", "Heat pump", hp.running ? hp.doing : "Idle",
         [hp.power != null && fmtW(hp.power), hp.cop != null && `COP ${fmtCop(hp.cop)} now`, hp.flow_temp != null && `Flow ${fmtT(hp.flow_temp)}`,
           hp.today != null && `${fmtKwh(hp.today)} today`, hp.cop_today?.overall != null && `COP today ${fmtCop(hp.cop_today.overall)}`,

@@ -131,7 +131,8 @@ The Energy section draws your house with the power running between its parts, li
 - **Battery**: how full it is, and whether it's charging or powering the house.
 - **Grid**: buying or selling right now, and how much was bought and sold today.
 - **Home**: what the house is using now and today.
-- **Car**: plugged in or not, charging or not, how fast, the car's battery and range, and what this charge added.
+- **Car**: plugged in or not, charging or not, how fast, the car's battery and range, what this charge added, and
+  the charge limit and ready-by time (the car's own limit, and Intelligent Octopus's target time).
 - **Heat pump**: whether it's running, what it's doing (heating the house, hot water, defrosting), what it draws,
   its flow temperature, and its COP: right now and for today, for heating, hot water and overall. Moonlight works
   COP out itself from the water flow rate and how much warmer the water leaves than it comes back (ESPAltherma's
@@ -139,7 +140,9 @@ The Energy section draws your house with the power running between its parts, li
   builds up while Moonlight is running and starts again at midnight.
 - **Temperatures**: inside and the hot water tank, each on the picture (outside is in the top bar).
 - **Predbat**: if Predbat is installed, a row under the picture with its status, the price now, the export price, the
-  cost so far today, how long the battery will last, and when it next charges the battery.
+  cost so far today, how long the battery will last, and when it next charges the battery. With the Octopus Energy
+  integration it also shows the next cheap slot (or how long the cheap rate lasts) and any bonus slots Intelligent
+  Octopus adds for car charging outside the usual 23:30 to 05:30 night rate.
 
 Moonlight finds the sensors itself, starting with the ones in Home Assistant's Energy dashboard (Settings > Dashboards >
 Energy), then by name (for example a myenergi zappi's plug status, or a heat pump's "Operation" sensor). Settings >

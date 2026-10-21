@@ -279,11 +279,11 @@ export interface SecurityOptions {
 // Energy (see API.md "Energy"): solar, battery, grid, car and heat pump from Home Assistant, drawn as a house.
 export type EnergySlot =
   | "solar_power" | "solar_today" | "solar_forecast" | "solar_forecast_tomorrow" | "battery_soc" | "battery_power" | "grid_power" | "grid_import_today" | "grid_export_today"
-  | "home_power" | "home_today" | "car_plug" | "car_status" | "car_power" | "car_soc" | "car_range" | "car_session"
+  | "home_power" | "home_today" | "car_plug" | "car_status" | "car_power" | "car_soc" | "car_range" | "car_session" | "car_limit" | "car_ready"
   | "heat_pump_mode" | "heat_pump_power" | "heat_pump_today" | "heat_pump_flow" | "heat_pump_return" | "heat_pump_flow_rate"
   | "heat_pump_details" | "inside_temp" | "outdoor_temp" | "heat_pump_tank"
   | "plan_status" | "plan_cost_today" | "plan_rate_now" | "plan_rate_export" | "plan_battery_hours"
-  | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end";
+  | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end" | "cheap_off_peak" | "cheap_dispatches";
 export type EnergyKind = "power" | "energy" | "percent" | "temperature" | "number" | "state";
 export type EnergyGroup = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "temperatures" | "plan";
 export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean }
@@ -299,7 +299,9 @@ export interface EnergyOverview {
   grid: { power: number | null; state: "importing" | "exporting" | "idle" | null; import_today: number | null; export_today: number | null } | null;
   /** computed: no home sensor, so worked out from solar + battery + grid. */
   home: { power: number | null; today: number | null; computed: boolean } | null;
-  car: { plugged_in: boolean | null; charging: boolean | null; status: string | null; power: number | null; soc: number | null; range: number | null; range_unit: string | null; session: number | null } | null;
+  car: { plugged_in: boolean | null; charging: boolean | null; status: string | null; power: number | null; soc: number | null; range: number | null; range_unit: string | null; session: number | null;
+    /** limit: the % charging stops at; ready: when it should be done by (ISO). */
+    limit: number | null; ready: string | null } | null;
   /** doing: "Heating the house", "Heating hot water", "Defrosting", "Idle"... */
   /** heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight. */
   heat_pump: { running: boolean; doing: string; power: number | null; today: number | null; flow_temp: number | null; heat: number | null; cop: number | null;
@@ -308,7 +310,10 @@ export interface EnergyOverview {
   /** From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO. */
   plan: { status: string | null; cost_today: number | null; cost_unit: string | null; rate_now: number | null; rate_export: number | null; rate_unit: string | null;
     battery_hours: number | null; charge: EnergyWindow | null; cheap: EnergyWindow | null } | null;
+  tariff: EnergyTariff | null;
 }
+/** Cheap electricity from the Octopus Energy integration; bonus: car-charging slots outside the usual night hours. */
+export interface EnergyTariff { cheap_now: boolean; cheap_until: string | null; next: { start: string; end: string } | null; bonus: { start: string; end: string }[]; dispatching: boolean | null }
 export interface EnergyWindow { start: string; end: string | null; rate: number | null }
 export interface EnergyCandidate { entity_id: string; name: string; state: string | null; unit: string | null }
 export interface EnergyOptions {

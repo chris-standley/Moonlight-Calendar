@@ -383,10 +383,13 @@ person broadcasts `security_alert`.
 Read-only; the screens draw it as a house with the power flowing between its parts. Each value is a slot filled by
 one HA entity: `solar_power, solar_today, solar_forecast, solar_forecast_tomorrow, battery_soc, battery_power,
 grid_power, grid_import_today, grid_export_today, home_power, home_today, car_plug, car_status, car_power, car_soc,
-car_range, car_session, heat_pump_mode, heat_pump_power, heat_pump_today, heat_pump_flow, heat_pump_return,
+car_range, car_session, car_limit, car_ready, heat_pump_mode, heat_pump_power, heat_pump_today, heat_pump_flow, heat_pump_return,
 heat_pump_flow_rate, heat_pump_details, inside_temp, outdoor_temp, heat_pump_tank, plan_status, plan_cost_today,
 plan_rate_now, plan_rate_export, plan_battery_hours, plan_charge_start, plan_charge_end, plan_cheap_start,
-plan_cheap_end`. `heat_pump_details` is one entity carrying a controller's readings as attributes (ESPAltherma's
+plan_cheap_end, cheap_off_peak, cheap_dispatches`. `cheap_off_peak` and `cheap_dispatches` are the Octopus Energy
+integration's off-peak and intelligent dispatching binary sensors (the latter found by its `planned_dispatches`
+attribute); `car_limit` prefers the car's own (AC) charge limit, then Intelligent Octopus's charge target; `car_ready`
+prefers Intelligent Octopus's target time. `heat_pump_details` is one entity carrying a controller's readings as attributes (ESPAltherma's
 flow rate, leaving and inlet water, tank, indoor, outdoor, 3-way valve, defrost); the `plan_*` slots are Predbat's
 `predbat.*` entities, found by id. A slot is automatic
 until picked: HA's Energy dashboard first (`energy/get_prefs`: the solar, battery and grid `stat_rate` power sensors
@@ -398,11 +401,15 @@ minutes (or with `refresh`).
   forecast_tomorrow, starts, ends} | null,
   battery: {soc, power (+ discharging, - charging), state: "charging"|"discharging"|"idle"|null} | null,
   grid: {power (+ importing, - exporting), state: "importing"|"exporting"|"idle"|null, import_today, export_today} | null,
-  home: {power, today, computed} | null, car: {plugged_in, charging, status, power, soc, range, range_unit, session} | null,
+  home: {power, today, computed} | null, car: {plugged_in, charging, status, power, soc, range, range_unit, session,
+  limit (%), ready (ISO: a time of day becomes its next occurrence)} | null,
   heat_pump: {running, doing ("Heating the house", "Heating hot water", "Defrosting", "Cooling", "Running", "Idle"),
   power, today, flow_temp, heat, cop, cop_today: {heating, hot_water, overall} | null} | null,
   temperatures: {inside, outside, tank} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
-  battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null}`. Power in W (kW sensors
+  battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null, tariff: {cheap_now,
+  cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null}`. `tariff`: the off-peak
+  window and planned car-charging slots merged; `bonus`: planned slots (up to 3) not inside the usual 23:30-05:30
+  night rate. Power in W (kW sensors
   converted), energy in kWh. A part is null when none of its slots has an entity. `solar.starts`/`ends` (ISO): the
   first and last half hour of today's forecast with any output (a Solcast-style `detailedForecast` attribute).
   `heat_pump.heat` (W) = water flow × 4186 × (leaving − return temperature), from the controller's readings or the
