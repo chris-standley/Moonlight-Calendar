@@ -13,7 +13,7 @@ const GROUPS: { key: EnergyGroup; label: string; slots: [EnergySlot, string][] }
   { key: "heat_pump", label: "Heat pump", slots: [["heat_pump_mode", "What it's doing"], ["heat_pump_power", "Power"], ["heat_pump_today", "Used today"],
     ["heat_pump_flow", "Flow temperature"], ["heat_pump_return", "Return temperature"], ["heat_pump_flow_rate", "Water flow rate"],
     ["heat_pump_details", "Controller readings (ESPAltherma)"]] },
-  { key: "temperatures", label: "Temperatures", slots: [["inside_temp", "Inside"], ["outdoor_temp", "Outside"], ["heat_pump_tank", "Hot water tank"]] },
+  { key: "temperatures", label: "Temperatures", slots: [["inside_temp", "Inside"], ["heat_pump_tank", "Hot water tank"]] },
   { key: "plan", label: "Predbat", slots: [["plan_status", "Status"], ["plan_cost_today", "Cost today"], ["plan_rate_now", "Price now"],
     ["plan_rate_export", "Export price"], ["plan_battery_hours", "Battery hours left"], ["plan_charge_start", "Battery charge starts"],
     ["plan_charge_end", "Battery charge ends"], ["plan_cheap_start", "Cheap rate starts"], ["plan_cheap_end", "Cheap rate ends"]] },

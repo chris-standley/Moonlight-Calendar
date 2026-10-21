@@ -90,7 +90,7 @@ export function EnergyView() {
         <div className={"en-body" + (data.plan ? " with-plan" : "")}>
           <House data={data} small={layout === "phone"} sky={weather?.current ?? null} />
           {data.plan && <Plan plan={data.plan} />}
-          {layout === "phone" && <Details data={data} outside={data.temperatures?.outside ?? weather?.current.temp ?? null} />}
+          {layout === "phone" && <Details data={data} />}
         </div>
       )}
     </div>
@@ -139,7 +139,6 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
   const plugged = car?.plugged_in || car?.charging;
   const gridW = grid?.power ?? null;
   const drawnSun = !sky || sky.condition === "sunny";
-  const outside = temps?.outside ?? sky?.temp ?? null;
   const phase = solar ? solarPhase(solar) : "day";
   const tank = temps?.tank ?? null;
   const tankColor = tank == null ? "var(--en-glass)" : tank >= 45 ? "#e8674f" : tank >= 35 ? "#f2a33a" : "#6aa6e8";
@@ -243,8 +242,7 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
       {/* The weather in place of the sun */}
       {!drawnSun && sky && <div className="en-weather"><WeatherIcon condition={sky.condition} size={24} /></div>}
 
-      {/* Temperatures */}
-      {!small && outside != null && <Tag x={120} y={192} title="Outside" value={fmtDeg(outside)} />}
+      {/* Temperatures (outside is in the top bar already) */}
       {!small && temps?.inside != null && <Tag x={642} y={346} title="Inside" value={fmtDeg(temps.inside)} />}
       {!small && tank != null && <Tag x={642} y={430} title="Tank" value={fmtDeg(tank)} cls="t-tank" />}
 
@@ -287,7 +285,7 @@ export function House({ data, small, sky }: { data: EnergyOverview; small?: bool
 }
 
 /** On a phone the picture keeps the headline numbers and the rest goes in cards below. */
-function Details({ data, outside }: { data: EnergyOverview; outside: number | null }) {
+function Details({ data }: { data: EnergyOverview }) {
   const { solar, battery, grid, home, car, heat_pump: hp, temperatures: temps } = data;
   const card = (cls: string, title: string, value: string, rows: (string | null | false | undefined)[]) => (
     <section className={`panel en-card ${cls}`}>
@@ -314,8 +312,8 @@ function Details({ data, outside }: { data: EnergyOverview; outside: number | nu
         [hp.power != null && fmtW(hp.power), hp.cop != null && `COP ${fmtCop(hp.cop)} now`, hp.flow_temp != null && `Flow ${fmtT(hp.flow_temp)}`,
           hp.today != null && `${fmtKwh(hp.today)} today`, hp.cop_today?.overall != null && `COP today ${fmtCop(hp.cop_today.overall)}`,
           hp.cop_today?.heating != null && `Heating ${fmtCop(hp.cop_today.heating)}`, hp.cop_today?.hot_water != null && `Hot water ${fmtCop(hp.cop_today.hot_water)}`])}
-      {(temps || outside != null) && card("c-temp", "Temperatures", `${fmtDeg(temps?.inside ?? null)} inside`,
-        [outside != null && `${fmtDeg(outside)} outside`, temps?.tank != null && `Hot water tank ${fmtDeg(temps.tank)}`])}
+      {(temps?.inside != null || temps?.tank != null) && card("c-temp", "Temperatures", `${fmtDeg(temps?.inside ?? null)} inside`,
+        [temps?.tank != null && `Hot water tank ${fmtDeg(temps.tank)}`])}
     </div>
   );
 }

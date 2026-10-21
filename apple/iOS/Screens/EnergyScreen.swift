@@ -22,7 +22,7 @@ struct EnergyScreen: View {
                             EnergyHouse(data: data, compact: room == .narrow, sky: model.weather?.current)
                                 .shadow(color: .black.opacity(0.05), radius: 8, y: 3)
                             if let plan = data.plan { EnergyPlan(plan: plan) }
-                            if room == .narrow { EnergyCards(data: data, outside: model.weather.map { Double($0.current.temp) }) }
+                            if room == .narrow { EnergyCards(data: data) }
                         }
                     } else {
                         ProgressView().padding(40)

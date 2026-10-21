@@ -40,7 +40,6 @@ struct EnergyHouse: View {
     private func tags(_ s: CGFloat) -> some View {
         if !compact {
             let t = data.temperatures
-            if let out = t?.outside ?? sky.map({ Double($0.temp) }) { tag(s, 120, 192, "Outside", Energy.degrees(out)) }
             if let v = t?.inside { tag(s, 642, 346, "Inside", Energy.degrees(v)) }
             if let v = t?.tank { tag(s, 642, 430, "Tank", Energy.degrees(v)) }
         }
@@ -545,8 +544,6 @@ private struct EnergyScene {
 /// The details under the picture on a narrow screen.
 struct EnergyCards: View {
     let data: EnergyOverview
-    /// The weather's temperature, when there's no outside sensor.
-    var outside: Double? = nil
     var columns = 2
     var titleFont: Font = Theme.text(.caption, .heavy)
     var valueFont: Font = Theme.text(.headline, .heavy)
@@ -610,12 +607,9 @@ struct EnergyCards: View {
                 hp.cop_today?.heating.map { "Heating \(Energy.cop($0))" }, hp.cop_today?.hot_water.map { "Hot water \(Energy.cop($0))" },
             ].compactMap { $0 }))
         }
-        let t = d.temperatures, outsideT = t?.outside ?? outside
-        if t?.inside != nil || t?.tank != nil || outsideT != nil {
-            let inside = t?.inside.map { "\(Energy.degrees($0)) inside" }
-            let outdoors = outsideT.map { "\(Energy.degrees($0)) outside" }
-            out.append(Item(tint: Color(hex: "#6AA6E8"), title: "Temperatures", value: inside ?? outdoors ?? "–",
-                            lines: [inside != nil ? outdoors : nil, t?.tank.map { "Hot water tank \(Energy.degrees($0))" }].compactMap { $0 }))
+        if let t = d.temperatures, t.inside != nil || t.tank != nil {
+            out.append(Item(tint: Color(hex: "#6AA6E8"), title: "Temperatures", value: t.inside.map { "\(Energy.degrees($0)) inside" } ?? "–",
+                            lines: [t.tank.map { "Hot water tank \(Energy.degrees($0))" }].compactMap { $0 }))
         }
         return out
     }

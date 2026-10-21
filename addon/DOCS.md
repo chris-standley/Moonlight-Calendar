@@ -134,7 +134,7 @@ The Energy section draws your house with the power running between its parts, li
   COP out itself from the water flow rate and how much warmer the water leaves than it comes back (ESPAltherma's
   readings, or flow-rate and return-temperature sensors you pick) against the heat pump's power meter. Today's COP
   builds up while Moonlight is running and starts again at midnight.
-- **Temperatures**: inside, outside and the hot water tank, each on the picture.
+- **Temperatures**: inside and the hot water tank, each on the picture (outside is in the top bar).
 - **Predbat**: if Predbat is installed, a row under the picture with its status, the price now, the export price, the
   cost so far today, how long the battery will last, and when it next charges the battery.
 
