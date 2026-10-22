@@ -53,6 +53,11 @@ export function fmtTime(s: string): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return m === 0 ? `${h12}${ap}` : `${h12}:${pad(m)}${ap}`;
 }
+/** A clock's "12:25pm". Built by hand: older WebViews (Fire tablets) give en-GB's 12-hour clock as "0:25 pm". */
+export function clockTime(d: Date): string {
+  const h = d.getHours();
+  return `${h % 12 === 0 ? 12 : h % 12}:${pad(d.getMinutes())}${h < 12 ? "am" : "pm"}`;
+}
 export function minutesOf(s: string): number {
   const [h, m] = timeOf(s).split(":").map(Number);
   return h * 60 + m;
