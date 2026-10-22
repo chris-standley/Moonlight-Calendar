@@ -13,6 +13,7 @@ screens, so screens never see the key or talk to Immich. Written against the Imm
   `filter` form is used instead.
 - `GET  /api/memories?for=YYYY-MM-DD&type=on_this_day` -> [{assets: [Asset]}]  (memory.read, optional)
 - `GET  /api/assets/{id}/thumbnail?size=preview` -> JPEG/WebP, EXIF orientation already applied (asset.view)
+- `GET    /api/albums?assetId=` -> the albums a photo is in                (album.read: the hide button)
 - `DELETE /api/albums/{id}/assets` {ids} -> [{id, success, error}]  (albumAsset.delete: the screensaver's hide button)
 - `PUT    /api/albums/{id}/assets` {ids} -> [{id, success, error}]  (albumAsset.create: "Show again")
 
@@ -22,7 +23,7 @@ winter albums are shown. The list is grouped by album (oldest photo first) so th
 at a time; an album's photos are only fetched again when Immich says it changed. Only images are used (videos skipped). The asset list is cached and refreshed every few minutes; if Immich can't be
 reached the last good list is kept, and with none the screensaver falls back to its painted scenes.
 
-A photo hidden from a screen is taken out of the albums it was shown from and remembered in `immich_hidden`, so it
+A photo hidden from a screen is taken out of every album it is in and remembered in `immich_hidden`, so it
 stays hidden even where Immich wouldn't let it be removed (a shared album, favourites, memories).
 """
 from __future__ import annotations
@@ -112,10 +113,11 @@ def hidden_ids(c) -> set[str]:
     return {r["asset_id"] for r in db.rows(c, "SELECT asset_id FROM immich_hidden")}
 
 
-def hidden_list(c) -> list[dict]:
+def hidden_list(c, limit: int, offset: int = 0) -> list[dict]:
     return [{"id": r["asset_id"], "albums": json.loads(r["albums"]), "hidden_at": r["hidden_at"],
              "url": f"/api/immich/assets/{r['asset_id']}/preview"}
-            for r in db.rows(c, "SELECT * FROM immich_hidden ORDER BY hidden_at DESC, asset_id")]
+            for r in db.rows(c, "SELECT * FROM immich_hidden ORDER BY hidden_at DESC, rowid DESC LIMIT ? OFFSET ?",
+                             (limit, offset))]
 
 
 def household_today(tz: str) -> date:
@@ -279,6 +281,12 @@ class Client:
         raw = await self._call(http, "GET", "/memories", "read memories",
                                params={"for": day.isoformat(), "type": "on_this_day"})
         return [a for m in raw if isinstance(m, dict) for a in (m.get("assets") or []) if isinstance(a, dict)]
+
+    async def albums_with(self, http: httpx.AsyncClient, asset_id: str) -> list[dict]:
+        """Every album (owned or shared) a photo is in: [{id, name}]."""
+        raw = await self._call(http, "GET", "/albums", "list albums", params={"assetId": asset_id})
+        return [{"id": a["id"], "name": str(a.get("albumName") or "Untitled")}
+                for a in raw if isinstance(a, dict) and isinstance(a.get("id"), str)] if isinstance(raw, list) else []
 
     async def album_change(self, http: httpx.AsyncClient, album_id: str, asset_id: str, add: bool) -> str | None:
         """Take a photo out of an album (or put it back). None when done, else Immich's reason, e.g. "no_permission"

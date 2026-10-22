@@ -134,7 +134,7 @@ function AlbumToast({ name, icon, onDone }: { name: string; icon?: ReactNode; on
 }
 
 const names = (xs: { name: string }[]) => xs.map((x) => x.name).join(", ");
-/** The real Immich albums a photo is playing from (not favourites or "on this day"). */
+/** The real Immich albums a photo is playing from (not favourites or "on this day"); it may be in others too. */
 const albumsWith = (id: string, albums: Album[]) =>
   albums.filter((a) => a.id !== "favorites" && a.id !== "on-this-day" && a.photos.some((p) => p.id === id));
 
@@ -151,9 +151,8 @@ function HideConfirm({ photo, albums, onHide, onCancel }: { photo: SlidePhoto; a
         <img src={photo.url} alt="" />
         <div>
           <b>Hide this photo?</b>
-          <p>{from.length
-            ? <>It won't be shown on the screens again, and it's taken out of <b>{names(from)}</b> in Immich.</>
-            : <>It won't be shown on the screens again. Nothing changes in Immich.</>}
+          <p>It won't be shown on the screens again, and it's taken out of every Immich album it's in
+            {from.length ? <>, including <b>{names(from)}</b></> : null}.
           </p>
           <div className="ss-confirm-btns">
             <button className="btn ghost" onClick={onCancel}>Cancel</button>

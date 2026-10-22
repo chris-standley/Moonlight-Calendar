@@ -68,10 +68,11 @@ class FakeImmich:
         if req.headers.get("x-api-key") != KEY:
             return httpx.Response(401, json={"message": "Invalid API key", "statusCode": 401})
         if path == "/api/albums" and req.method == "GET":
+            having = req.url.params.get("assetId")
             return httpx.Response(200, json=[
                 {"id": k, "albumName": self.names[k], "assetCount": len(v), "shared": False, "albumThumbnailAssetId": None,
                  "updatedAt": self.updated[k], "lastModifiedAssetTimestamp": self.updated[k]}
-                for k, v in self.photos.items()])
+                for k, v in self.photos.items() if not having or any(a["id"] == having for a in v)])
         if path.startswith("/api/albums/") and path.endswith("/assets") and req.method in ("PUT", "DELETE"):
             if self.no_album_edit:
                 return httpx.Response(403, json={"message": "Missing required permission"})
@@ -570,15 +571,16 @@ def test_hide_photo_removes_it_from_its_albums(client, fake):
     body = client.get("/api/screensaver/photos").json()
     assert both["id"] not in {p["id"] for p in body["photos"]}
     # Settings lists it, with a thumbnail the proxy still serves.
-    hidden = client.get("/api/immich/hidden").json()
-    assert [h["id"] for h in hidden] == [both["id"]] and hidden[0]["albums"] == [{"id": fake.garden, "name": "Garden"}]
+    page = client.get("/api/immich/hidden").json()
+    hidden = page["photos"]
+    assert page["total"] == 1 and [h["id"] for h in hidden] == [both["id"]] and hidden[0]["albums"] == [{"id": fake.garden, "name": "Garden"}]
     assert client.get(hidden[0]["url"]).status_code == 200
     assert client.post(f"/api/screensaver/photos/{both['id']}/hide").status_code == 404  # not on the screens now
     # Show again: needs the PIN, goes back into Garden.
     assert client.post(f"/api/immich/hidden/{both['id']}/restore", json={"pin": "0000"}).status_code == 403
     r = client.post(f"/api/immich/hidden/{both['id']}/restore", json={"pin": PIN}).json()
     assert r["restored"] == [{"id": fake.garden, "name": "Garden"}] and r["failed"] == []
-    assert both in fake.photos[fake.garden] and client.get("/api/immich/hidden").json() == []
+    assert both in fake.photos[fake.garden] and client.get("/api/immich/hidden").json() == {"total": 0, "photos": []}
     assert both["id"] in {p["id"] for p in client.get("/api/screensaver/photos").json()["photos"]}
 
 
@@ -595,3 +597,20 @@ def test_hide_photo_when_immich_refuses_or_not_in_an_album(client, fake):
     assert not ids & {fav, one}
     assert client.post(f"/api/screensaver/photos/{uid()}/hide").status_code == 404
     assert client.post("/api/screensaver/photos/not-a-uuid/hide").status_code == 404
+
+
+def test_hide_photo_takes_it_out_of_every_album(client, fake):
+    one = fake.photos[fake.holiday][0]
+    fake.photos[fake.private].append(one)  # also in an album the screensaver doesn't show
+    connect(client, fake)  # only Holiday 2025
+    r = client.post(f"/api/screensaver/photos/{one['id']}/hide").json()
+    assert {a["name"] for a in r["removed"]} == {"Holiday 2025", "Private"}
+    assert one not in fake.photos[fake.holiday] and one not in fake.photos[fake.private]
+    # The list comes a page at a time, newest first.
+    for a in fake.photos[fake.holiday][:2]:
+        client.post(f"/api/screensaver/photos/{a['id']}/hide")
+    assert client.get("/api/immich/hidden?limit=0").json() == {"total": 3, "photos": []}
+    first = client.get("/api/immich/hidden?limit=2").json()["photos"]
+    rest = client.get("/api/immich/hidden?limit=2&offset=2").json()["photos"]
+    assert len(first) == 2 and len(rest) == 1 and rest[0]["id"] == one["id"]
+    assert client.get("/api/immich/hidden?limit=501").status_code == 400

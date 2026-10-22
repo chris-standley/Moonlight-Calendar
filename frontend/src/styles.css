@@ -657,6 +657,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .immich-ok { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 0.8rem; background: rgba(47, 181, 138, 0.12); color: var(--ok-text); font-weight: 800; }
 .layout-phone .rail-item { min-width: 3rem; }
 
+.hidden-head { width: 100%; padding: 0; border: 0; }
 .hidden-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.8rem; width: 100%; }
 .hidden-photo { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .hidden-photo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 0.7rem; background: var(--line); }
@@ -683,6 +684,13 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .cal-panel { grid-column: 1 / -1; }
 .cal-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; }
 .cal-panel-head .panel-title { margin-bottom: 0; }
+.cal-fold { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text); }
+.cal-fold svg { color: var(--muted); transition: transform 0.2s; }
+.cal-fold[aria-expanded="true"] svg { transform: rotate(180deg); }
+.cal-folded { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; width: 100%; text-align: left; font-weight: 600; }
+.cal-folded > span { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; }
+.cal-folded > span.s-auth_failed { color: var(--danger); }
+.cal-folded > span.s-error { color: var(--warn-text); }
 .cal-intro { margin: 0.4rem 0 0.2rem; max-width: 46rem; line-height: 1.45; font-weight: 600; }
 .acct { border-top: 1px solid var(--line); padding: 0.8rem 0 0.4rem; }
 .acct:first-of-type { margin-top: 0.4rem; }

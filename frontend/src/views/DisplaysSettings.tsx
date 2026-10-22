@@ -441,21 +441,30 @@ export function ScreensaverPanel({ onScreensaver }: { onScreensaver: () => void 
 }
 
 /** Photos hidden with the screensaver's eye button, newest first, each with "Show again" (back into its albums). */
+const HIDDEN_PAGE = 12;
+
+/** Photos hidden with the screensaver's eye button: just the count until opened, then newest first a page at a time,
+ * each with "Show again" (back into its albums). */
 function HiddenPhotos() {
   const { api, askPin, toast } = useApp();
-  const [hidden] = useData((a) => a.hiddenPhotos(), ["photos"], []);
-  const [all, setAll] = useState(false);
-  if (!hidden?.length) return null;
+  const [count] = useData((a) => a.hiddenPhotos(0).then((r) => r.total), ["photos"], []);
+  const [open, setOpen] = useState(false);
+  const [pages, setPages] = useState(1);
+  const [page] = useData((a) => (open ? a.hiddenPhotos(pages * HIDDEN_PAGE) : Promise.resolve(null)), ["photos"], [open, pages]);
+  if (!count) return null;
   async function restore(id: string) {
     const pin = await askPin("Show this photo on the screensaver again? It goes back into the albums it was taken out of.");
     if (!pin) return;
     try { await api.restorePhoto(id, pin); toast("Photo back on the screensaver"); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't show it again"); }
   }
-  const list = all ? hidden : hidden.slice(0, 6);
+  const list = page?.photos ?? [];
   return (
-    <div className="set-col hidden-photos"><span>Hidden photos ({hidden.length})</span>
-      <div className="hidden-grid">
+    <div className="set-col hidden-photos">
+      <div className="set-row hidden-head"><span>Hidden photos ({count})</span>
+        <button className="btn ghost small" aria-expanded={open} onClick={() => { setOpen(!open); setPages(1); }}>{open ? "Hide list" : "Show"}</button>
+      </div>
+      {open && <div className="hidden-grid">
         {list.map((h) => (
           <div key={h.id} className="hidden-photo">
             <img src={h.url} alt="" loading="lazy" />
@@ -463,8 +472,8 @@ function HiddenPhotos() {
             <button className="btn ghost small" onClick={() => restore(h.id)}>Show again</button>
           </div>
         ))}
-      </div>
-      {hidden.length > list.length && <button className="btn ghost small" onClick={() => setAll(true)}>Show all {hidden.length}</button>}
+      </div>}
+      {open && page && page.total > list.length && <button className="btn ghost small" onClick={() => setPages(pages + 1)}>Show more</button>}
     </div>
   );
 }

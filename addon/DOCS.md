@@ -263,11 +263,11 @@ Advent, Santa, nativity, carol or Boxing Day in their name only show in December
 painted landscapes.
 
 To stop a photo coming up again, tap the crossed-out eye at the top left of the screensaver (on the Apple TV, press
-the remote during a slideshow) and confirm. Moonlight takes it out of the Immich albums it was showing from and
-never shows it again. Removing photos from albums needs two more API key permissions, `albumAsset.delete` (and
+the remote during a slideshow) and confirm. Moonlight takes it out of every Immich album it is in and never shows it
+again. Removing photos from albums needs two more API key permissions, `albumAsset.delete` (and
 `albumAsset.create` to put one back); without them, or for a shared album you can only view, the photo is still
-hidden from the screens but stays in the album. Hidden photos are listed under Settings > Photo screensaver, each
-with Show again, which puts it back in its albums.
+hidden from the screens but stays in the album. Settings > Photo screensaver shows how many are hidden; open the
+list to see them a few at a time, each with Show again, which puts it back in its albums.
 
 If Immich is itself a Home Assistant add-on, check its port (2283) is filled in under the add-on's Network settings; Immich opened only through the Home Assistant sidebar can't be reached by Moonlight. If Immich uses HTTPS, start the address with `https://`; when its certificate is self-signed or made for a domain name rather than the IP address, turn on Skip certificate check.
 

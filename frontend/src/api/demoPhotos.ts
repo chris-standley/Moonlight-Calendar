@@ -205,14 +205,14 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
       : { source: "none", status: "unconfigured", photos: [], albums: [] },
     async hidePhoto(id) {
       const look = library().findIndex((p) => p.id === id);
-      const from = groups().filter((g) => g.looks.includes(look) && g.id !== "favorites" && g.id !== "on-this-day");
       if (look < 0 || !groups().some((g) => g.looks.includes(look))) throw new ApiError(404, "Photo not found");
-      const removed = from.map(({ id, name }) => ({ id, name }));
+      const removed = ALBUMS.filter((a) => a.looks.includes(look)).map(({ id, name }) => ({ id, name })); // every album it's in
       hiddenLooks = [{ look, albums: removed, at: isoDT(new Date()) }, ...hiddenLooks];
       emit("photos");
       return { ok: true, removed, failed: [] };
     },
-    hiddenPhotos: async (): Promise<HiddenPhoto[]> => hiddenLooks.map((h) => ({ id: library()[h.look].id, albums: h.albums, hidden_at: h.at, url: library()[h.look].url })),
+    hiddenPhotos: async (limit, offset = 0) => ({ total: hiddenLooks.length, photos: hiddenLooks.slice(offset, offset + limit)
+      .map((h): HiddenPhoto => ({ id: library()[h.look].id, albums: h.albums, hidden_at: h.at, url: library()[h.look].url })) }),
     async restorePhoto(id, pin) {
       checkPin(pin);
       hiddenLooks = hiddenLooks.filter((h) => library()[h.look].id !== id);

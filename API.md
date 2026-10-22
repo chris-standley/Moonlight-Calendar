@@ -638,11 +638,13 @@ ImmichAlbum = `{id, name, asset_count, shared, updated_at|null}` (`updated_at` =
   over the same connection as the weather at each refresh; without HA only towns are used. `url` is an absolute path; clients
   prefix their base path.
 - `POST /api/screensaver/photos/{id}/hide` -> `{ok: true, removed: [{id, name}], failed: [{id, name, error}]}`: the
-  screensaver's hide button (no PIN; the screen asks first). Never shows the photo again and takes it out of the Immich
-  albums it is shown from (`DELETE /api/albums/{id}/assets`, needs `albumAsset.delete`), not favourites or memories.
+  screensaver's hide button (no PIN; the screen asks first). Never shows the photo again and takes it out of every
+  Immich album it is in, shown or not (`GET /api/albums?assetId=`, then `DELETE /api/albums/{id}/assets`, needs
+  `albumAsset.delete`); favourites and memories are left alone.
   It is hidden even when Immich refuses (`failed`: a shared album the key's user can only view, a key without the
   permission, Immich down). 404 unless the id is in the current photo list.
-- `GET /api/immich/hidden` -> `[{id, albums: [{id, name}], hidden_at, url}]` hidden photos, newest first (`albums` = taken out of).
+- `GET /api/immich/hidden?limit=12&offset=0` -> `{total, photos: [{id, albums: [{id, name}], hidden_at, url}]}` hidden
+  photos, newest first, a page at a time (`limit` 0-500, 0 = just the count; `albums` = taken out of).
 - `POST /api/immich/hidden/{id}/restore` `{pin}` -> `{ok: true, restored: [{id, name}], failed: [{id, name, error}]}`:
   show it again, back into the albums it was taken out of (`PUT /api/albums/{id}/assets`, `albumAsset.create`).
 - `GET /api/immich/assets/{id}/preview` -> the preview image streamed from Immich, `Cache-Control: private, max-age=86400`.

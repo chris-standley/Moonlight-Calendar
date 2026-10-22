@@ -167,7 +167,10 @@ export function httpApi(base = ""): Api {
       return { ...r, photos: r.photos.map((p) => ({ ...p, url: base + p.url })) };
     },
     hidePhoto: (id) => req("POST", `/api/screensaver/photos/${id}/hide`),
-    hiddenPhotos: async () => (await get<HiddenPhoto[]>("/api/immich/hidden")).map((p) => ({ ...p, url: base + p.url })),
+    async hiddenPhotos(limit, offset = 0) {
+      const r = await get<{ total: number; photos: HiddenPhoto[] }>(`/api/immich/hidden?limit=${limit}&offset=${offset}`);
+      return { ...r, photos: r.photos.map((p) => ({ ...p, url: base + p.url })) };
+    },
     restorePhoto: async (id, pin) => { await req("POST", `/api/immich/hidden/${id}/restore`, { pin }); },
     nursery: () => get("/api/nursery"),
     saveNursery: (c) => req("PUT", "/api/nursery", c),
