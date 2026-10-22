@@ -470,7 +470,12 @@ struct EnergyOverview: Codable {
         var running: Bool; var doing: String; var power: Double?; var today: Double?
         var flow_temp: Double?; var heat: Double?; var cop: Double?; var cop_today: Cop?
     }
-    struct Temperatures: Codable { var inside: Double?; var outside: Double?; var tank: Double? }
+    /// °C; the *_target ones are the heat pump's set points; humidity in %.
+    struct Temperatures: Codable {
+        var inside: Double?; var outside: Double?; var tank: Double?
+        var heating_target: Double?; var tank_target: Double?
+        var inside_humidity: Double?; var outside_humidity: Double?
+    }
     /// From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO.
     struct Plan: Codable {
         struct Window: Codable { var start: String; var end: String?; var rate: Double? }

@@ -39,21 +39,32 @@ struct EnergyHouse: View {
 
     private var drawSun: Bool { sky == nil || sky?.condition == "sunny" }
 
+    /// Inside and the tank with what they're set to; outside (with its humidity) under the weather.
     @ViewBuilder
     private func tags(_ s: CGFloat) -> some View {
         if !compact {
             let t = data.temperatures
-            if let v = t?.inside { tag(s, 642, 346, "Inside", Energy.degrees(v)) }
-            if let v = t?.tank { tag(s, 642, 430, "Tank", Energy.degrees(v)) }
+            if let v = t?.inside {
+                tag(s, 642, 346, "Inside", Energy.degrees(v),
+                    [t?.heating_target.map { "Set \(Energy.degrees($0))" }, t?.inside_humidity.map { "\(Int($0.rounded()))% RH" }])
+            }
+            if let v = t?.tank { tag(s, 642, 430, "Tank", Energy.degrees(v), [t?.tank_target.map { "Set \(Energy.degrees($0))" }]) }
+            if let v = t?.outside ?? sky.map({ Double($0.temp) }) {
+                tag(s, 120, 212, "Outside", Energy.degrees(v), [t?.outside_humidity.map { "\(Int($0.rounded()))% RH" }])
+            }
         }
     }
 
-    private func tag(_ s: CGFloat, _ x: CGFloat, _ y: CGFloat, _ title: String, _ value: String) -> some View {
+    private func tag(_ s: CGFloat, _ x: CGFloat, _ y: CGFloat, _ title: String, _ value: String, _ sub: [String?] = []) -> some View {
         let size = max(12 * s, 9)
+        let more = sub.compactMap { $0 }.joined(separator: " · ")
         return VStack(spacing: 0) {
             Text(title.uppercased()).font(.system(size: size * 0.8, weight: .heavy, design: .rounded))
                 .tracking(size * 0.05).foregroundStyle(Theme.muted)
             Text(value).font(.system(size: size * 1.35, weight: .heavy, design: .rounded)).foregroundStyle(Theme.text)
+            if !more.isEmpty {
+                Text(more).font(.system(size: size * 0.78, weight: .bold, design: .rounded)).foregroundStyle(Theme.muted)
+            }
         }
         .padding(.horizontal, size * 0.6)
         .padding(.vertical, size * 0.3)
@@ -640,7 +651,11 @@ struct EnergyCards: View {
         }
         if let t = d.temperatures, t.inside != nil || t.tank != nil {
             out.append(Item(tint: Color(hex: "#6AA6E8"), title: "Temperatures", value: t.inside.map { "\(Energy.degrees($0)) inside" } ?? "–",
-                            lines: [t.tank.map { "Hot water tank \(Energy.degrees($0))" }].compactMap { $0 }))
+                            lines: [t.heating_target.map { "Set to \(Energy.degrees($0))" },
+                                    t.inside_humidity.map { "Humidity \(Int($0.rounded()))%" },
+                                    t.tank.map { "Hot water tank \(Energy.degrees($0))" + (t.tank_target.map { " (set \(Energy.degrees($0)))" } ?? "") },
+                                    t.outside.map { "Outside \(Energy.degrees($0))" + (t.outside_humidity.map { ", \(Int($0.rounded()))% humidity" } ?? "") }]
+                                .compactMap { $0 }))
         }
         return out
     }

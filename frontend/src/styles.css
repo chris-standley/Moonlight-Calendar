@@ -1427,6 +1427,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .en-tag span { font-size: 0.8em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .en-tag b { font-size: 1.35em; font-weight: 800; white-space: nowrap; }
 .en-tag.t-tank { background: color-mix(in srgb, var(--surface) 80%, transparent); }
+.en-tag small { font-size: 0.78em; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .en-body.with-plan { flex-direction: column; gap: 0.8rem; }
 .en-body.with-plan .en-house { width: min(100cqw, (100cqh - 4.4rem) * 10 / 6); }
 .en-plan { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; flex: none; max-width: 100%; }

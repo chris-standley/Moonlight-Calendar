@@ -6,7 +6,7 @@ struct EnergyView: View {
     @State private var data: EnergyOverview?
 
     var body: some View {
-        Screen {
+        Screen(weather: false) {
             if data?.reachable == false {
                 Text("Can't reach Home Assistant").font(Theme.font(26, .bold)).foregroundStyle(Theme.danger)
             }

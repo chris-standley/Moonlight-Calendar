@@ -285,6 +285,7 @@ export type EnergySlot =
   | "home_power" | "home_today" | "car_plug" | "car_status" | "car_power" | "car_soc" | "car_range" | "car_session" | "car_limit" | "car_ready"
   | "heat_pump_mode" | "heat_pump_power" | "heat_pump_today" | "heat_pump_flow" | "heat_pump_return" | "heat_pump_flow_rate"
   | "heat_pump_details" | "inside_temp" | "outdoor_temp" | "heat_pump_tank"
+  | "heating_target" | "tank_target" | "inside_humidity" | "outside_humidity"
   | "plan_status" | "plan_cost_today" | "plan_rate_now" | "plan_rate_export" | "plan_battery_hours"
   | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end" | "cheap_off_peak" | "cheap_dispatches";
 export type EnergyKind = "power" | "energy" | "percent" | "temperature" | "number" | "state";
@@ -309,7 +310,9 @@ export interface EnergyOverview {
   /** heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight. */
   heat_pump: { running: boolean; doing: string; power: number | null; today: number | null; flow_temp: number | null; heat: number | null; cop: number | null;
     cop_today: { heating: number | null; hot_water: number | null; overall: number | null } | null } | null;
-  temperatures: { inside: number | null; outside: number | null; tank: number | null } | null;
+  /** °C; *_target: the heat pump's set points; humidity in %. */
+  temperatures: { inside: number | null; outside: number | null; tank: number | null; heating_target?: number | null; tank_target?: number | null;
+    inside_humidity?: number | null; outside_humidity?: number | null } | null;
   /** From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO. */
   plan: { status: string | null; cost_today: number | null; cost_unit: string | null; rate_now: number | null; rate_export: number | null; rate_unit: string | null;
     battery_hours: number | null; charge: EnergyWindow | null; cheap: EnergyWindow | null } | null;

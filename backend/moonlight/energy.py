@@ -77,6 +77,10 @@ SLOTS: dict[str, tuple[str, str]] = {
     "inside_temp": ("temperature", "temperatures"),
     "outdoor_temp": ("temperature", "temperatures"),
     "heat_pump_tank": ("temperature", "temperatures"),
+    "heating_target": ("temperature", "temperatures"),
+    "tank_target": ("temperature", "temperatures"),
+    "inside_humidity": ("percent", "temperatures"),
+    "outside_humidity": ("percent", "temperatures"),
     "plan_status": ("state", "plan"),
     "plan_cost_today": ("number", "plan"),
     "plan_rate_now": ("number", "plan"),
@@ -576,6 +580,11 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
         # Nothing picked for it: the heat pump controller's own reading will do.
         if temps[key] is None and attr in d and eff.get("auto", {}).get(slot, True):
             temps[key] = round(d[attr], 1)
+    temps |= {"heating_target": number("heating_target"), "tank_target": number("tank_target"),
+              "inside_humidity": number("inside_humidity", 0), "outside_humidity": number("outside_humidity", 0)}
+    for k in ("inside_humidity", "outside_humidity"):
+        if temps[k] is not None:
+            temps[k] = int(temps[k])
     out["temperatures"] = temps if any(v is not None for v in temps.values()) else None
 
     if has(*PREDBAT):
@@ -812,6 +821,13 @@ PATTERNS: dict[str, list[str]] = {
     "inside_temp": [HEAT_PUMP_WORDS + r".*(room|indoor|inside).*temp", r"(indoor|inside)_temp", r"room_temp"],
     "heat_pump_tank": [HEAT_PUMP_WORDS + r".*(tank|dhw|hot_water).*temp", r"(dhw|hot_water)_tank.*temp"],
     "outdoor_temp": [HEAT_PUMP_WORDS + r".*outdoor.*temp"],
+    "heating_target": [r"heating_set_?point", HEAT_PUMP_WORDS + r".*(heating|room|climate\w*).*(set_?point|target)",
+                       r"(room|heating)_(set_?point|target)_temp"],
+    "tank_target": [r"dhw_set_?point", HEAT_PUMP_WORDS + r".*(tank|dhw|hot_water).*(set_?point|target)",
+                    r"(hot_water|tank)_(set_?point|target)"],
+    # Matched on the friendly name too: "Hallway Meter Humidity", "Outside Meter Humidity".
+    "inside_humidity": [r"(living_room|lounge|hall)\w*humid", r"(indoor|inside)\w*humid", r"humidity"],
+    "outside_humidity": [r"(^| )(outside|outdoor)\w*humid", r"(openweathermap|met_office|(^|_)met_|weather|accuweather|pirate)\w*humid"],
 }
 EXCLUDE: dict[str, str] = {
     "solar_power": r"forecast|predbat|estimate",
@@ -820,6 +836,11 @@ EXCLUDE: dict[str, str] = {
     "solar_forecast_tomorrow": r"remaining|predbat|peak|cost|weather|power|d3|day_3",
     "heat_pump_flow_rate": r"gas|air|refrig",
     "inside_temp": r"target|setpoint|set_point|offset|outdoor|outside",
+    "heating_target": r"mode|offset|leaving|flow|dhw|tank|hot_water|predicted|predheat",
+    "tank_target": r"mode|offset|predicted",
+    "inside_humidity": r"outside|fridge|freezer|garage|bath|ensuite|en_suite|(^|_)wc(_|$)|ams|p1s|offset|calibration|test|index|"
+                       r"dew|weather|openweathermap",
+    "outside_humidity": r"fridge|freezer|offset|calibration|test|index|dew|forecast",
     "battery_soc": r"car|ev_|vehicle|e_niro|tesla|phone|predbat|target|reserve|cutoff|min|max",
     "battery_power": r"car|ev_|vehicle|predbat|rate|max|limit",
     "grid_power": r"predbat|limit|export_limit|zappi|eddi|ct",

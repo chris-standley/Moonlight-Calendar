@@ -450,7 +450,7 @@ minutes (or with `refresh`).
   limit (%), ready (ISO: a time of day becomes its next occurrence)} | null,
   heat_pump: {running, doing ("Heating the house", "Heating hot water", "Defrosting", "Cooling", "Running", "Idle"),
   power, today, flow_temp, heat, cop, cop_today: {heating, hot_water, overall} | null} | null,
-  temperatures: {inside, outside, tank} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
+  temperatures: {inside, outside, tank, heating_target, tank_target, inside_humidity, outside_humidity} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
   battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null, tariff: {cheap_now,
   cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null, sun: {night, next} | null}`.
   `sun`: from Home Assistant's `sun.sun` (watched, so sunset and sunrise push an update); `night` = below the horizon,
