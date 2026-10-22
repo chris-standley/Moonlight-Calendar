@@ -25,6 +25,9 @@ from ..common import LAYOUTS, as_int, bad, body_dict, choice, hub, layout_name, 
 router = APIRouter(prefix="/api")
 
 SECTIONS = ("today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security", "energy")  # Settings is always shown
+# The bottom bar of a compact screen stood upright: up to four of its menu's tabs, the rest under More.
+BAR_TABS = (*SECTIONS, "music", "settings")
+BAR_MAX = 4
 SERVICE = "service"  # a non-screen client, e.g. the Home Assistant integration
 APP = "app"  # the iPhone and iPad app
 NOT_SCREENS = (SERVICE, APP)
@@ -45,8 +48,11 @@ def style_setup(c, layout: str) -> dict:
     screens = db.get_setting(c, "screens", db.DEFAULT_SETTINGS["screens"])
     idle = db.get_setting(c, "idle_minutes", db.DEFAULT_SETTINGS["idle_minutes"])
     s = {**db.DEFAULT_SETTINGS["screens"][layout], **(screens.get(layout) or {})}
-    return {"start": s["start"], "sections": list(s["sections"]), "speaker": media.players_setting(c)[layout],
-            "idle_minutes": idle.get(layout, db.DEFAULT_SETTINGS["idle_minutes"][layout])}
+    out = {"start": s["start"], "sections": list(s["sections"]), "speaker": media.players_setting(c)[layout],
+           "idle_minutes": idle.get(layout, db.DEFAULT_SETTINGS["idle_minutes"][layout])}
+    if s.get("bar"):
+        out["bar"] = list(s["bar"])  # unset = the menu's first four
+    return out
 
 
 def display_out(d: dict, current_id: str | None = None, c=None) -> dict:
@@ -61,7 +67,7 @@ def display_out(d: dict, current_id: str | None = None, c=None) -> dict:
                 base = style_setup(c2, d["layout"])
         else:
             base = style_setup(c, d["layout"])
-        out["setup"] = {**base, **{k: v for k, v in own.items() if k in base}}
+        out["setup"] = {**base, **{k: v for k, v in own.items() if k in base or k == "bar"}}
         out["own_setup"] = bool(own)
     return out
 
@@ -167,7 +173,7 @@ async def approve(body: dict = Body(...)):
 @router.patch("/displays/{display_id}")
 async def update(display_id: str, request: Request, body: dict = Body(...)):
     """Change a paired screen: `{pin, name?, layout?, setup?}`. `setup` is `{start?, sections?, speaker?,
-    idle_minutes?}` merged into its own setup, or `null` to follow its style again."""
+    idle_minutes?, bar?}` merged into its own setup, or `null` to follow its style again."""
     body = body_dict(body)
     with db.connect() as c:
         require_pin(c, body.get("pin"))
@@ -223,6 +229,9 @@ def _check_setup(c, layout: str, s: dict) -> dict:
             if not 0 <= v <= 1440:
                 raise bad("setup.idle_minutes must be between 0 (never) and 1440")
             out[k] = v
+        elif k == "bar":
+            if v is not None:  # null = back to the menu's first four
+                out[k] = check_bar(v, "setup.bar")
         else:
             raise bad(f"Unknown setup field {k}")
     sections = out.get("sections", base["sections"])
@@ -231,8 +240,15 @@ def _check_setup(c, layout: str, s: dict) -> dict:
     return out
 
 
+def check_bar(v, field: str) -> list[str]:
+    """The tabs a compact screen keeps in its bottom bar when upright, in the order given."""
+    if not isinstance(v, list) or len(v) > BAR_MAX or any(x not in BAR_TABS for x in v):
+        raise bad(f"{field} must be a list of up to {BAR_MAX} of " + ", ".join(BAR_TABS))
+    return list(dict.fromkeys(v))
+
+
 def apply_settings(c, body: dict) -> None:
-    """PATCH /api/settings `screens`: {layout: {start?, sections?}}; layouts not sent are kept."""
+    """PATCH /api/settings `screens`: {layout: {start?, sections?, bar?}}; layouts not sent are kept."""
     if "screens" not in body:
         return
     val = body["screens"]
@@ -251,6 +267,11 @@ def apply_settings(c, body: dict) -> None:
             s["sections"] = [x for x in SECTIONS if x in secs]
         if "start" in conf:
             s["start"] = choice(conf["start"], f"screens.{layout}.start", SECTIONS)
+        if "bar" in conf:
+            if conf["bar"] is None:
+                s.pop("bar", None)
+            else:
+                s["bar"] = check_bar(conf["bar"], f"screens.{layout}.bar")
         if s["start"] not in s["sections"]:
             if "start" in conf:
                 raise bad(f"screens.{layout}.start must be one of its sections")

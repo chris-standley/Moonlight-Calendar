@@ -6,6 +6,8 @@ export type Layout = "large" | "compact" | "phone";
 interface Ctx {
   api: Api;
   layout: Layout;
+  /** A compact screen standing upright (see usePortrait in App). */
+  portrait: boolean;
   /** The paired screen this is, with its name and setup (null in the Home Assistant app or the demo). */
   screen: Display | null;
   people: Person[];

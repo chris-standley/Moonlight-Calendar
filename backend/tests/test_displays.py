@@ -237,7 +237,9 @@ def test_one_address_and_per_screen_setup(app_on, ha):
     assert r["own_setup"] is False and r["setup"]["start"] == "today" and r["setup"]["idle_minutes"] == 3
 
     for bad in ({"setup": {"sections": []}}, {"setup": {"start": "settings"}}, {"setup": {"speaker": "light.x"}},
-                {"setup": {"idle_minutes": -1}}, {"setup": {"colour": "red"}}, {"setup": []}, {"layout": "tv"}):
+                {"setup": {"idle_minutes": -1}}, {"setup": {"colour": "red"}}, {"setup": []}, {"layout": "tv"},
+                {"setup": {"bar": ["today", "calendar", "meals", "lists", "music"]}}, {"setup": {"bar": ["garage"]}},
+                {"setup": {"bar": "today"}}):
         assert ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, **bad}).status_code == 400, bad
     assert ha.patch(f"/api/displays/{other['id']}", json={"pin": "0000", "layout": "phone"}).status_code == 403
 
@@ -301,3 +303,26 @@ def test_the_phone_app_is_not_a_screen(app_on, ha):
     assert lan(app_on, headers={"Authorization": f"Bearer {token}"}).get("/api/people").status_code == 200
     assert ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "layout": "phone"}).status_code == 400
     assert ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "name": "Chris's iPhone"}).json()["name"] == "Chris's iPhone"
+
+
+def test_bottom_bar_choice(app_on, ha):
+    """A compact screen stood upright keeps up to four chosen tabs in its bottom bar; unset = automatic."""
+    _, d = pair(ha, lan(app_on), name="Kitchen", layout="compact")
+    assert "bar" not in d["setup"]
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {"bar": ["today", "meals", "music", "meals"]}})
+    assert r.status_code == 200, r.text
+    assert r.json()["setup"]["bar"] == ["today", "meals", "music"] and r.json()["own_setup"] is True
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {"idle_minutes": 4}}).json()
+    assert r["setup"]["bar"] == ["today", "meals", "music"]  # other changes keep it
+    r = ha.patch(f"/api/displays/{d['id']}", json={"pin": PIN, "setup": {"bar": None}}).json()
+    assert "bar" not in r["setup"]
+
+    # The style's choice, for compact screens without their own setup.
+    _, other = pair(ha, lan(app_on), name="Hall", layout="compact")
+    assert ha.patch("/api/settings", json={"pin": PIN, "screens": {"compact": {"bar": ["calendar", "settings"]}}}).status_code == 200
+    shown = {x["name"]: x for x in ha.get("/api/displays").json()}
+    assert shown["Hall"]["setup"]["bar"] == ["calendar", "settings"]
+    assert ha.patch("/api/settings", json={"pin": PIN, "screens": {"compact": {"bar": ["x"]}}}).status_code == 400
+    ha.patch("/api/settings", json={"pin": PIN, "screens": {"compact": {"bar": None}}})
+    shown = {x["name"]: x for x in ha.get("/api/displays").json()}
+    assert "bar" not in shown["Hall"]["setup"]

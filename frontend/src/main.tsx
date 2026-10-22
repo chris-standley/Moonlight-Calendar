@@ -32,7 +32,9 @@ const asLayout = (s: string) => OLD[s] ?? (s as Layout);
 export function guessLayout(): Layout {
   const m = location.pathname.match(/\/display\/(\w+)/)?.[1].match(STYLE) ?? location.hash.match(STYLE);
   if (m) return asLayout(m[1]);
-  return window.innerWidth >= 1800 ? "large" : window.innerWidth >= 700 ? "compact" : "phone";
+  // The short side, so a compact screen stood upright isn't taken for a phone.
+  const short = Math.min(window.innerWidth, window.innerHeight);
+  return window.innerWidth >= 1800 ? "large" : short >= 560 ? "compact" : "phone";
 }
 
 /** Live: served by the add-on (also under HA ingress, so API calls stay relative to the app's base path). */
@@ -59,13 +61,26 @@ function Live() {
   return <div className="live-root"><App key={layout} api={api} layout={layout} onLayout={setLayout} /></div>;
 }
 
+/** Preview frames: each screen style, plus the compact screen stood upright (the Touch Display 2 is portrait natively). */
+const FRAMES = [
+  { key: "large", layout: "large" as Layout, ...SCREENS.large },
+  { key: "compact", layout: "compact" as Layout, ...SCREENS.compact },
+  { key: "compact-portrait", layout: "compact" as Layout, ...SCREENS.compact, w: SCREENS.compact.h, h: SCREENS.compact.w,
+    label: "Compact portrait", detail: "Touch Display 2 upright, 1200×1920 at 2× zoom" },
+  { key: "phone", layout: "phone" as Layout, ...SCREENS.phone },
+];
+
 /** Published preview: in-browser demo data, with a switcher that renders each screen at its real size, scaled to fit. */
 function Preview() {
   const api = useMemo(() => demoApi(), []);
-  const [layout, setLayout] = useState<Layout>(() => {
-    const m = location.hash.match(STYLE);
+  const [key, setKey] = useState(() => {
+    const h = location.hash.slice(1);
+    if (FRAMES.some((f) => f.key === h)) return h;
+    const m = h.match(STYLE);
     return m ? asLayout(m[1]) : "large";
   });
+  const f = FRAMES.find((x) => x.key === key) ?? FRAMES[0];
+  const layout = f.layout;
   const [box, setBox] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
     const r = () => setBox({ w: window.innerWidth, h: window.innerHeight });
@@ -73,25 +88,24 @@ function Preview() {
     return () => window.removeEventListener("resize", r);
   }, []);
   useLayoutEffect(() => setRootFont(layout), [layout]);
-  const s = SCREENS[layout];
   const bar = 56, pad = 16;
-  const scale = Math.min((box.w - pad * 2) / s.w, (box.h - bar - pad * 2) / s.h, layout === "large" ? 1 : 2);
+  const scale = Math.min((box.w - pad * 2) / f.w, (box.h - bar - pad * 2) / f.h, layout === "large" ? 1 : 2);
   return (
     <div className="preview">
       <div className="pv-bar">
         <span className="pv-name">Moonlight preview</span>
         <div className="pv-tabs">
-          {(Object.keys(SCREENS) as Layout[]).map((k) => (
-            <button key={k} className={k === layout ? "on" : ""} onClick={() => { setLayout(k); try { history.replaceState(null, "", "#" + k); } catch { /* sandboxed */ } }}>
-              {SCREENS[k].label}
+          {FRAMES.map((x) => (
+            <button key={x.key} className={x.key === key ? "on" : ""} onClick={() => { setKey(x.key); try { history.replaceState(null, "", "#" + x.key); } catch { /* sandboxed */ } }}>
+              {x.label}
             </button>
           ))}
         </div>
-        <span className="pv-detail">{s.detail} · shown at {Math.round(scale * 100)}% · demo PIN 1234</span>
+        <span className="pv-detail">{f.detail} · shown at {Math.round(scale * 100)}% · demo PIN 1234</span>
       </div>
       <div className="pv-stage">
-        <div style={{ width: s.w * scale, height: s.h * scale }}>
-          <div className="pv-frame" style={{ width: s.w, height: s.h, transform: `scale(${scale})` }}>
+        <div style={{ width: f.w * scale, height: f.h * scale }}>
+          <div className="pv-frame" style={{ width: f.w, height: f.h, transform: `scale(${scale})` }}>
             <App key={layout} api={api} layout={layout} />
           </div>
         </div>

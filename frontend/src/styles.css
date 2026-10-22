@@ -1567,3 +1567,82 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-phone .mu-side > .segmented button { font-size: 0.85rem; padding: 0 0.4rem; }
 .layout-phone .mu-grid { grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 0.8rem 0.6rem; }
 .layout-phone .ss-np { width: auto; max-width: none; }
+
+/* Compact screen stood upright (the Touch Display 2 is portrait natively): the `portrait` class comes from the app's
+   own box (see usePortrait in App), not the window, so the demo's preview frame shows it too. */
+/* The menu is a bottom bar: up to four chosen tabs and More (App.tsx), full width like a phone's tab bar */
+.layout-compact.portrait { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.layout-compact.portrait .main { grid-row: 1; }
+.layout-compact.portrait .rail { grid-row: 2; flex-direction: row; justify-content: space-around; width: auto; padding: 0.3rem 0.6rem 0.4rem; border-right: 0; border-top: 1px solid var(--line); gap: 0.2rem; }
+.layout-compact.portrait .rail-logo { display: none; }
+.layout-compact.portrait .rail-item { flex: 1 1 0; min-width: 0; max-width: 8rem; padding: 0.4rem 0.2rem 0.35rem; gap: 0.15rem; font-size: 0.75rem; }
+.layout-compact.portrait .rail-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layout-compact.portrait .topbar { gap: 0.7rem; }
+.layout-compact.portrait .tb-date { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.layout-compact.portrait .tb-time, .layout-compact.portrait .tb-wx { flex: none; }
+.layout-compact.portrait .np-pill { flex: 0 1 11rem; }
+.layout-compact.portrait .toolbar { flex-wrap: wrap; row-gap: 0.4rem; }
+/* Today: the agenda across the top; meals and music, then chores and the shopping list, in two columns below */
+.layout-compact.portrait .today-view { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1.2fr) auto minmax(0, 1fr);
+  grid-template-areas: "agenda agenda" "meals music" "chores list"; }
+.layout-compact.portrait .today-mid, .layout-compact.portrait .today-right { display: contents; }
+.layout-compact.portrait .today-view .agenda { grid-area: agenda; }
+.layout-compact.portrait .today-mid > .panel:first-child { grid-area: meals; }
+.layout-compact.portrait .today-mid > .panel:last-child { grid-area: chores; flex: none; overflow-y: auto; scrollbar-width: none; }
+.layout-compact.portrait .today-view .np-card { grid-area: music; }
+.layout-compact.portrait .today-right > .panel:last-child { grid-area: list; flex: none; }
+.layout-compact.portrait .today-view:not(:has(.np-card)) .today-mid > .panel:first-child { grid-column: 1 / -1; }
+.layout-compact.portrait .tm-next { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Chores and rewards: up to two people side by side, more scroll sideways */
+.layout-compact.portrait .chore-cols, .layout-compact.portrait .reward-cols { grid-template-columns: none; grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 0.6rem) / 2); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.layout-compact.portrait .chore-col, .layout-compact.portrait .kid-rewards { scroll-snap-align: start; }
+.layout-compact.portrait .chore-cols > .family-prompt, .layout-compact.portrait .reward-cols > .family-prompt { grid-column: auto; }
+.layout-compact.portrait .reward { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.6rem; row-gap: 0.45rem; }
+.layout-compact.portrait .reward > .btn { grid-column: 2; justify-self: start; }
+.layout-compact.portrait .rw-emoji { width: 2.2rem; font-size: 1.6rem; }
+/* Meals: the days run down the page and the meals across */
+.layout-compact.portrait .meal-grid { grid-auto-flow: column; grid-template-columns: 4.4rem repeat(4, minmax(0, 1fr)); grid-template-rows: auto repeat(7, minmax(0, 1fr)); }
+.layout-compact.portrait .mg-day { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; padding-left: 0.3rem; }
+.layout-compact.portrait .mg-slot { flex-direction: row; align-items: center; justify-content: center; gap: 0.35rem; padding: 0 0 0.1rem; }
+.layout-compact.portrait .mg-slot span { font-size: 1.2rem; }
+.layout-compact.portrait .mg-cell { padding: 0.3rem; flex-direction: row; gap: 0.35rem; }
+.layout-compact.portrait .mg-cell.filled { flex-direction: column; gap: 0.1rem; }
+.layout-compact.portrait .mg-emoji { font-size: 1rem; }
+/* Lists: the lists as tabs along the top, the chosen one below */
+.layout-compact.portrait .lists-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 0.6rem; }
+.layout-compact.portrait .list-nav { flex-direction: row; overflow-x: auto; margin: 0 -1rem; padding: 0.2rem 1rem 0.3rem; scroll-padding: 0 1rem; scrollbar-width: none; }
+.layout-compact.portrait .list-nav::after { content: ""; flex: 0 0 0.1rem; }
+.layout-compact.portrait .list-tab { flex: none; padding: 0.55rem 0.8rem; gap: 0.5rem; }
+.layout-compact.portrait .list-panel { min-width: 0; }
+/* Music: what's playing on top (art beside the title), the queue, library and rooms below */
+.layout-compact.portrait .music-view { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+.layout-compact.portrait .mu-hero-in { gap: 0.6rem; }
+.layout-compact.portrait .mu-now { flex-direction: row; align-items: center; gap: 1.1rem; }
+.layout-compact.portrait .mu-hero .np-art.big { width: 9rem; flex: none; border-radius: 0.9rem; }
+.layout-compact.portrait .mu-hero .np-transport.big { margin: 0; }
+.layout-compact.portrait .mu-nothing { padding: 0.6rem; }
+/* Security: the alarm and sensors on top, the cameras two abreast below */
+.layout-compact.portrait .sec-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+.layout-compact.portrait .sec-side, .layout-compact.portrait .sec-sensors { min-height: auto; }
+.layout-compact.portrait .sec-cams { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.layout-compact.portrait .sec-pop-stack { width: auto; left: 1rem; }
+/* Energy: the house along the bottom, the plan in the sky above it */
+.layout-compact.portrait .en-stage { flex-direction: column; align-items: center; justify-content: flex-end; }
+.layout-compact.portrait .en-stage .en-house { width: 100%; flex: none; }
+.layout-compact.portrait .en-stage .en-plan { position: static; margin: 0 1rem 1.6rem; }
+.layout-compact.portrait .en-stage .en-plan-item span { font-size: 0.62rem; }
+.layout-compact.portrait .en-stage .en-plan-item b { font-size: 0.85rem; }
+/* Screensaver: the photo's details along the top, then the music and next event; the clock stays bottom left */
+.layout-compact.portrait .ss-info { left: 1.6rem; bottom: 2rem; }
+.layout-compact.portrait .ss-caption { left: 1.6rem; right: 1.6rem; max-width: none; justify-content: flex-end; }
+.layout-compact.portrait .ss-album { top: auto; bottom: 14.5rem; max-width: 85%; }
+.layout-compact.portrait .ss-right { left: 1.6rem; right: 1.6rem; top: 4.4rem; bottom: auto; align-items: stretch; max-width: none; }
+.layout-compact.portrait .ss-np { left: 0; right: 0; top: 0; bottom: auto; width: auto; max-width: none; }
+.layout-compact.portrait .ss-right .ss-next { align-self: flex-start; }
+.layout-compact.portrait .ss-right:has(.ss-np) .ss-next { margin-top: 8rem; }
+/* More: the tabs that aren't in the bottom bar */
+.more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 0.6rem; }
+.more-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 1rem 0.4rem 0.8rem; border-radius: var(--radius); background: var(--surface-2); color: var(--text-2); font-weight: 800; }
+.more-item.on { background: var(--accent-soft); color: var(--accent); }
+.more-item:active { background: var(--line); }

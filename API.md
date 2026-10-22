@@ -29,7 +29,9 @@ implementation of the same contract, used for the published preview). Keep them 
   `screens` = per style `{start, sections}`: the sections its menu shows, in menu order, from `today, calendar,
   chores, rewards, meals, recipes, lists, nursery, security, energy` (Settings is always shown), and the one it opens on (default large
   `{start: "calendar", sections: all but today}`, compact `{start: "today", sections: all but nursery}`, phone the same). Upgrading to 0.6.0 adds `security` once to the large and compact menus, and 0.8.5 to the phone
-  menus; upgrading to 0.8.0 adds `energy` once to every style's menu.
+  menus; upgrading to 0.8.0 adds `energy` once to every style's menu. `bar` (optional): up to 4 tabs from the sections
+  plus `music` and `settings`, in order, kept in the bottom bar of a compact screen stood upright (the rest go under
+  More); unset or null = the menu's first four.
   `weather_entity` = the HA weather entity the screens show (`""` = demo forecast; falls back to `MOONLIGHT_WEATHER_ENTITY`
   until one is saved).
   `holidays` = the public holidays that `skip_holidays` repeats leave out: ISO country code (`""` = none) and region
@@ -546,7 +548,7 @@ Every screen opens the same address, `/display`, and is told apart by the token 
 can't read a MAC address). Each paired screen has a name, a style and its own setup.
 
 Display = `{id, name, layout: "large"|"compact"|"phone"|"service"|"app", created_at, last_seen|null, revoked, current: bool,
-setup?: {start, sections, speaker, idle_minutes}, own_setup?: bool}`
+setup?: {start, sections, speaker, idle_minutes, bar?}, own_setup?: bool}`
 (`current` = the screen making the request; `last_seen` updated at most once a minute). Screens only: `setup` is what it
 shows, its own choices over its style's (Settings `screens`, `media_players`, `idle_minutes`); `own_setup` says whether
 it has choices of its own. The frontend takes the style from `GET /api/auth/status` and switches when it changes.
@@ -563,7 +565,8 @@ it has choices of its own. The frontend takes the style from `GET /api/auth/stat
   pairing always stays `service` (the approver's `layout` is ignored), and a screen can't be approved as `service`.
 - `GET /api/displays` -> `[Display]` (not revoked)
 - `PATCH /api/displays/{id}` `{pin, name?, layout?, setup?}` -> Display. `setup` = `{start?, sections?, speaker?,
-  idle_minutes?}` merged into the screen's own setup (`speaker` a `media_player.*` id or `""` for none; hiding the start
+  idle_minutes?, bar?}` merged into the screen's own setup (`speaker` a `media_player.*` id or `""` for none; `bar` as in
+  Settings `screens`, null = back to automatic; hiding the start
   section moves it to the first one left), or `null` to follow its style again. A `service` has no style or setup.
 - `DELETE /api/displays/{id}` `{pin}` -> `{ok: true}`; that token stops working on its next request.
 

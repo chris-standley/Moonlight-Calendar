@@ -1,10 +1,10 @@
-import { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Api, DEFAULT_SCREENS, Display, Person, Section, Settings, Theme } from "./api/types";
+import { CSSProperties, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Api, BAR_MAX, DEFAULT_SCREENS, Display, Person, Section, Settings, Theme } from "./api/types";
 import { AppProvider, Layout, useApp, useNow } from "./state";
-import { fmtFull, today } from "./dates";
-import { PinPad } from "./components/ui";
+import { fmtDayMonth, fmtDow, fmtFull, today } from "./dates";
+import { PinPad, Sheet } from "./components/ui";
 import {
-  IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconMusic, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
+  IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconMore, IconMusic, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -58,6 +58,22 @@ function useTheme(theme: Theme | undefined) {
   }, [theme]);
 }
 
+/** A compact screen mounted upright (taller than wide) gets its own arrangement of every section. It follows the
+ * screen's own box rather than the window, so the preview can show it too, and it changes live when the screen turns. */
+function usePortrait(root: RefObject<HTMLDivElement | null>, layout: Layout) {
+  const [portrait, setPortrait] = useState(false);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (layout !== "compact" || !el) { setPortrait(false); return; }
+    const check = () => setPortrait(el.offsetHeight > el.offsetWidth);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [root, layout]);
+  return portrait;
+}
+
 const IDLE_MS = { large: 5 * 60_000, compact: 3 * 60_000, phone: 0 };
 
 interface Burst { id: number; x: number; y: number; color: string }
@@ -78,6 +94,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   const [saver, setSaver] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const nursery = useNurseryFeed(api);
+  const portrait = usePortrait(root, layout);
 
   useEffect(() => {
     const load = () => {
@@ -143,6 +160,11 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   // Music comes with a speaker: it's there whenever this screen has one (Settings > Screens > Set up > Speaker).
   const speaker = screen?.setup?.speaker ?? settings?.media_players?.[layout] ?? "";
   const nav = NAV.filter((n) => n.key === "settings" || (n.key === "music" ? !!speaker : setup.sections.includes(n.key as Section)));
+  // Stood upright, a compact screen's menu is a bottom bar: the chosen tabs (else the first four), the rest under More.
+  const picked = nav.filter((n) => chosen.bar?.includes(n.key));
+  const bar = !portrait || nav.length <= BAR_MAX + 1 ? nav : picked.length ? picked.slice(0, BAR_MAX) : nav.slice(0, BAR_MAX);
+  const more = nav.filter((n) => !bar.includes(n));
+  const [moreOpen, setMoreOpen] = useState(false);
   // Open on the chosen start section once settings arrive, and leave a section that was just hidden.
   const opened = useRef(false);
   useEffect(() => {
@@ -173,19 +195,40 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   }, [layout, tab]);
 
   return (
-    <AppProvider value={{ api, layout, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
-      <div className={`app layout-${layout}` + (EMBEDDED ? " embedded" : "")} ref={root}>
+    <AppProvider value={{ api, layout, portrait, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
+      <div className={`app layout-${layout}` + (portrait ? " portrait" : "") + (EMBEDDED ? " embedded" : "")} ref={root}>
        <MediaProvider api={api} layout={layout}>
         <nav className="rail">
           <div className="rail-logo"><Logo size={layout === "large" ? 44 : 34} /></div>
-          {nav.map((n) => (
+          {bar.map((n) => (
             <button key={n.key} className={"rail-item" + (tab === n.key ? " on" : "")} onClick={() => setTab(n.key)}>
               <n.icon size={layout === "large" ? 30 : layout === "phone" ? 21 : 24} />
               {n.key === "nursery" && nursery.unread > 0 && tab !== "nursery" && <i className="rail-dot" aria-label="New" />}
               <span>{n.label}</span>
             </button>
           ))}
+          {more.length > 0 && (
+            <button className={"rail-item" + (more.some((n) => n.key === tab) ? " on" : "")} onClick={() => setMoreOpen(true)}>
+              <IconMore size={24} />
+              {more.some((n) => n.key === "nursery") && nursery.unread > 0 && tab !== "nursery" && <i className="rail-dot" aria-label="New" />}
+              <span>More</span>
+            </button>
+          )}
         </nav>
+        {moreOpen && (
+          <Sheet title="More" onClose={() => setMoreOpen(false)}>
+            <div className="more-grid">
+              {more.map((n) => (
+                <button key={n.key} className={"more-item" + (tab === n.key ? " on" : "")} onClick={() => { setTab(n.key); setMoreOpen(false); }}>
+                  <n.icon size={30} />
+                  {n.key === "nursery" && nursery.unread > 0 && tab !== "nursery" && <i className="rail-dot" aria-label="New" />}
+                  <span>{n.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="muted connect-note">Choose what's in the bar in Settings › Screens.</p>
+          </Sheet>
+        )}
         <main className="main">
           {/* A compact screen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
           {/* Energy on a wall screen fills the screen and carries its own clock. */}
@@ -226,13 +269,13 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
 function TopBar({ familyName, music, nursery }: { familyName: string; music: boolean; nursery: NurseryFeed | null }) {
   const now = useNow(10_000);
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
-  const { api, settings } = useApp();
+  const { api, settings, portrait } = useApp();
   useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api, settings?.weather_entity, settings?.temp_unit]);
   const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
   return (
     <header className="topbar">
       <div className="tb-time">{time}</div>
-      <div className="tb-date">{fmtFull(today())}</div>
+      <div className="tb-date">{portrait ? `${fmtDow(today())} ${fmtDayMonth(today())}` : fmtFull(today())}</div>
       {wx && <div className="tb-wx"><WeatherIcon condition={wx.condition} size={34} /> {wx.temp}°</div>}
       {music && <NowPlayingPill />}
       {nursery && <NurseryButton feed={nursery} />}
