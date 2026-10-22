@@ -141,6 +141,17 @@ data:
   style: fullscreen
   screens: Hallway
 
+# Counting up instead: how long since the kettle boiled, from now, gone after an hour. The same id again (the next
+# boil) starts it from 0:00. `since: "{{ now() - timedelta(minutes=5) }}"` would count from five minutes ago.
+action: moonlight.start_timer
+data:
+  id: kettle
+  label: Kettle boiled
+  icon: "☕"
+  count_up: true
+  duration: "01:00:00"
+  screens: Kitchen
+
 # Take one off, or everything on some screens, or (with neither) everything.
 action: moonlight.clear_notifications
 data:

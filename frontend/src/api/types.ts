@@ -430,15 +430,17 @@ export interface ScreenAlert {
   icon: string; dismissible: boolean; chime: boolean; created_at: number; expires_at: number | null;
   /** notification */
   title?: string; message?: string; image?: string | null;
-  /** timer: counts down to `ends_at` (a countdown to a date has a long one); `finished` once it got there */
-  label?: string; description?: string; started_at?: number; ends_at?: number; finished?: boolean; finished_for?: number | null;
+  /** timer: counts down to `ends_at` (a countdown to a date has a long one); `finished` once it got there. A
+   * `count_up` one counts up from `started_at` instead (how long since the kettle boiled): `ends_at` is null. */
+  label?: string; description?: string; count_up?: boolean; started_at?: number; ends_at?: number | null; finished?: boolean; finished_for?: number | null;
 }
 export interface AlertsNow { server_time: number; alerts: ScreenAlert[] }
-/** POST /api/alerts: `duration` and `finished_for` in seconds, `until` an ISO date-time. */
+/** POST /api/alerts: `duration` and `finished_for` in seconds, `until` an ISO date-time; `since` ("now" or an ISO
+ * date-time) makes a timer count up, and then `duration` is how long after `since` it goes. */
 export interface AlertIn {
   kind?: "notification" | "timer"; style?: "fullscreen" | "toast"; screens?: string[]; id?: string; icon?: string;
   dismissible?: boolean; chime?: boolean; title?: string; message?: string; image?: string; duration?: number;
-  label?: string; description?: string; until?: string; finished_for?: number;
+  label?: string; description?: string; until?: string; since?: string; finished_for?: number;
 }
 
 export class ApiError extends Error {

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -114,6 +114,43 @@ def test_timer_and_countdown(devices):
     r = hass.post("/api/alerts", json={"kind": "timer", "label": "Pizza", "duration": 300, "id": t["id"]})
     assert r.json()["ends_at"] - r.json()["started_at"] == 300_000
     assert ids(hass).count(t["id"]) == 1
+
+
+def test_count_up_since(devices):
+    hass = devices["hass"]
+    r = hass.post("/api/alerts", json={"kind": "timer", "label": "Kettle boiled", "since": "now", "icon": "☕",
+                                       "screens": ["Kitchen"], "id": "kettle"})
+    assert r.status_code == 200, r.text
+    k = r.json()
+    assert k["count_up"] is True and k["ends_at"] is None and k["expires_at"] is None and k["chime"] is False
+    assert abs(k["started_at"] - alerts.now_ms()) < 2000
+    assert ids(devices["kitchen"]) == ["kettle"] and ids(devices["hallway"]) == []
+    # From a moment in the past, going an hour after it.
+    ago = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    r = hass.post("/api/alerts", json={"kind": "timer", "label": "Kettle boiled", "since": ago, "duration": 3600,
+                                       "id": "kettle"})
+    assert r.status_code == 200, r.text
+    k = r.json()
+    assert 590_000 < alerts.now_ms() - k["started_at"] < 610_000
+    assert k["expires_at"] == k["started_at"] + 3_600_000
+    assert ids(devices["hass"]).count("kettle") == 1
+    later = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    for bad_body in ({"since": later}, {"since": "soon"}, {"since": "now", "until": later},
+                     {"since": ago, "duration": 60}, {"since": "2001-01-01T00:00"}):
+        assert hass.post("/api/alerts", json={"kind": "timer", "label": "x", **bad_body}).status_code == 400, bad_body
+    # Counting up never finishes.
+    sent = []
+
+    async def capture(msg):
+        sent.append(msg)
+
+    orig = alerts.hub.send
+    alerts.hub.send = capture
+    try:
+        asyncio.run(alerts.tick(k["started_at"] + 1_000_000))
+    finally:
+        alerts.hub.send = orig
+    assert sent == []
 
 
 def test_dismiss_clear_and_events(app, devices):

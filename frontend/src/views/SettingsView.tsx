@@ -53,10 +53,13 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't change the PIN"); }
   }
   /** Shows on this screen only what Home Assistant's moonlight.show_notification and start_timer would. */
-  async function testAlert(what: "fullscreen" | "toast" | "timer") {
+  async function testAlert(what: "fullscreen" | "toast" | "timer" | "up") {
     const screens = screen ? [screen.id] : undefined;
     try {
-      if (what === "timer") {
+      if (what === "up") {
+        await api.createAlert({ kind: "timer", label: "Test count up", description: "From Settings", icon: "☕", since: "now",
+          duration: 30, screens, id: "test-up" });
+      } else if (what === "timer") {
         await api.createAlert({ kind: "timer", style: "fullscreen", label: "Test timer", description: "From Settings", icon: "⏲️", duration: 15,
           finished_for: 30, screens, id: "test-timer" });
       } else {
@@ -95,6 +98,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
                 <button className="btn ghost small" onClick={() => testAlert("fullscreen")}>Full screen</button>
                 <button className="btn ghost small" onClick={() => testAlert("toast")}>Toast</button>
                 <button className="btn ghost small" onClick={() => testAlert("timer")}>Timer</button>
+                <button className="btn ghost small" onClick={() => testAlert("up")}>Count up</button>
               </span>
             </div>
           )}
