@@ -499,9 +499,12 @@ clock.
   - timer: `label` (required), `description`, and either `duration` seconds or `until` (ISO date-time; without a zone
     it is the household's time) for a countdown, up to a year. `finished_for` seconds: how long "Time's up" stays
     (left out or 0: until dismissed or cleared).
+  - timer counting up: `label`, `description` and `since`: `"now"` or an ISO date-time already gone (up to a year
+    ago). `duration` seconds is then how long after `since` it goes (left out: until dismissed or cleared); `until`
+    is a 400. `chime` defaults to false (played when it appears). It never finishes.
 - Alert = `{id, kind, style, screens, icon, dismissible, chime, created_at, expires_at (null = until dismissed or
-  cleared)}` + notification `{title, message, image}` or timer `{label, description, started_at, ends_at, finished,
-  finished_for}`.
+  cleared)}` + notification `{title, message, image}` or timer `{label, description, count_up, started_at, ends_at,
+  finished, finished_for}` (`ends_at` null when it counts up from `started_at`).
 - `POST /api/alerts/{id}/dismiss` -> `{ok}`: tapped away on a screen; gone from every screen. 409 if not
   dismissible, 404 if already gone.
 - `DELETE /api/alerts/{id}` -> `{ok}` (404 if gone); `DELETE /api/alerts?screens=Kitchen&screens=large` -> `{cleared:

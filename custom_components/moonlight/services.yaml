@@ -211,6 +211,15 @@ start_timer:
       required: false
       selector:
         datetime:
+    count_up:
+      required: false
+      default: false
+      selector:
+        boolean:
+    since:
+      required: false
+      selector:
+        datetime:
     screens:
       required: false
       example: Kitchen
@@ -248,7 +257,6 @@ start_timer:
         boolean:
     chime:
       required: false
-      default: true
       selector:
         boolean:
     id:

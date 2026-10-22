@@ -1,8 +1,8 @@
 """Notifications and timers that Home Assistant (or anything else on the API) puts on the screens.
 
 A notification is a message shown full screen or as a toast in the corner. A timer counts down to a moment (from a
-duration, or to a date and time for a countdown) and says "Time's up" when it gets there. Each goes to every screen
-or to chosen ones, and stays for a set time or until someone taps it away on a screen or Home Assistant clears it.
+duration, or to a date and time for a countdown) and says "Time's up" when it gets there, or counts up from a moment
+(`since`, e.g. how long ago the kettle boiled). Each goes to every screen or to chosen ones, and stays for a set time or until someone taps it away on a screen or Home Assistant clears it.
 
 They are kept in the database (table `alerts`) so a restart doesn't lose one that waits to be cleared, and in memory
 for the screens. Times are epoch milliseconds; the API sends its own clock as `server_time` so a screen with a wrong
@@ -163,12 +163,12 @@ def _bool(body: dict, key: str, default: bool) -> bool:
     return v
 
 
-def _until_ms(c, value: Any) -> int:
+def _until_ms(c, value: Any, key: str = "until") -> int:
     """An ISO date-time; without a zone it is the household's local time."""
     try:
         dt = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
     except ValueError:
-        raise bad("until must be an ISO date and time, like 2026-12-25T07:00")
+        raise bad(f"{key} must be an ISO date and time, like 2026-12-25T07:00")
     if dt.tzinfo is None:
         tz = db.get_setting(c, "timezone", db.default_timezone())
         try:
@@ -212,8 +212,10 @@ def build(c, body: dict, now: int | None = None) -> dict:
     else:
         a["label"] = _text(body, "label", 80, required=True)
         a["description"] = _text(body, "description", 300)
-        a["chime"] = _bool(body, "chime", True)
         has_duration, has_until = body.get("duration") is not None, body.get("until") not in (None, "")
+        if body.get("since") not in (None, ""):
+            return _count_up(c, body, a, now, has_duration, has_until)
+        a["chime"] = _bool(body, "chime", True)
         if has_duration == has_until:
             raise bad("A timer needs either duration (seconds) or until (a date and time)")
         if has_duration:
@@ -224,6 +226,7 @@ def build(c, body: dict, now: int | None = None) -> dict:
                 raise bad("until is in the past")
             if ends - now > MAX_SECONDS * 1000:
                 raise bad("until is more than a year away")
+        a["count_up"] = False
         a["started_at"] = now
         a["ends_at"] = ends
         a["finished"] = False
@@ -232,6 +235,27 @@ def build(c, body: dict, now: int | None = None) -> dict:
         secs = 0 if after in (None, "") else _seconds(after, "finished_for")
         a["finished_for"] = secs or None
         a["expires_at"] = ends + secs * 1000 if secs else None
+    return a
+
+
+def _count_up(c, body: dict, a: dict, now: int, has_duration: bool, has_until: bool) -> dict:
+    """A timer that counts up from `since` ("now" or an ISO date-time); `duration` is how long after `since` it goes
+    (left out: until dismissed or cleared)."""
+    if has_until:
+        raise bad("A timer counts down to until or up from since, not both")
+    since = body["since"]
+    started = now if isinstance(since, str) and since.strip().lower() == "now" else _until_ms(c, since, "since")
+    if started > now + 5000:
+        raise bad("since is in the future")
+    if now - started > MAX_SECONDS * 1000:
+        raise bad("since is more than a year ago")
+    started = min(started, now)
+    secs = _seconds(body["duration"], "duration", allow_zero=False) if has_duration else 0
+    expires = started + secs * 1000 if secs else None
+    if expires is not None and expires <= now:
+        raise bad("since plus duration is already over")
+    a["chime"] = _bool(body, "chime", False)  # nothing to get to: a chime is played when it appears
+    a.update(count_up=True, started_at=started, ends_at=None, finished=False, finished_for=None, expires_at=expires)
     return a
 
 
@@ -294,7 +318,7 @@ async def tick(now: int | None = None) -> None:
     """Timers that reached zero say so; the ones whose time is up go."""
     now = now_ms() if now is None else now
     for a in list(_alerts.values()):
-        if a["kind"] == "timer" and not a["finished"] and a["ends_at"] <= now:
+        if a["kind"] == "timer" and not a["finished"] and a["ends_at"] is not None and a["ends_at"] <= now:
             a["finished"] = True
             _save(a)
             await announce("finished", a)

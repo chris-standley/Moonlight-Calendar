@@ -1339,6 +1339,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ha-ring-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; }
 .ha-ring-text b { font-size: clamp(2.4rem, 8vh, 6rem); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .ha-ring-icon { font-size: clamp(2rem, 7vh, 4.4rem); line-height: 1; }
+.ha-ring-since { font-size: clamp(0.9rem, 2.6vh, 1.5rem); font-weight: 700; color: var(--muted); }
 .ha-full.done .ha-ring-fill { stroke: var(--warn-text); }
 .ha-full.done .ha-ring-text b { color: var(--warn-text); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.45; } }
