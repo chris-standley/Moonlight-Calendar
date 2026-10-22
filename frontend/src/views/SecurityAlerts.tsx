@@ -46,7 +46,10 @@ export function SecurityAlerts({ saver, children }: { saver: boolean; children?:
   useEffect(() => {
     if (!enabled) { setShown([]); return; }
     load();
-    return api.subscribe((t) => { if (t === "security_alert") load(); });
+    // Belt and braces: an occasional check too, in case a change was missed.
+    const t = setInterval(load, 15_000);
+    const off = api.subscribe((t) => { if (t === "security_alert") load(); });
+    return () => { clearInterval(t); off(); };
   }, [api, enabled, load]);
 
   // Drop the ones whose linger time is over.
