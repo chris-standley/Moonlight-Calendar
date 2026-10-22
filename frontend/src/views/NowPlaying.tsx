@@ -270,7 +270,7 @@ function NowPlayingSheet({ onClose }: { onClose: () => void }) {
 
 /** Screensaver corner card while music plays, with the controls and volume (taps on it don't wake the screen). After
  * a pause it stays for a while so it can be resumed, then gets out of the way. */
-export function ScreensaverNowPlaying() {
+export function ScreensaverNowPlaying({ onOpen }: { onOpen: () => void }) {
   const { np } = useMedia();
   const playing = np?.state === "playing" || np?.state === "buffering";
   const [stale, setStale] = useState(false);
@@ -282,7 +282,11 @@ export function ScreensaverNowPlaying() {
   }, [playing, np?.title]);
   if (!np?.show || (!playing && stale)) return null;
   return (
-    <div className="ss-np" onClick={(e) => e.stopPropagation()}>
+    // Tapping the card (not its controls) opens the Music tab; the controls work without waking the screen.
+    <div className="ss-np" role="button" aria-label="Open Music" onClick={(e) => {
+      e.stopPropagation();
+      if (!(e.target as HTMLElement).closest(".ss-np-ctl")) onOpen();
+    }}>
       <Art np={np} />
       <div className="ss-np-main">
         <div className="ss-np-text">
