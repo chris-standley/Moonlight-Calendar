@@ -115,6 +115,8 @@ FLAGS = ("battery_invert", "grid_invert")
 SHOWABLE = {"inside_temp": "inside", "heating_target": "heating_target", "inside_humidity": "inside_humidity",
             "heat_pump_tank": "tank", "tank_target": "tank_target", "outdoor_temp": "outside",
             "outside_humidity": "outside_humidity"}
+# Whole parts of the picture that can be left off too ("plan" covers Predbat and the Octopus cheap times).
+PARTS = ("solar", "battery", "grid", "home", "car", "heat_pump", "plan")
 
 POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
@@ -180,8 +182,8 @@ def apply_settings(c, body: dict) -> bool:
         out["entities"] = merged
     if "hide" in val:
         hide = val["hide"]
-        if not isinstance(hide, list) or any(h not in SHOWABLE for h in hide):
-            raise bad(f"energy.hide must be a list of: {', '.join(SHOWABLE)}")
+        if not isinstance(hide, list) or any(h not in SHOWABLE and h not in PARTS for h in hide):
+            raise bad(f"energy.hide must be a list of: {', '.join((*PARTS, *SHOWABLE))}")
         out["hide"] = sorted(set(hide))
     for flag in FLAGS:
         if flag in val:
@@ -595,7 +597,7 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
     for k in ("inside_humidity", "outside_humidity"):
         if temps[k] is not None:
             temps[k] = int(temps[k])
-    hidden = [SHOWABLE[h] for h in eff.get("hide") or []]
+    hidden = [SHOWABLE[h] for h in eff.get("hide") or [] if h in SHOWABLE]
     for k in hidden:
         temps[k] = None
     # `hidden` tells the screens not to put the weather's temperature in place of a hidden outside reading.
@@ -622,6 +624,12 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
 
     out["tariff"] = tariff(st("cheap_off_peak"), st("cheap_dispatches"), now) if has("cheap_off_peak", "cheap_dispatches") else None
     out["sun"] = sun(states.get(SUN))
+    # Parts the household left off the picture (worked out first: the home's use counts a hidden battery's power).
+    for part in eff.get("hide") or []:
+        if part in PARTS:
+            out[part] = None
+            if part == "plan":
+                out["tariff"] = None
     return out
 
 
@@ -977,7 +985,7 @@ def effective(auto: dict[str, list[str]], auto_flags: dict[str, bool], conf: dic
     for f, slot in (("battery_invert", "battery_power"), ("grid_invert", "grid_power")):
         if not isinstance(conf.get(f), bool) and not is_auto[slot]:
             flags[f] = False
-    hide = [h for h in conf.get("hide") or [] if h in SHOWABLE]
+    hide = [h for h in conf.get("hide") or [] if h in SHOWABLE or h in PARTS]
     return {"entities": ents, **flags, "auto": is_auto, "hide": hide}
 
 

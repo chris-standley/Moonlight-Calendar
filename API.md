@@ -43,7 +43,7 @@ implementation of the same contract, used for the published preview). Keep them 
   `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
   `popup: {large?, compact?, phone?, tv?: bool}` (default large and compact on; `tv` is the Apple TV app, off). Broadcasts `security` and `security_alert`.
   `energy` (merged, see Energy): `entities: {slot: entity id | "" (none) | null (automatic)}`, `battery_invert`,
-  `grid_invert`: bool or null (automatic), `hide`: [slots of the temperatures group left off the picture]. Broadcasts `energy`.
+  `grid_invert`: bool or null (automatic), `hide`: [parts (solar, battery, grid, home, car, heat_pump, plan) and temperatures-group slots left off the picture]. Broadcasts `energy`.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial

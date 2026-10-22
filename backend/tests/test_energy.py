@@ -467,6 +467,11 @@ def test_hide_readings_from_the_picture(client):
     assert client.get("/api/energy/options").json()["hide"] == ["heat_pump_tank", "outdoor_temp"]
     client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": []}})
     assert client.get("/api/energy").json()["temperatures"]["tank"] == 45.0
+    # Whole parts too
+    client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": ["car", "battery", "plan"]}})
+    r = client.get("/api/energy").json()
+    assert r["car"] is None and r["battery"] is None and r["plan"] is None and r["tariff"] is None
+    assert r["solar"] is not None and r["home"]["power"] == 3848
 
 
 def test_settings_validation(client):

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, EnergyCandidate, EnergyGroup, EnergyOptions, EnergySettingsPatch, EnergySlot } from "../api/types";
+import { ApiError, EnergyCandidate, EnergyGroup, EnergyOptions, EnergyPart, EnergySettingsPatch, EnergySlot } from "../api/types";
 import { useApp } from "../state";
 
 const GROUPS: { key: EnergyGroup; label: string; slots: [EnergySlot, string][] }[] = [
@@ -58,12 +58,21 @@ export function EnergyPanel() {
     <section className="panel">
       <h2 className="panel-title">Energy</h2>
       <p className="muted connect-note">The house picture in Energy reads these Home Assistant sensors. Most are found on their own (from
-        Home Assistant's Energy dashboard first); pick any that are wrong, or None to leave something out.</p>
+        Home Assistant's Energy dashboard first); pick any that are wrong, or None to leave something out. The switches put each part on the picture or leave it off.</p>
       {!opts && <p className="muted">Looking in Home Assistant…</p>}
       {opts && GROUPS.map((g) => (
         <div key={g.key} className="en-set-group">
-          <h3 className="sec-set-sub">{g.label}</h3>
+          <h3 className="sec-set-sub">{g.label}{g.key !== "temperatures" && (() => {
+            // A whole part can be left off the picture.
+            const hide = opts.hide ?? [], part = g.key as EnergyPart, shown = !hide.includes(part);
+            return (
+              <button className={"toggle" + (shown ? " on" : "")} aria-pressed={shown} aria-label={`Show ${g.label.toLowerCase()} on the picture`}
+                title="On the picture"
+                onClick={() => save({ hide: shown ? [...hide, part] : hide.filter((h) => h !== part) }, `${shown ? "Hide" : "Show"} ${g.label.toLowerCase()}`)}><span /></button>
+            );
+          })()}</h3>
           {g.key === "temperatures" && <p className="muted connect-note">The switch beside each one puts it on the picture or leaves it off.</p>}
+          {g.key !== "temperatures" && (opts.hide ?? []).includes(g.key as EnergyPart) && <p className="muted connect-note">Left off the picture.</p>}
           {g.slots.map(([slot, label]) => {
             const s = opts.slots[slot];
             const choices = s.kind === "number" ? [...opts.candidates.number, ...opts.candidates.percent] : opts.candidates[s.kind];

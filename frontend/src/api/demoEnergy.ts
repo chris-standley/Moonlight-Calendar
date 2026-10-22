@@ -64,7 +64,11 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
   let tick = 0;
   setInterval(() => { tick++; emit("energy"); }, 5000);
   const wobble = (base: number, amount: number, phase: number) => Math.round(base + Math.sin(tick / 2 + phase) * amount);
-  const on = (slot: EnergySlot) => (settings()?.entities?.[slot] ?? SLOTS[slot][1]) !== "" && !settings()?.hide?.includes(slot);
+  const hidden = (slot: EnergySlot) => {
+    const hide: string[] = settings()?.hide ?? [];
+    return hide.includes(slot) || hide.includes(slot.startsWith("cheap") ? "plan" : GROUP(slot));
+  };
+  const on = (slot: EnergySlot) => (settings()?.entities?.[slot] ?? SLOTS[slot][1]) !== "" && !hidden(slot);
   return {
     async energy(): Promise<EnergyOverview> {
       // The sun follows the clock: up from 7:40 to 17:30, strongest at lunchtime.

@@ -290,10 +290,12 @@ export type EnergySlot =
   | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end" | "cheap_off_peak" | "cheap_dispatches";
 export type EnergyKind = "power" | "energy" | "percent" | "temperature" | "number" | "state";
 export type EnergyGroup = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "temperatures" | "plan";
-export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean; hide?: EnergySlot[] }
+export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean; hide?: EnergyHide[] }
 export interface EnergySettingsPatch { entities?: Partial<Record<EnergySlot, string | null>>; battery_invert?: boolean | null; grid_invert?: boolean | null;
-  /** Readings left off the picture (the temperatures group). */
-  hide?: EnergySlot[] }
+  /** Parts and readings (the temperatures group) left off the picture. */
+  hide?: EnergyHide[] }
+export type EnergyPart = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "plan";
+export type EnergyHide = EnergyPart | EnergySlot;
 /** Power in watts, energy in kWh; null when the sensor has no reading. Each part is null when nothing is set for it. */
 export interface EnergyOverview {
   configured: boolean; reachable: boolean; error: string | null; updated: string | null;
@@ -328,7 +330,7 @@ export interface EnergyWindow { start: string; end: string | null; rate: number 
 export interface EnergyCandidate { entity_id: string; name: string; state: string | null; unit: string | null }
 export interface EnergyOptions {
   slots: Record<EnergySlot, { kind: EnergyKind; group: EnergyGroup; entities: string[]; auto: boolean; suggested: string[] }>;
-  battery_invert: boolean; grid_invert: boolean; hide?: EnergySlot[];
+  battery_invert: boolean; grid_invert: boolean; hide?: EnergyHide[];
   candidates: Record<EnergyKind, EnergyCandidate[]>;
 }
 
