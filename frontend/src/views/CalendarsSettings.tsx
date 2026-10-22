@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Account, AccountKind, ApiError, FeedPreview, HaCalendar, SyncCalendar } from "../api/types";
 import { useApp, useData } from "../state";
 import { Avatar, PersonPicker, Sheet } from "../components/ui";
+import { IconDown } from "../components/icons";
 
 type IconProps = { size?: number };
 const svg = (size = 24) => ({ width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const });
@@ -45,6 +46,19 @@ const kindName = (k: AccountKind) => (k === "icloud" ? "iCloud" : k === "ics" ? 
 /** One read-only calendar, refreshed every 15 minutes (a published link or a Home Assistant calendar). */
 const single = (k: AccountKind) => k === "ics" || k === "ha";
 
+/** The Calendars card folded away: how many calendars show, and any account that needs attention. */
+function FoldedSummary({ accounts, shown, onOpen }: { accounts: Account[]; shown: number; onOpen: () => void }) {
+  const trouble = accounts.filter((a) => a.status !== "ok");
+  return (
+    <button className="cal-folded muted" onClick={onOpen}>
+      {accounts.length
+        ? `${shown} calendar${shown === 1 ? "" : "s"} shown from ${accounts.length} source${accounts.length === 1 ? "" : "s"}`
+        : "No calendars connected yet"}
+      {trouble.map((a) => <span key={a.id} className={`s-${a.status}`}><span className={`status-dot s-${a.status}`} /> {a.label}: {statusText(a)}</span>)}
+    </button>
+  );
+}
+
 export function CalendarsPanel() {
   const { api, people, askPin, toast } = useApp();
   const [accounts] = useData((a) => a.accounts(), ["accounts"], []);
@@ -54,6 +68,7 @@ export function CalendarsPanel() {
   const [haOpen, setHaOpen] = useState(false);
   const [editing, setEditing] = useState<SyncCalendar | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [open, setOpen] = useState(false); // folded away by default: set up once, rarely changed
 
   async function syncNow(a: Account) {
     setSyncing(a.id);
@@ -76,16 +91,20 @@ export function CalendarsPanel() {
   }
 
   return (
-    <section className="panel cal-panel">
+    <section className={"panel cal-panel" + (open ? "" : " folded")}>
       <div className="cal-panel-head">
-        <h2 className="panel-title">Calendars</h2>
-        <div className="cal-head-btns">
+        <button className="cal-fold" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <h2 className="panel-title">Calendars</h2>
+          <IconDown size={22} />
+        </button>
+        {open && <div className="cal-head-btns">
           <button className="btn ghost small" onClick={() => setHaOpen(true)}><IconHome size={20} /> Home Assistant</button>
           <button className="btn ghost small" onClick={() => setFeed({})}><IconLink size={20} /> Add calendar link</button>
           <button className="btn small" onClick={() => setConnect({})}><IconCloud size={20} /> Connect iCloud</button>
-        </div>
+        </div>}
       </div>
-      {accounts && !accounts.some((a) => !single(a.kind)) && (
+      {!open && accounts && <FoldedSummary accounts={accounts} shown={calendars?.filter((c) => c.visible).length ?? 0} onOpen={() => setOpen(true)} />}
+      {open && accounts && !accounts.some((a) => !single(a.kind)) && (
         <p className="muted cal-intro">
           Connect each adult's iCloud calendar. iCloud stays the master copy: changes made on phones appear here
           within a couple of minutes, and events added here go straight to iCloud. To show a calendar you can only
@@ -94,7 +113,7 @@ export function CalendarsPanel() {
           {api.mode === "demo" && " (Demo: any Apple ID works; the password “wrong” shows a failed sign-in.)"}
         </p>
       )}
-      {accounts?.map((a) => (
+      {open && accounts?.map((a) => (
         <div key={a.id} className="acct">
           <div className="acct-head">
             <span className={`status-dot s-${a.status}`} aria-label={a.status} />

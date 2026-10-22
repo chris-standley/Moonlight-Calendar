@@ -13,12 +13,18 @@ screens, so screens never see the key or talk to Immich. Written against the Imm
   `filter` form is used instead.
 - `GET  /api/memories?for=YYYY-MM-DD&type=on_this_day` -> [{assets: [Asset]}]  (memory.read, optional)
 - `GET  /api/assets/{id}/thumbnail?size=preview` -> JPEG/WebP, EXIF orientation already applied (asset.view)
+- `GET    /api/albums?assetId=` -> the albums a photo is in                (album.read: the hide button)
+- `DELETE /api/albums/{id}/assets` {ids} -> [{id, success, error}]  (albumAsset.delete: the screensaver's hide button)
+- `PUT    /api/albums/{id}/assets` {ids} -> [{id, success, error}]  (albumAsset.create: "Show again")
 
 What is shown: the chosen albums (plus favourites and memories), or with mode "all" every album except the excluded
 ones. With `festive` on, albums named for Christmas are hidden outside December, and in December only they and
 winter albums are shown. The list is grouped by album (oldest photo first) so the screens can play one album
 at a time; an album's photos are only fetched again when Immich says it changed. Only images are used (videos skipped). The asset list is cached and refreshed every few minutes; if Immich can't be
 reached the last good list is kept, and with none the screensaver falls back to its painted scenes.
+
+A photo hidden from a screen is taken out of every album it is in and remembered in `immich_hidden`, so it
+stays hidden even where Immich wouldn't let it be removed (a shared album, favourites, memories).
 """
 from __future__ import annotations
 
@@ -103,6 +109,17 @@ def delete_config(c) -> None:
     c.execute("DELETE FROM immich")
 
 
+def hidden_ids(c) -> set[str]:
+    return {r["asset_id"] for r in db.rows(c, "SELECT asset_id FROM immich_hidden")}
+
+
+def hidden_list(c, limit: int, offset: int = 0) -> list[dict]:
+    return [{"id": r["asset_id"], "albums": json.loads(r["albums"]), "hidden_at": r["hidden_at"],
+             "url": f"/api/immich/assets/{r['asset_id']}/preview"}
+            for r in db.rows(c, "SELECT * FROM immich_hidden ORDER BY hidden_at DESC, rowid DESC LIMIT ? OFFSET ?",
+                             (limit, offset))]
+
+
 def household_today(tz: str) -> date:
     try:
         return datetime.now(ZoneInfo(tz)).date()
@@ -138,11 +155,11 @@ class Client:
         return httpx.AsyncClient(base_url=self.base, timeout=timeout, transport=transport, follow_redirects=False, verify=self.verify,
                                  headers={"x-api-key": self._key, "Accept": "application/json"})
 
-    def _fail(self, r: httpx.Response, what: str) -> ImmichError:
+    def _fail(self, r: httpx.Response, what: str, needs: str = "album.read, asset.read and asset.view") -> ImmichError:
         if r.status_code == 401:
             return AuthFailed("Immich didn't accept the API key")
         if r.status_code == 403:
-            return ImmichError(f"The API key isn't allowed to {what} (give it album.read, asset.read and asset.view)")
+            return ImmichError(f"The API key isn't allowed to {what} (give it {needs})")
         if r.is_redirect:
             to = r.headers.get("location", "")
             return ImmichError(f"{self.server_url} redirects to {to or 'another address'}. "
@@ -179,13 +196,13 @@ class Client:
                                "(2283 by default)")
         return ImmichError(f"Couldn't reach Immich at {self.server_url} ({type(e).__name__})")
 
-    async def _call(self, http: httpx.AsyncClient, method: str, path: str, what: str, **kw) -> Any:
+    async def _call(self, http: httpx.AsyncClient, method: str, path: str, what: str, needs: str | None = None, **kw) -> Any:
         try:
             r = await http.request(method, path, **kw)
         except httpx.HTTPError as e:
             raise self._unreachable(e) from None
         if r.status_code != 200:
-            raise self._fail(r, what)
+            raise self._fail(r, what, needs) if needs else self._fail(r, what)
         try:
             return r.json()
         except ValueError:
@@ -264,6 +281,23 @@ class Client:
         raw = await self._call(http, "GET", "/memories", "read memories",
                                params={"for": day.isoformat(), "type": "on_this_day"})
         return [a for m in raw if isinstance(m, dict) for a in (m.get("assets") or []) if isinstance(a, dict)]
+
+    async def albums_with(self, http: httpx.AsyncClient, asset_id: str) -> list[dict]:
+        """Every album (owned or shared) a photo is in: [{id, name}]."""
+        raw = await self._call(http, "GET", "/albums", "list albums", params={"assetId": asset_id})
+        return [{"id": a["id"], "name": str(a.get("albumName") or "Untitled")}
+                for a in raw if isinstance(a, dict) and isinstance(a.get("id"), str)] if isinstance(raw, list) else []
+
+    async def album_change(self, http: httpx.AsyncClient, album_id: str, asset_id: str, add: bool) -> str | None:
+        """Take a photo out of an album (or put it back). None when done, else Immich's reason, e.g. "no_permission"
+        for a shared album the key's user can only view."""
+        perm = "albumAsset.create" if add else "albumAsset.delete"
+        raw = await self._call(http, "PUT" if add else "DELETE", f"/albums/{album_id}/assets",
+                               "add photos to albums" if add else "remove photos from albums", perm, json={"ids": [asset_id]})
+        res = next((x for x in raw if isinstance(x, dict) and x.get("id") == asset_id), None) if isinstance(raw, list) else None
+        if not res or res.get("success") or res.get("error") in ("not_found", "duplicate"):
+            return None  # already out of (or back in) the album is as good
+        return str(res.get("error") or "unknown")
 
     async def preview(self, asset_id: str) -> tuple[httpx.AsyncClient, httpx.Response]:
         """Open a streaming request for an asset's preview. The caller closes both."""
@@ -382,6 +416,17 @@ class Cache:
             return now - self.fetched_at >= REFRESH_SECONDS
         return now - self.tried_at >= RETRY_SECONDS
 
+    def drop(self, asset_id: str) -> None:
+        """Take a hidden photo out of the list now, rather than at the next refresh."""
+        self.photos = [p for p in self.photos if p["id"] != asset_id]
+        self.albums = [g for g in ({**g, "photos": [i for i in g["photos"] if i != asset_id]} for g in self.albums) if g["photos"]]
+        self.ids.discard(asset_id)
+
+    def albums_with(self, asset_id: str) -> list[dict]:
+        """The real Immich albums (not favourites or memories) a photo is being shown from: [{id, name}]."""
+        return [{"id": g["id"], "name": g["name"]} for g in self.albums
+                if asset_id in g["photos"] and g["id"] not in ("favorites", "on-this-day")]
+
     def mark_failed(self, e: ImmichError) -> None:
         """A proxied preview failed: report it, and re-check Immich on the next request after RETRY_SECONDS."""
         self.status = "auth_failed" if isinstance(e, AuthFailed) else "error"
@@ -439,6 +484,8 @@ class Cache:
         found: dict[str, dict] = {}
         groups: list[dict] = []
         zones = await ha_client.zones()  # friendly place names ("Home") for photos taken inside a zone
+        with db.connect() as c:
+            never = hidden_ids(c)  # hidden from the screensaver with the eye button
 
         def add(group: dict, assets: list[dict], hide: set[str]) -> None:
             ids = []
@@ -469,7 +516,7 @@ class Cache:
                 shown = [i for i in pick if i in albums and i not in hidden]
             # Most recently changed first, so if the cap is reached it's old albums that miss out.
             shown.sort(key=lambda i: albums[i]["updated_at"] or "", reverse=True)
-            hide: set[str] = set()
+            hide: set[str] = set(never)
             for album_id in sorted(i for i in hidden if i in albums):  # a hidden album's photos stay hidden elsewhere
                 hide.update(a["id"] for a in await self._album(client, http, albums[album_id], HIDE_LIMIT))
             for album_id in shown:

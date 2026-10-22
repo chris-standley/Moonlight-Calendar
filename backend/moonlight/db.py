@@ -231,6 +231,12 @@ CREATE TABLE IF NOT EXISTS immich (
     festive      INTEGER NOT NULL DEFAULT 1,     -- Christmas albums only in December, see immich.py
     updated_at   TEXT NOT NULL
 );
+-- Photos hidden from the screensaver (the eye button), and the Immich albums they were taken out of, for "Show again".
+CREATE TABLE IF NOT EXISTS immich_hidden (
+    asset_id   TEXT PRIMARY KEY,
+    albums     TEXT NOT NULL DEFAULT '[]',   -- [{id, name}] the photo was removed from in Immich
+    hidden_at  TEXT NOT NULL
+);
 """
 # Nursery updates from Tapestry (see tapestry.py): the family's login (one row; the password never leaves this file)
 # and a copy of the newest updates. Their photos are files in a "nursery" folder beside this database.

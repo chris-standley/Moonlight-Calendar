@@ -1,6 +1,7 @@
 """Photo screensaver: Immich connection settings, the chosen photos and the preview proxy. See immich.py."""
 from __future__ import annotations
 
+import json
 import re
 
 from fastapi import APIRouter, Body, HTTPException
@@ -8,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
 from .. import db, immich
-from ..common import as_int, bad, body_dict, hub, layout_name, not_found, require_pin
+from ..common import log, as_int, bad, body_dict, hub, layout_name, not_found, require_pin
 
 router = APIRouter(prefix="/api")
 
@@ -207,15 +208,102 @@ async def screensaver_photos():
     return {"source": "immich", "status": cache.status, "photos": cache.photos, "albums": cache.albums}
 
 
-@router.get("/immich/assets/{asset_id}/preview")
-async def immich_preview(asset_id: str):
-    """Proxy one preview image. Only assets in the current photo list are served."""
+REASONS = {"no_permission": "Immich only lets you view this album", "not_found": "the photo isn't in it any more"}
+
+
+def _reason(err: str) -> str:
+    return REASONS.get(err, f"Immich said {err}")
+
+
+async def _change_albums(cfg: dict, asset_id: str, albums: list[dict] | None, add: bool) -> tuple[list[dict], list[dict]]:
+    """Take a photo out of (or put it back in) albums -> (done, failed: [{id, name, error}]). Never raises.
+    `albums` None = every album it is in, asked of Immich (else the ones it is shown from)."""
+    done: list[dict] = []
+    failed: list[dict] = []
+    client = immich.Client(cfg["server_url"], cfg["api_key"], cfg["skip_cert_check"])
+    async with client.http() as http:
+        if albums is None:
+            shown = immich.cache.albums_with(asset_id)
+            try:
+                found = await client.albums_with(http, asset_id)
+            except immich.ImmichError as e:
+                log.info("Couldn't list the albums of %s: %s", asset_id, e)
+                found = []
+            albums = list({a["id"]: a for a in shown + found}.values())
+        for a in albums:
+            try:
+                err = await client.album_change(http, a["id"], asset_id, add)
+            except immich.ImmichError as e:
+                err = str(e)
+                failed.append({**a, "error": err})
+                continue
+            if err:
+                failed.append({**a, "error": _reason(err)})
+            else:
+                done.append(a)
+    return done, failed
+
+
+@router.post("/screensaver/photos/{asset_id}/hide")
+async def hide_photo(asset_id: str):
+    """The screensaver's hide button: never show this photo again, and take it out of every Immich album it is in. -> {ok, removed: [{id, name}], failed: [{id, name, error}]}. It's hidden even if Immich refuses (a shared
+    album, a key without albumAsset.delete, Immich down) or it came from favourites or memories."""
     cache = await immich.cache.get()
     if not UUID.match(asset_id) or asset_id not in cache.ids:
         raise not_found("Photo not found")
     with db.connect() as c:
         cfg = immich.load_config(c)
     if not cfg:
+        raise not_found("Photo not found")
+    removed, failed = await _change_albums(cfg, asset_id, None, add=False)
+    with db.connect() as c:
+        c.execute("INSERT OR REPLACE INTO immich_hidden(asset_id, albums, hidden_at) VALUES(?, ?, ?)",
+                  (asset_id, json.dumps(removed), db.now_iso()))
+    cache.drop(asset_id)
+    await hub.broadcast("photos")
+    return {"ok": True, "removed": removed, "failed": failed}
+
+
+@router.get("/immich/hidden")
+async def hidden_photos(limit: int = 12, offset: int = 0):
+    """Photos hidden from the screensaver, newest first, a page at a time:
+    {total, photos: [{id, albums: [{id, name}], hidden_at, url}]}. limit 0 = just the count."""
+    if not 0 <= limit <= 500 or offset < 0:
+        raise bad("limit must be 0-500 and offset 0 or more")
+    with db.connect() as c:
+        return {"total": db.row(c, "SELECT COUNT(*) AS n FROM immich_hidden")["n"],
+                "photos": immich.hidden_list(c, limit, offset) if limit else []}
+
+
+@router.post("/immich/hidden/{asset_id}/restore")
+async def restore_photo(asset_id: str, body: dict | None = Body(None)):
+    """Show a hidden photo again {pin}: back into the albums it was taken out of. -> {ok, restored: [{id, name}],
+    failed: [{id, name, error}]}."""
+    body = body_dict(body)
+    with db.connect() as c:
+        require_pin(c, body.get("pin"))
+        r = db.row(c, "SELECT * FROM immich_hidden WHERE asset_id = ?", (asset_id,))
+        cfg = immich.load_config(c)
+    if not r:
+        raise not_found("That photo isn't hidden")
+    restored, failed = await _change_albums(cfg, asset_id, json.loads(r["albums"]), add=True) if cfg else ([], [])
+    with db.connect() as c:
+        c.execute("DELETE FROM immich_hidden WHERE asset_id = ?", (asset_id,))
+    await immich.cache.get(force=True)
+    await hub.broadcast("photos")
+    return {"ok": True, "restored": restored, "failed": failed}
+
+
+@router.get("/immich/assets/{asset_id}/preview")
+async def immich_preview(asset_id: str):
+    """Proxy one preview image. Only assets in the current photo list, or hidden from it, are served."""
+    cache = await immich.cache.get()
+    if not UUID.match(asset_id):
+        raise not_found("Photo not found")
+    with db.connect() as c:
+        cfg = immich.load_config(c)
+        allowed = asset_id in cache.ids or asset_id in immich.hidden_ids(c)
+    if not cfg or not allowed:
         raise not_found("Photo not found")
     try:
         http, r = await immich.Client(cfg["server_url"], cfg["api_key"], cfg["skip_cert_check"]).preview(asset_id)
