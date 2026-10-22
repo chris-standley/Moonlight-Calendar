@@ -1454,6 +1454,9 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .en-set-row { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr); align-items: center; gap: 0.4rem 0.8rem; padding: 0.35rem 0; }
 .en-set-row > span { font-weight: 700; }
 .en-set-row select { width: 100%; min-width: 0; }
+.en-set-row.with-show { grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) auto; }
+.layout-phone .en-set-row.with-show { grid-template-columns: 1fr auto; }
+.layout-phone .en-set-row.with-show > span { grid-column: 1 / -1; }
 .layout-phone .en-set-row { grid-template-columns: 1fr; }
 
 /* Music tab: what's playing (dark, over the blurred art) beside Up next / Library / Rooms */

@@ -182,7 +182,8 @@ export function House({ data, small, sky, bare }: {
   const drawnSun = !sky || sky.condition === "sunny";
   const phase = solar ? solarPhase(solar) : "day";
   const tank = temps?.tank ?? null;
-  const outside = temps?.outside ?? sky?.temp ?? null;
+  // A hidden outside reading stays hidden: no weather temperature in its place.
+  const outside = temps?.hidden?.includes("outside") ? null : temps?.outside ?? sky?.temp ?? null;
   const tankColor = tank == null ? "var(--en-glass)" : tank >= 45 ? "#e8674f" : tank >= 35 ? "#f2a33a" : "#6aa6e8";
   return (
     <div className={"en-house" + (small ? " small" : "") + (bare ? " bare" : "") + (data.sun?.night ? " night" : "")}>
@@ -284,12 +285,12 @@ export function House({ data, small, sky, bare }: {
       {/* The weather in place of the sun */}
       {!drawnSun && sky && <div className="en-weather"><WeatherIcon condition={sky.condition} size={24} /></div>}
 
-      {/* Temperatures: inside and the tank with what they're set to, outside under the weather */}
+      {/* Temperatures: inside and the tank with what they're set to, outside above the heat pump */}
       {!small && temps?.inside != null && <Tag x={642} y={346} title="Inside" value={fmtDeg(temps.inside)}
         sub={[temps.heating_target != null && `Set ${fmtDeg(temps.heating_target)}`, temps.inside_humidity != null && `${temps.inside_humidity}% RH`]} />}
       {!small && tank != null && <Tag x={642} y={430} title="Tank" value={fmtDeg(tank)} cls="t-tank"
         sub={[temps?.tank_target != null && `Set ${fmtDeg(temps.tank_target)}`]} />}
-      {!small && outside != null && <Tag x={120} y={212} title="Outside" value={fmtDeg(outside)} cls="t-out"
+      {!small && outside != null && <Tag x={hp ? 800 : 850} y={hp ? 262 : 380} title="Outside" value={fmtDeg(outside)} cls="t-out"
         sub={[temps?.outside_humidity != null && `${temps.outside_humidity}% RH`]} />}
 
       {/* Labels over the picture */}

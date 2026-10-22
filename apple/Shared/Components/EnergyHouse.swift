@@ -39,7 +39,7 @@ struct EnergyHouse: View {
 
     private var drawSun: Bool { sky == nil || sky?.condition == "sunny" }
 
-    /// Inside and the tank with what they're set to; outside (with its humidity) under the weather.
+    /// Inside and the tank with what they're set to; outside (with its humidity) above the heat pump.
     @ViewBuilder
     private func tags(_ s: CGFloat) -> some View {
         if !compact {
@@ -49,8 +49,8 @@ struct EnergyHouse: View {
                     [t?.heating_target.map { "Set \(Energy.degrees($0))" }, t?.inside_humidity.map { "\(Int($0.rounded()))% RH" }])
             }
             if let v = t?.tank { tag(s, 642, 430, "Tank", Energy.degrees(v), [t?.tank_target.map { "Set \(Energy.degrees($0))" }]) }
-            if let v = t?.outside ?? sky.map({ Double($0.temp) }) {
-                tag(s, 120, 212, "Outside", Energy.degrees(v), [t?.outside_humidity.map { "\(Int($0.rounded()))% RH" }])
+            if t?.hidden?.contains("outside") != true, let v = t?.outside ?? sky.map({ Double($0.temp) }) {
+                tag(s, data.heat_pump != nil ? 800 : 850, data.heat_pump != nil ? 262 : 380, "Outside", Energy.degrees(v), [t?.outside_humidity.map { "\(Int($0.rounded()))% RH" }])
             }
         }
     }

@@ -36,4 +36,5 @@ async def options(refresh: bool = False):
                              "suggested": auto.get(slot) or []}
                       for slot, (kind, group) in energy.SLOTS.items()},
             "battery_invert": eff["battery_invert"], "grid_invert": eff["grid_invert"],
+            "hide": eff["hide"],
             "candidates": energy.candidates(svc.all)}

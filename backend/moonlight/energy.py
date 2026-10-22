@@ -111,6 +111,10 @@ DETAIL_ATTRS = {
     "defrost": [r"^defrost operation", r"defrost"],
 }
 FLAGS = ("battery_invert", "grid_invert")
+# Readings the household can leave off the picture (Settings > Energy), by slot -> their key in `temperatures`.
+SHOWABLE = {"inside_temp": "inside", "heating_target": "heating_target", "inside_humidity": "inside_humidity",
+            "heat_pump_tank": "tank", "tank_target": "tank_target", "outdoor_temp": "outside",
+            "outside_humidity": "outside_humidity"}
 
 POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
@@ -149,7 +153,8 @@ def saved(c) -> dict:
 
 def apply_settings(c, body: dict) -> bool:
     """PATCH /api/settings `energy`: {entities?: {slot: entity id | "" (none) | null (automatic)},
-    battery_invert?: bool, grid_invert?: bool}. Returns True if `energy` was present."""
+    battery_invert?: bool, grid_invert?: bool, hide?: [slot...] (readings left off the picture)}. Returns True if
+    `energy` was present."""
     if KEY not in body:
         return False
     from .common import bad
@@ -173,6 +178,11 @@ def apply_settings(c, body: dict) -> bool:
             else:
                 merged[slot] = eid
         out["entities"] = merged
+    if "hide" in val:
+        hide = val["hide"]
+        if not isinstance(hide, list) or any(h not in SHOWABLE for h in hide):
+            raise bad(f"energy.hide must be a list of: {', '.join(SHOWABLE)}")
+        out["hide"] = sorted(set(hide))
     for flag in FLAGS:
         if flag in val:
             if val[flag] is not None and not isinstance(val[flag], bool):
@@ -585,7 +595,11 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
     for k in ("inside_humidity", "outside_humidity"):
         if temps[k] is not None:
             temps[k] = int(temps[k])
-    out["temperatures"] = temps if any(v is not None for v in temps.values()) else None
+    hidden = [SHOWABLE[h] for h in eff.get("hide") or []]
+    for k in hidden:
+        temps[k] = None
+    # `hidden` tells the screens not to put the weather's temperature in place of a hidden outside reading.
+    out["temperatures"] = temps | {"hidden": hidden} if hidden or any(v is not None for v in temps.values()) else None
 
     if has(*PREDBAT):
         def window(a: str, b: str) -> dict | None:
@@ -963,7 +977,8 @@ def effective(auto: dict[str, list[str]], auto_flags: dict[str, bool], conf: dic
     for f, slot in (("battery_invert", "battery_power"), ("grid_invert", "grid_power")):
         if not isinstance(conf.get(f), bool) and not is_auto[slot]:
             flags[f] = False
-    return {"entities": ents, **flags, "auto": is_auto}
+    hide = [h for h in conf.get("hide") or [] if h in SHOWABLE]
+    return {"entities": ents, **flags, "auto": is_auto, "hide": hide}
 
 
 def watch_list(eff: dict) -> set[str]:

@@ -15,7 +15,7 @@ implementation of the same contract, used for the published preview). Keep them 
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
   media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv},
-  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}, energy: {entities?, battery_invert?, grid_invert?}}`
+  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}, energy: {entities?, battery_invert?, grid_invert?, hide?}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
@@ -43,7 +43,7 @@ implementation of the same contract, used for the published preview). Keep them 
   `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
   `popup: {large?, compact?, phone?, tv?: bool}` (default large and compact on; `tv` is the Apple TV app, off). Broadcasts `security` and `security_alert`.
   `energy` (merged, see Energy): `entities: {slot: entity id | "" (none) | null (automatic)}`, `battery_invert`,
-  `grid_invert`: bool or null (automatic). Broadcasts `energy`.
+  `grid_invert`: bool or null (automatic), `hide`: [slots of the temperatures group left off the picture]. Broadcasts `energy`.
   An unknown `holidays` country or region is a 400; changing it broadcasts `events` and `chores` too.
   `screens` may be partial (`{compact: {start: "meals"}}`, merged per style); `sections` must not be empty and `start`
   must be one of them (hiding the start section moves it to the first one left). `media_players` may be partial
@@ -450,7 +450,7 @@ minutes (or with `refresh`).
   limit (%), ready (ISO: a time of day becomes its next occurrence)} | null,
   heat_pump: {running, doing ("Heating the house", "Heating hot water", "Defrosting", "Cooling", "Running", "Idle"),
   power, today, flow_temp, heat, cop, cop_today: {heating, hot_water, overall} | null} | null,
-  temperatures: {inside, outside, tank, heating_target, tank_target, inside_humidity, outside_humidity} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
+  temperatures: {inside, outside, tank, heating_target, tank_target, inside_humidity, outside_humidity, hidden} | null, plan: {status, cost_today, cost_unit, rate_now, rate_export, rate_unit,
   battery_hours, charge: {start, end, rate} | null, cheap: {start, end, rate} | null} | null, tariff: {cheap_now,
   cheap_until, next: {start, end} | null, bonus: [{start, end}], dispatching} | null, sun: {night, next} | null}`.
   `sun`: from Home Assistant's `sun.sun` (watched, so sunset and sunrise push an update); `night` = below the horizon,
@@ -472,7 +472,7 @@ minutes (or with `refresh`).
   reading seen if HA has none from midnight.
   `configured: false` without Home Assistant.
 - `GET /api/energy/options?refresh=false` -> `{slots: {slot: {kind: "power"|"energy"|"percent"|"temperature"|"number"|"state",
-  group, entities: [ids in use], auto: bool, suggested: [ids automatic would use]}}, battery_invert, grid_invert,
+  group, entities: [ids in use], auto: bool, suggested: [ids automatic would use]}}, battery_invert, grid_invert, hide,
   candidates: {kind: [{entity_id, name, state, unit}]}}` for Settings > Energy. 409 without HA.
 
 Live updates: the entities in use are followed over HA's WebSocket; changes broadcast `energy`, at most every 4

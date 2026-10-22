@@ -63,11 +63,12 @@ export function EnergyPanel() {
       {opts && GROUPS.map((g) => (
         <div key={g.key} className="en-set-group">
           <h3 className="sec-set-sub">{g.label}</h3>
+          {g.key === "temperatures" && <p className="muted connect-note">The switch beside each one puts it on the picture or leaves it off.</p>}
           {g.slots.map(([slot, label]) => {
             const s = opts.slots[slot];
             const choices = s.kind === "number" ? [...opts.candidates.number, ...opts.candidates.percent] : opts.candidates[s.kind];
             return (
-              <label key={slot} className="en-set-row"><span>{label}</span>
+              <label key={slot} className={"en-set-row" + (g.key === "temperatures" ? " with-show" : "")}><span>{label}</span>
                 <select className="input" value={s.auto ? "auto" : s.entities[0] ?? ""}
                   onChange={(e) => save({ entities: { [slot]: e.target.value === "auto" ? null : e.target.value } }, `Change ${g.label.toLowerCase()}: ${label.toLowerCase()}`)}>
                   <option value="auto">{s.suggested.length ? `Auto: ${nameOf(s.suggested)}${s.suggested.length === 1 ? reading(byId.get(s.suggested[0])) : ""}` : "Auto: none found"}</option>
@@ -75,6 +76,15 @@ export function EnergyPanel() {
                   {!s.auto && s.entities[0] && !choices.some((c) => c.entity_id === s.entities[0]) && <option value={s.entities[0]}>{s.entities[0]}</option>}
                   {choices.map((c) => <option key={c.entity_id} value={c.entity_id}>{c.name}{reading(c)}</option>)}
                 </select>
+                {g.key === "temperatures" && (() => {
+                  // Each reading can be left off the picture, so a household shows just what it cares about.
+                  const hide = opts.hide ?? [], shown = !hide.includes(slot);
+                  return (
+                    <button className={"toggle" + (shown ? " on" : "")} aria-pressed={shown} aria-label={`Show ${label.toLowerCase()} on the picture`}
+                      title="On the picture"
+                      onClick={(e) => { e.preventDefault(); save({ hide: shown ? [...hide, slot] : hide.filter((h) => h !== slot) }, `${shown ? "Hide" : "Show"} ${label.toLowerCase()}`); }}><span /></button>
+                  );
+                })()}
               </label>
             );
           })}

@@ -458,7 +458,19 @@ def test_settings_pick_none_and_flip(client):
     assert any(c["entity_id"] == "binary_sensor.e_niro_ev_battery_plug" for c in opts["candidates"]["state"])
 
 
+def test_hide_readings_from_the_picture(client):
+    r = client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": ["outdoor_temp", "heat_pump_tank"]}})
+    assert r.status_code == 200, r.text
+    t = client.get("/api/energy").json()["temperatures"]
+    assert t["outside"] is None and t["tank"] is None and t["inside"] == 19.2
+    assert sorted(t["hidden"]) == ["outside", "tank"]
+    assert client.get("/api/energy/options").json()["hide"] == ["heat_pump_tank", "outdoor_temp"]
+    client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": []}})
+    assert client.get("/api/energy").json()["temperatures"]["tank"] == 45.0
+
+
 def test_settings_validation(client):
+    assert client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": ["solar_power"]}}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "energy": {"entities": {"nope": ""}}}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "energy": {"entities": {"solar_power": "light.kitchen"}}}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "energy": {"grid_invert": "yes"}}).status_code == 400

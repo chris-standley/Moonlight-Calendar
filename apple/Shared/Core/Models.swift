@@ -479,6 +479,8 @@ struct EnergyOverview: Codable {
         var inside: Double?; var outside: Double?; var tank: Double?
         var heating_target: Double?; var tank_target: Double?
         var inside_humidity: Double?; var outside_humidity: Double?
+        /// Readings the household left off the picture (a hidden outside isn't replaced by the weather's).
+        var hidden: [String]?
     }
     /// From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO.
     struct Plan: Codable {
