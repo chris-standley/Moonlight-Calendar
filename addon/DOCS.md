@@ -98,7 +98,9 @@ put the album art on the screensaver. Moonlight drives the speaker through Home 
 
 ### Music tab
 
-Every screen with a speaker gets a **Music** tab (the iPhone, iPad and Apple TV apps too, once phones have a speaker):
+Every screen with a speaker gets a **Music** tab (the iPhone, iPad and Apple TV apps too, once phones have a speaker).
+Tapping the music card on Today, or the player in the top bar, opens what's playing with an **Open Music** button that
+goes straight to it:
 
 - **Up next**: what's playing and the queue. Tap a track to play it now, play it next, or remove it.
 - **Library**: your Music Assistant library and favourites (playlists, albums, artists, podcasts, radio) through Home
