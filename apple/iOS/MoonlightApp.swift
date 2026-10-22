@@ -57,10 +57,12 @@ struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @SceneStorage("tab") private var tab = "today"
     @AppStorage(AppTab.orderKey) private var order = ""
+    /// Music only once phones have a speaker (Settings › Screens on a wall screen).
+    @State private var speaker = false
 
     var body: some View {
         TabView(selection: $tab) {
-            ForEach(AppTab.ordered(order)) { t in
+            ForEach(AppTab.ordered(order).filter { $0 != .music || speaker }) { t in
                 Tab(t.title, systemImage: t.symbol, value: t.rawValue) { t.screen }
             }
         }
@@ -74,13 +76,16 @@ struct MainTabs: View {
             if let api = model.api { await Reminders.reschedule(api) }
         }
         .task(id: model.rev("people", "lists")) { MoonlightShortcuts.updateAppShortcutParameters() }
+        .task(id: model.rev("settings", "displays")) {
+            if let np = await model.call({ try await $0.nowPlaying() }) { speaker = np.configured }
+        }
     }
 }
 
 /// The app's tabs. On iPhone the first four fit in the tab bar and the rest go under More; the order is chosen in
 /// Settings › Tab bar and kept on this device.
 enum AppTab: String, CaseIterable, Identifiable {
-    case today, calendar, chores, rewards, meals, recipes, lists, security, energy, settings
+    case today, calendar, chores, rewards, meals, recipes, lists, music, security, energy, settings
 
     static let orderKey = "tabs.order"
     var id: String { rawValue }
@@ -96,6 +101,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .meals: "fork.knife"
         case .recipes: "book.closed"
         case .lists: "list.bullet"
+        case .music: "music.note"
         case .security: "lock.shield"
         case .energy: "bolt"
         case .settings: "gearshape"
@@ -112,6 +118,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .meals: MealsScreen()
         case .recipes: RecipesScreen()
         case .lists: ListsScreen()
+        case .music: MusicScreen()
         case .security: SecurityScreen()
         case .energy: EnergyScreen()
         case .settings: SettingsScreen()

@@ -42,6 +42,7 @@ struct MainTabs: View {
     @State private var nursery = false
     @State private var energy = false
     @State private var security = false
+    @State private var music = false
 
     var body: some View {
         TabView {
@@ -59,6 +60,8 @@ struct MainTabs: View {
                 if security { Tab("Security", systemImage: "lock.shield") { SecurityView() } }
                 // Once Home Assistant has something for the house picture (Settings › Energy on a wall screen).
                 if energy { Tab("Energy", systemImage: "bolt") { EnergyView() } }
+                // Once this screen has a speaker (Settings › Screens on a wall screen).
+                if music { Tab("Music", systemImage: "music.note") { MusicView() } }
             }
             Tab("Photos", systemImage: "photo.on.rectangle") { PhotosView() }
             Tab("Settings", systemImage: "gearshape") { SettingsView() }
@@ -74,6 +77,9 @@ struct MainTabs: View {
             if let s = await model.call({ try await $0.security() }) {
                 security = s.configured && (s.alarm != nil || !s.cameras.isEmpty || !s.sensors.isEmpty)
             }
+        }
+        .task(id: model.rev("settings", "displays")) {
+            if let n = await model.call({ try await $0.nowPlaying() }) { music = n.configured }
         }
         // The remote's Play/Pause controls this screen's speaker from anywhere (Photos uses it for the slideshow).
         .onPlayPauseCommand {

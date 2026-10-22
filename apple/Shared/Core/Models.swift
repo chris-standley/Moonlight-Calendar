@@ -276,6 +276,11 @@ struct NowPlaying: Codable, Equatable {
         let play_pause: Bool
         let previous: Bool
         let next: Bool
+        var volume: Bool? = nil
+        var mute: Bool? = nil
+        var shuffle: Bool? = nil
+        var `repeat`: Bool? = nil
+        var grouping: Bool? = nil
     }
     let configured: Bool
     let state: String
@@ -286,8 +291,129 @@ struct NowPlaying: Codable, Equatable {
     let name: String?
     let art_url: String?
     let supports: Supports?
+    var music_assistant: Bool? = nil
+    var volume: Double? = nil
+    var muted: Bool? = nil
+    var shuffle: Bool? = nil
+    var `repeat`: String? = nil
+    var duration: Double? = nil
+    var position: Double? = nil
+    var position_updated_at: String? = nil
+    var server_time: String? = nil
 
     var isPlaying: Bool { state == "playing" || state == "buffering" }
+
+    /// Seconds into the track at `now`, given the answer arrived at `fetched`: HA's position at position_updated_at,
+    /// plus the time since if it's playing.
+    func position(at now: Date, fetched: Date) -> Double? {
+        guard var p = position else { return nil }
+        if isPlaying {
+            if let s = server_time.flatMap(NowPlaying.date), let u = position_updated_at.flatMap(NowPlaying.date) {
+                p += max(0, s.timeIntervalSince(u))
+            }
+            p += max(0, now.timeIntervalSince(fetched))
+        }
+        return duration.map { min(p, $0) } ?? p
+    }
+
+    /// HA's timestamps carry microseconds, more than ISO8601DateFormatter reads: keep milliseconds.
+    static func date(_ iso: String) -> Date? {
+        let trimmed = iso.replacingOccurrences(of: #"(\.\d{3})\d+"#, with: "$1", options: .regularExpression)
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: trimmed) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: trimmed)
+    }
+}
+
+/// "3:07", or "1:02:03" for long podcast episodes.
+func trackTime(_ seconds: Double?) -> String {
+    guard let seconds, seconds.isFinite, seconds >= 0 else { return "" }
+    let s = Int(seconds), h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+    return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
+}
+
+// MARK: Music (the Music tab: queue, library, rooms; see API.md "Music tab")
+
+/// Something in the speaker's library: open it (`can_expand`) and/or play it (`can_play`).
+struct MediaItem: Codable, Hashable {
+    let id: String
+    let type: String
+    let title: String
+    let subtitle: String?
+    let kind: String
+    let can_play: Bool
+    let can_expand: Bool
+    let thumb: String?
+
+    /// Albums, playlists, podcasts, artists and stations are tiles with art; tracks and episodes are rows.
+    var isTile: Bool {
+        can_expand || ["album", "playlist", "podcast", "artist", "audiobook", "directory", "genre", "radio"].contains(kind) || type == "radio"
+    }
+}
+
+struct MediaBrowse: Codable {
+    let id: String
+    let type: String
+    let title: String
+    let subtitle: String?
+    let kind: String
+    let can_play: Bool
+    let can_expand: Bool
+    let thumb: String?
+    let items: [MediaItem]
+    let more: Int
+
+    var item: MediaItem { MediaItem(id: id, type: type, title: title, subtitle: subtitle, kind: kind, can_play: can_play, can_expand: can_expand, thumb: thumb) }
+}
+
+struct QueueTrack: Codable, Identifiable, Hashable {
+    let key: String
+    let index: Int?
+    let title: String
+    let artist: String?
+    let album: String?
+    let duration: Double?
+    let thumb: String?
+    let current: Bool
+    var id: String { key }
+    var detail: String? {
+        let parts = [artist, album].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+struct MediaQueue: Codable {
+    let source: String
+    /// false: only the current and next track are known (Music Assistant without Moonlight's own connection).
+    let full: Bool
+    let total: Int
+    let current: Int?
+    let items: [QueueTrack]
+    let can_jump: Bool
+    let can_remove: Bool
+    let can_move: Bool
+}
+
+struct MediaRoom: Codable, Identifiable, Hashable {
+    let entity_id: String
+    let name: String
+    let state: String
+    /// This screen's own speaker.
+    let this: Bool
+    let grouped: Bool
+    let volume: Double?
+    let muted: Bool?
+    let playing: String?
+    let can_volume: Bool
+    var id: String { entity_id }
+}
+
+struct MediaRooms: Codable {
+    let entity: String
+    let can_group: Bool
+    let rooms: [MediaRoom]
 }
 
 struct Photo: Codable, Identifiable, Hashable {

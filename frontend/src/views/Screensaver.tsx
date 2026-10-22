@@ -56,7 +56,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const nowS = isoDT(now);
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
   const { np } = useMedia();
-  const music = !!np?.show && np.state === "playing";
+  const music = !!np?.show;
   const day = weather?.daily.find((d) => d.date === t);
   const cam = useSaverCamera(); // someone at a camera: its video takes the photo's place until they've gone
   return (

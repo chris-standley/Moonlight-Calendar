@@ -28,9 +28,9 @@ const SECTION_LABEL: Record<Section, string> = {
   today: "Today", calendar: "Calendar", chores: "Chores", rewards: "Rewards", meals: "Meals", recipes: "Recipes", lists: "Lists", nursery: "Nursery", security: "Security", energy: "Energy",
 };
 const SPEAKER_WHERE: Record<Layout, string> = {
-  compact: "Card on Today, album art on the screensaver",
-  large: "Small player in the top bar",
-  phone: "Small player in the top bar",
+  compact: "A Music section, a card on Today, and controls on the screensaver",
+  large: "A Music section, a small player in the top bar, and controls on the screensaver",
+  phone: "A Music section and a small player in the top bar",
 };
 const IDLE_OPTS = [0, 1, 3, 5, 10, 30].map((v) => ({ value: String(v), label: v === 0 ? "Never" : `${v} min` }));
 const STYLE_OPTS = STYLES.map((x) => ({ value: x.layout, label: STYLE_LABEL[x.layout] }));

@@ -135,6 +135,34 @@ struct APIClient: Sendable {
     func media(_ action: String) async throws -> NowPlaying {
         try await send("POST", "/api/media/command", ["layout": layout, "action": action])
     }
+    /// volume_set (0...1), volume_mute / shuffle_set (Bool), repeat_set ("off", "all", "one").
+    func media(_ action: String, value: Any) async throws -> NowPlaying {
+        try await send("POST", "/api/media/command", ["layout": layout, "action": action, "value": value])
+    }
+    func mediaQueue() async throws -> MediaQueue { try await get("/api/media/queue", ["layout": layout]) }
+    /// `action` play, remove or next (move it up to play next).
+    func queueAction(_ action: String, key: String) async throws {
+        let _: Ignored = try await send("POST", "/api/media/queue", ["layout": layout, "action": action, "key": key])
+    }
+    /// The speaker's library; nil = the top level.
+    func browse(_ item: MediaItem?) async throws -> MediaBrowse {
+        var q = ["layout": layout]
+        if let item { q["id"] = item.id; q["type"] = item.type }
+        return try await get("/api/media/browse", q)
+    }
+    func searchMusic(_ text: String) async throws -> [MediaItem] { try await get("/api/media/search", ["layout": layout, "q": text]) }
+    /// `enqueue` replace (play now), next, or add (end of the queue).
+    @discardableResult
+    func play(_ item: MediaItem, enqueue: String) async throws -> NowPlaying {
+        try await send("POST", "/api/media/play", ["layout": layout, "id": item.id, "type": item.type, "enqueue": enqueue])
+    }
+    func rooms() async throws -> MediaRooms { try await get("/api/media/rooms", ["layout": layout]) }
+    /// `action` join, unjoin, volume (value 0...1) or mute (value Bool).
+    func roomAction(_ room: String, _ action: String, value: Any? = nil) async throws -> MediaRooms {
+        var body: [String: Any] = ["layout": layout, "room": room, "action": action]
+        if let value { body["value"] = value }
+        return try await send("POST", "/api/media/rooms", body)
+    }
     func photos() async throws -> PhotoList { try await get("/api/screensaver/photos") }
     func nursery() async throws -> NurseryConfig { try await get("/api/nursery") }
     func nurseryUpdates() async throws -> [NurseryUpdate] { try await get("/api/nursery/updates") }

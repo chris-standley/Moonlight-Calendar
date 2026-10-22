@@ -138,7 +138,7 @@ def test_now_playing_mapping(client, fake):
     assert r["music_assistant"] is True and r["app"] == "music_assistant" and r["source"] == "Music Assistant Queue"
     assert r["has_art"] and r["art_url"].startswith("/api/media/art?layout=compact&v=")
     assert r["supports"] == {"play_pause": True, "previous": True, "next": True, "volume": True, "mute": True,
-                             "shuffle": True, "repeat": True, "seek": True}
+                             "shuffle": True, "repeat": True, "seek": True, "grouping": False}
     assert r["reachable"] and r["error"] is None and r["server_time"]
     body = json.dumps(r)
     assert PROXY_TOKEN not in body and TOKEN not in body and "media_player_proxy" not in body

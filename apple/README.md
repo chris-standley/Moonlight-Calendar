@@ -29,6 +29,11 @@ Text uses the system's text styles in the rounded design, so Dynamic Type works.
 Once Tapestry is connected (Settings › Nursery on a wall screen), Today has a nursery button at the top left with
 the number of new updates; it opens the updates with their photos.
 
+Once phones have a speaker (Settings › Screens on a wall screen, the phone style), there is a Music tab: what's
+playing with its controls and volume, Up next (tap a track to play it now, next, or remove it), Library (browse and
+search Music Assistant; play now, next or at the end of the queue) and Rooms (group speakers and set each one's
+volume).
+
 ### Recipes
 
 The Recipes tab is the family recipe box: search, favourites, tags, and a page per recipe with its picture, rating,
@@ -105,6 +110,7 @@ Assistant's address: Home Assistant's login page opens in a sign-in sheet and th
 | Meals | The week's meal plan | Previous / next week |
 | Lists | Shopping and to-do lists | Select an item to tick it off |
 | Nursery | Nursery updates from Tapestry, once connected (Settings › Nursery on a wall screen) | Pick an update; open its photos full screen |
+| Music | Once this screen has a speaker: what's playing, Up next, the library and rooms | Play/pause/skip and volume; play a track from the queue; play an album, playlist or podcast now, next or at the end; group rooms and set their volume |
 | Photos | The Immich screensaver photos and their albums | Play everything shuffled, or one album oldest to newest, full screen with the clock. Each photo is centred over a blurred copy of itself; a portrait photo is shown beside another portrait one from the same day |
 | Settings | What this Apple TV is paired with | Forget it and pair again |
 

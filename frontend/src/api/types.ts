@@ -339,10 +339,13 @@ export interface NowPlaying {
   duration: number | null; position: number | null; position_updated_at: string | null;
   volume: number | null; muted: boolean | null; shuffle: boolean | null; repeat: "off" | "all" | "one" | null;
   source: string | null; app: string | null; music_assistant: boolean;
+  /** The player actually shown and driven when the speaker hands over to one it fronts (an idle Music Assistant
+   * speaker while its Sonos plays from the Sonos app); null normally. */
+  via?: string | null;
   has_art: boolean;
   /** Ready to use as <img src> (served by Moonlight; changes with the track). */
   art_url: string | null;
-  supports: { play_pause: boolean; previous: boolean; next: boolean; volume: boolean; mute: boolean; shuffle: boolean; repeat: boolean; seek: boolean };
+  supports: { play_pause: boolean; previous: boolean; next: boolean; volume: boolean; mute: boolean; shuffle: boolean; repeat: boolean; seek: boolean; grouping?: boolean };
   reachable: boolean;
   error: string | null;
   server_time: string;
@@ -350,6 +353,41 @@ export interface NowPlaying {
 export type MediaAction = "play_pause" | "play" | "pause" | "next" | "previous" | "volume_set" | "volume_mute" | "shuffle_set" | "repeat_set";
 export interface MediaPlayerOption { entity_id: string; name: string; state: string; music_assistant: boolean }
 export interface MediaFavourite { uri: string; name: string; media_type: string }
+
+// The Music tab (see API.md "Music tab").
+/** Something in the library: open it (can_expand) and/or play it (can_play). `thumb` is ready for <img src>. */
+export interface MediaItem {
+  id: string; type: string; title: string; subtitle: string | null;
+  /** HA's media class (album, playlist, podcast, artist, track, directory...) or Music Assistant's media type. */
+  kind: string;
+  can_play: boolean; can_expand: boolean; thumb: string | null;
+}
+export interface MediaBrowse extends MediaItem { items: MediaItem[]; more: number }
+export type Enqueue = "replace" | "next" | "add";
+export interface QueueTrack {
+  /** What to send back to jump to / remove / move it. */
+  key: string; index: number | null;
+  title: string; artist: string | null; album: string | null; duration: number | null; thumb: string | null; current: boolean;
+}
+export interface MediaQueue {
+  source: "music_assistant" | "sonos" | "none";
+  /** false: only the current and next track are known (Music Assistant without its own connection). */
+  full: boolean; total: number; current: number | null; items: QueueTrack[];
+  can_jump: boolean; can_remove: boolean; can_move: boolean;
+}
+export type QueueAction = "play" | "remove" | "next";
+export interface MediaRoom {
+  entity_id: string; name: string; state: string;
+  /** This screen's speaker. */
+  this: boolean;
+  /** Playing together with this screen's speaker. */
+  grouped: boolean;
+  volume: number | null; muted: boolean | null; playing: string | null; can_volume: boolean;
+}
+export interface MediaRooms { entity: string; can_group: boolean; rooms: MediaRoom[] }
+export type RoomAction = "join" | "unjoin" | "volume" | "mute";
+/** Settings > Music: Moonlight's own connection to Music Assistant (for its whole queue). The token is write-only. */
+export interface MusicAssistantLink { url: string; detected_url: string | null; token_set: boolean }
 
 // Calendar sync (iCloud / CalDAV / published calendar links / Home Assistant calendars). Passwords and link URLs are write-only.
 export type AccountKind = "icloud" | "caldav" | "ics" | "ha";
@@ -543,6 +581,20 @@ export interface Api {
   mediaPlayers(): Promise<MediaPlayerOption[]>;
   mediaFavourites(layout: Layout): Promise<MediaFavourite[]>;
   playFavourite(layout: Layout, uri: string): Promise<NowPlaying>;
+  /** What's playing and what's next. 409 no speaker. */
+  mediaQueue(layout: Layout): Promise<MediaQueue>;
+  mediaQueueAction(layout: Layout, action: QueueAction, key: string): Promise<void>;
+  /** The speaker's library; no id = its top level. */
+  mediaBrowse(layout: Layout, id?: string, type?: string): Promise<MediaBrowse>;
+  /** Music Assistant speakers only (409 otherwise). */
+  mediaSearch(layout: Layout, q: string): Promise<MediaItem[]>;
+  mediaPlay(layout: Layout, item: { id: string; type: string }, enqueue: Enqueue): Promise<NowPlaying>;
+  mediaRooms(layout: Layout): Promise<MediaRooms>;
+  mediaRoomAction(layout: Layout, room: string, action: RoomAction, value?: number | boolean): Promise<MediaRooms>;
+  musicAssistant(): Promise<MusicAssistantLink>;
+  /** Checked against Music Assistant first: 400 token refused, 424 unreachable. url "" = the address it gives HA. */
+  saveMusicAssistant(link: { url: string; token?: string; pin: string }): Promise<MusicAssistantLink>;
+  removeMusicAssistant(pin: string): Promise<MusicAssistantLink>;
   // Security (see API.md "Security")
   security(): Promise<SecurityOverview>;
   securityAlerts(): Promise<SecurityAlert[]>;

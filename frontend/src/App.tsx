@@ -4,7 +4,7 @@ import { AppProvider, Layout, useApp, useNow } from "./state";
 import { fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
-  IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
+  IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconMusic, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
 } from "./components/icons";
 import { CalendarView } from "./views/CalendarView";
 import { ChoresView } from "./views/ChoresView";
@@ -16,6 +16,7 @@ import { Screensaver } from "./views/Screensaver";
 import { SettingsView } from "./views/SettingsView";
 import { SyncBanner } from "./views/SyncBanner";
 import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
+import { MusicView } from "./views/MusicView";
 import { TimerTray } from "./views/recipes/TimerTray";
 import { RecipesView } from "./views/RecipesView";
 import { NurseryButton, NurseryFeed, NurseryView, useNurseryFeed } from "./views/NurseryView";
@@ -25,7 +26,7 @@ import { EnergyView } from "./views/EnergyView";
 import { SecurityAlerts } from "./views/SecurityAlerts";
 import { ScreenAlerts } from "./views/ScreenAlerts";
 
-type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security" | "energy" | "settings";
+type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "music" | "nursery" | "security" | "energy" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { key: "today", label: "Today", icon: IconHome },
   { key: "calendar", label: "Calendar", icon: IconCalendar },
@@ -34,6 +35,7 @@ const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode 
   { key: "meals", label: "Meals", icon: IconMeals },
   { key: "recipes", label: "Recipes", icon: IconRecipes },
   { key: "lists", label: "Lists", icon: IconLists },
+  { key: "music", label: "Music", icon: IconMusic },
   { key: "nursery", label: "Nursery", icon: IconNursery },
   { key: "security", label: "Security", icon: IconShield },
   { key: "energy", label: "Energy", icon: IconBolt },
@@ -138,14 +140,16 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   const chosen = screen?.setup ?? settings?.screens?.[layout] ?? DEFAULT_SCREENS[layout];
   // Nursery only once Tapestry is connected (Settings › Nursery).
   const setup = { ...chosen, sections: chosen.sections.filter((x) => x !== "nursery" || nursery.config?.configured) };
-  const nav = NAV.filter((n) => n.key === "settings" || setup.sections.includes(n.key as Section));
+  // Music comes with a speaker: it's there whenever this screen has one (Settings > Screens > Set up > Speaker).
+  const speaker = screen?.setup?.speaker ?? settings?.media_players?.[layout] ?? "";
+  const nav = NAV.filter((n) => n.key === "settings" || (n.key === "music" ? !!speaker : setup.sections.includes(n.key as Section)));
   // Open on the chosen start section once settings arrive, and leave a section that was just hidden.
   const opened = useRef(false);
   useEffect(() => {
     if (!settings || screen === undefined) return;
     if (!opened.current) { opened.current = true; setTab(setup.start); return; }
-    setTab((t) => (t === "settings" || setup.sections.includes(t as Section) ? t : setup.start));
-  }, [settings, screen, setup.start, setup.sections]);
+    setTab((t) => (t === "settings" || (t === "music" && speaker) || setup.sections.includes(t as Section) ? t : setup.start));
+  }, [settings, screen, setup.start, setup.sections, speaker]);
   // A new install has nobody yet: still show every view (they point to Settings > Family).
   const ready = peopleLoaded && settings;
   const go = useCallback((t: string) => setTab(t as Tab), []);
@@ -186,7 +190,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
           {/* A compact screen's Today has its own Now playing card; everywhere else a small pill in the top bar. */}
           {/* Energy on a wall screen fills the screen and carries its own clock. */}
           {!(tab === "energy" && layout !== "phone") &&
-            <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today")}
+            <TopBar familyName={settings?.family_name ?? ""} music={!(layout === "compact" && tab === "today") && tab !== "music"}
               nursery={setup.sections.includes("nursery") ? null : nursery} />}
           {ready && <SyncBanner onOpen={() => setTab("settings")} />}
           <div className={"content" + (lift > 0 ? " lifted" : "")} ref={content} style={lift ? { marginTop: -lift } : undefined}>
@@ -198,6 +202,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
               {tab === "meals" && <MealsView />}
               {tab === "recipes" && <RecipesView />}
               {tab === "lists" && <ListsView />}
+              {tab === "music" && <MusicView />}
               {tab === "nursery" && <NurseryView feed={nursery} />}
               {tab === "security" && <SecurityView />}
               {tab === "energy" && <EnergyView />}
