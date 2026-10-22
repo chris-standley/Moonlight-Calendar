@@ -84,13 +84,15 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
       {cam && <div className="ss-cam"><CameraVideo key={cam.camera} cam={cam} width={1920} fit="contain" /></div>}
       <div className="ss-shade" />
       {cam && <div className="ss-cam-label"><span className="sec-live-dot" />{alertTitle(cam)}</div>}
-      {!cam && usePhotos && shown && settings?.photo_details !== false && <PhotoCaption photo={shown} />}
-      {!cam && usePhotos && album && !note && <AlbumToast key={album.at} name={album.name} />}
       {!cam && usePhotos && shown && (
-        <button className="ss-hide" aria-label="Don't show this photo again" onClick={(e) => { e.stopPropagation(); setHiding(shown); }}>
-          <IconEyeOff size={30} />
-        </button>
+        <div className="ss-tr">{/* the photo's details, and under them the button to hide it */}
+          {settings?.photo_details !== false && <PhotoCaption photo={shown} />}
+          <button className="ss-hide" aria-label="Don't show this photo again" onClick={(e) => { e.stopPropagation(); setHiding(shown); }}>
+            <IconEyeOff size={30} />
+          </button>
+        </div>
       )}
+      {!cam && usePhotos && album && !note && <AlbumToast key={album.at} name={album.name} />}
       {note && <AlbumToast key={note.at} name={note.text} icon={<IconEyeOff size={22} />} onDone={() => setNote(null)} />}
       {hiding && <HideConfirm photo={hiding} albums={albums} onHide={() => hide(hiding)} onCancel={() => setHiding(null)} />}
       <div className="ss-info">
