@@ -80,7 +80,7 @@ export function EnergyView() {
       <div className="energy full">
         <div className={"en-stage" + (data.sun?.night ? " night" : "")}>
           <House data={data} small={portrait} sky={weather?.current ?? null} bare />
-          <StageClock temp={weather?.current?.temp ?? null} offline={offline} />
+          <StageClock offline={offline} />
           {(data.plan || data.tariff) && <Plan plan={data.plan} tariff={data.tariff} />}
         </div>
       </div>
@@ -109,14 +109,14 @@ export function EnergyView() {
   );
 }
 
-/** The top bar's time, date and temperature, in the sky's top right corner (the weather's icon is on the picture). */
-function StageClock({ temp, offline }: { temp: number | null; offline: ReactNode }) {
+/** The top bar's time and date, in the sky's top right corner (the weather is on the picture, outside). */
+function StageClock({ offline }: { offline: ReactNode }) {
   const now = useNow(10_000);
   const time = clockTime(now);
   return (
     <div className="en-clock">
       <b>{time}</b>
-      <span>{fmtFull(today())}{temp != null && <> · {temp}°</>}</span>
+      <span>{fmtFull(today())}</span>
       {offline}
     </div>
   );
@@ -154,11 +154,14 @@ function carTarget(car: NonNullable<EnergyOverview["car"]>): string | null {
   return [car.limit != null && `Charging to ${car.limit}%`, car.ready && `by ${fmtTime(car.ready)}`].filter(Boolean).join(" ").replace(/^by/, "Ready by");
 }
 
-/** A small reading on the picture: a title over a value. */
-function Tag({ x, y, title, value, cls }: { x: number; y: number; title: string; value: string; cls?: string }) {
+/** A small reading on the picture: a title over a value, and smaller details (set point, humidity) under it. */
+function Tag({ x, y, title, value, sub, cls }: {
+  x: number; y: number; title: string; value: string; sub?: (string | false | null | undefined)[]; cls?: string;
+}) {
+  const more = (sub ?? []).filter(Boolean).join(" · ");
   return (
     <div className={"en-tag " + (cls ?? "")} style={{ left: `${x / 10}%`, top: `${y / 6}%` }}>
-      <span>{title}</span><b>{value}</b>
+      <span>{title}</span><b>{value}</b>{more && <small>{more}</small>}
     </div>
   );
 }
@@ -179,6 +182,8 @@ export function House({ data, small, sky, bare }: {
   const drawnSun = !sky || sky.condition === "sunny";
   const phase = solar ? solarPhase(solar) : "day";
   const tank = temps?.tank ?? null;
+  // A hidden outside reading stays hidden: no weather temperature in its place.
+  const outside = temps?.hidden?.includes("outside") ? null : temps?.outside ?? sky?.temp ?? null;
   const tankColor = tank == null ? "var(--en-glass)" : tank >= 45 ? "#e8674f" : tank >= 35 ? "#f2a33a" : "#6aa6e8";
   return (
     <div className={"en-house" + (small ? " small" : "") + (bare ? " bare" : "") + (data.sun?.night ? " night" : "")}>
@@ -280,9 +285,13 @@ export function House({ data, small, sky, bare }: {
       {/* The weather in place of the sun */}
       {!drawnSun && sky && <div className="en-weather"><WeatherIcon condition={sky.condition} size={24} /></div>}
 
-      {/* Temperatures (outside is in the top bar already) */}
-      {!small && temps?.inside != null && <Tag x={642} y={346} title="Inside" value={fmtDeg(temps.inside)} />}
-      {!small && tank != null && <Tag x={642} y={430} title="Tank" value={fmtDeg(tank)} cls="t-tank" />}
+      {/* Temperatures: inside and the tank with what they're set to, outside above the heat pump */}
+      {!small && temps?.inside != null && <Tag x={642} y={346} title="Inside" value={fmtDeg(temps.inside)}
+        sub={[temps.heating_target != null && `Set ${fmtDeg(temps.heating_target)}`, temps.inside_humidity != null && `${temps.inside_humidity}% RH`]} />}
+      {!small && tank != null && <Tag x={642} y={430} title="Tank" value={fmtDeg(tank)} cls="t-tank"
+        sub={[temps?.tank_target != null && `Set ${fmtDeg(temps.tank_target)}`]} />}
+      {!small && outside != null && <Tag x={hp ? 800 : 850} y={hp ? 262 : 380} title="Outside" value={fmtDeg(outside)} cls="t-out"
+        sub={[temps?.outside_humidity != null && `${temps.outside_humidity}% RH`]} />}
 
       {/* Labels over the picture */}
       {solar && <Chip x={185} y={96} align="left" cls="c-solar" title="Solar"
@@ -352,7 +361,9 @@ function Details({ data }: { data: EnergyOverview }) {
           hp.today != null && `${fmtKwh(hp.today)} today`, hp.cop_today?.overall != null && `COP today ${fmtCop(hp.cop_today.overall)}`,
           hp.cop_today?.heating != null && `Heating ${fmtCop(hp.cop_today.heating)}`, hp.cop_today?.hot_water != null && `Hot water ${fmtCop(hp.cop_today.hot_water)}`])}
       {(temps?.inside != null || temps?.tank != null) && card("c-temp", "Temperatures", `${fmtDeg(temps?.inside ?? null)} inside`,
-        [temps?.tank != null && `Hot water tank ${fmtDeg(temps.tank)}`])}
+        [temps?.heating_target != null && `Set to ${fmtDeg(temps.heating_target)}`, temps?.inside_humidity != null && `Humidity ${temps.inside_humidity}%`,
+          temps?.tank != null && `Hot water tank ${fmtDeg(temps.tank)}${temps.tank_target != null ? ` (set ${fmtDeg(temps.tank_target)})` : ""}`,
+          temps?.outside != null && `Outside ${fmtDeg(temps.outside)}${temps.outside_humidity != null ? `, ${temps.outside_humidity}% humidity` : ""}`])}
     </div>
   );
 }

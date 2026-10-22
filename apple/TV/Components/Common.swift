@@ -4,6 +4,8 @@ import SwiftUI
 /// line under it, so the screen below gets all the height.
 struct Header: View {
     @Environment(AppModel.self) private var model
+    /// Off on Energy, where the picture has the weather outside.
+    var weather = true
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
@@ -13,7 +15,7 @@ struct Header: View {
                     .foregroundStyle(Theme.text)
                 HStack(spacing: 8) {
                     Text(model.dates.shortDate(ctx.date))
-                    if let w = model.weather {
+                    if weather, let w = model.weather {
                         WeatherGlyph(condition: w.current.condition, size: 18)
                         Text("\(w.current.temp)°").foregroundStyle(Theme.text)
                     }
@@ -65,6 +67,7 @@ extension View {
 
 /// A Moonlight screen: safe-area padding and the content, with the clock up beside the tab bar.
 struct Screen<Content: View>: View {
+    var weather = true
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -80,7 +83,7 @@ struct Screen<Content: View>: View {
         .overlay(alignment: .topLeading) {
             // Measured from the screen's edge rather than the safe area, so it clears the left end of the tab bar
             // even with every section's tab showing.
-            Header()
+            Header(weather: weather)
                 .padding(.leading, 64)
                 .padding(.top, 44)
                 .ignoresSafeArea(edges: [.top, .leading])

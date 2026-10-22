@@ -293,7 +293,8 @@ def test_overview(client):
     assert hp["today"] == 7.0 and hp["flow_temp"] == 28.0
     # 11.4 l/min leaving at 33.9° and back at 29.1°: 3.8 kW of heat for 774 W
     assert hp["heat"] == 3818 and hp["cop"] == 4.9
-    assert r["temperatures"] == {"inside": 19.2, "outside": 9.0, "tank": 45.0}
+    temps = r["temperatures"]
+    assert {k: temps[k] for k in ("inside", "outside", "tank")} == {"inside": 19.2, "outside": 9.0, "tank": 45.0}
     plan = r["plan"]
     assert plan["status"] == "Demand" and plan["cost_today"] == 165.76 and plan["cost_unit"] == "p"
     assert plan["rate_now"] == 34.69 and plan["rate_export"] == 12.0 and plan["battery_hours"] == 0.5
@@ -321,6 +322,36 @@ def test_car_limit_ready_and_cheap_slots():
     t = energy.build(eff, by, now=datetime(2026, 10, 21, 11, 0, tzinfo=timezone.utc))["tariff"]
     assert t["next"] == {"start": "2026-10-21T14:00:00+01:00", "end": "2026-10-21T15:30:00+01:00"}
     assert t["bonus"] == [t["next"]]
+
+
+def test_set_points_and_humidity():
+    """Found by name (his Daikin set points and SwitchBot meters), not fooled by fridges or "indoor_outdoor" ids."""
+    def pct(eid, v, name):
+        return st(eid, v, unit_of_measurement="%", device_class="humidity", friendly_name=name)
+    extra = [
+        st("sensor.heating_set_point", "19", unit_of_measurement="°C", device_class="temperature",
+           friendly_name="Altherma Heating Set Point"),
+        st("sensor.dhw_setpoint", "46", unit_of_measurement="°C", device_class="temperature", friendly_name="DHW setpoint"),
+        st("sensor.altherma_domestichotwatertank_setpoint_mode", "fixed", friendly_name="Setpoint mode"),
+        pct("sensor.meter_2330_humidity", "57", "Kitchen Meter Pro Humidity"),
+        pct("sensor.indoor_outdoor_meter_5d0e_humidity", "55", "Hallway Meter Humidity"),
+        pct("sensor.indoor_outdoor_meter_3d2d_humidity", "56", "Bathroom Meter Humidity"),
+        pct("sensor.indoor_outdoor_meter_3f0a_humidity", "94", "Outside Meter Humidity"),
+        pct("sensor.indoor_outdoor_meter_2c0f_humidity", "76", "Kitchen Freezer Meter Humidity"),
+        pct("sensor.openweathermap_humidity", "92", "OpenWeatherMap Humidity"),
+    ]
+    by = {x["entity_id"]: x for x in ha_states() + extra}
+    auto, flags = energy.suggest(list(by.values()), PREFS)
+    assert auto["heating_target"] == ["sensor.heating_set_point"] and auto["tank_target"] == ["sensor.dhw_setpoint"]
+    assert auto["inside_humidity"][0] == "sensor.indoor_outdoor_meter_5d0e_humidity"
+    assert auto["outside_humidity"][0] == "sensor.indoor_outdoor_meter_3f0a_humidity"
+    t = energy.build(energy.effective(auto, flags, {}), by)["temperatures"]
+    assert t["heating_target"] == 19 and t["tank_target"] == 46
+    assert t["inside_humidity"] == 55 and t["outside_humidity"] == 94
+    # No outside meter: the weather's humidity
+    del by["sensor.indoor_outdoor_meter_3f0a_humidity"]
+    auto, _ = energy.suggest(list(by.values()), PREFS)
+    assert auto["outside_humidity"][0] == "sensor.openweathermap_humidity"
 
 
 def test_running_total_meter_counts_from_midnight():
@@ -427,7 +458,24 @@ def test_settings_pick_none_and_flip(client):
     assert any(c["entity_id"] == "binary_sensor.e_niro_ev_battery_plug" for c in opts["candidates"]["state"])
 
 
+def test_hide_readings_from_the_picture(client):
+    r = client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": ["outdoor_temp", "heat_pump_tank"]}})
+    assert r.status_code == 200, r.text
+    t = client.get("/api/energy").json()["temperatures"]
+    assert t["outside"] is None and t["tank"] is None and t["inside"] == 19.2
+    assert sorted(t["hidden"]) == ["outside", "tank"]
+    assert client.get("/api/energy/options").json()["hide"] == ["heat_pump_tank", "outdoor_temp"]
+    client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": []}})
+    assert client.get("/api/energy").json()["temperatures"]["tank"] == 45.0
+    # Whole parts too
+    client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": ["car", "battery", "plan"]}})
+    r = client.get("/api/energy").json()
+    assert r["car"] is None and r["battery"] is None and r["plan"] is None and r["tariff"] is None
+    assert r["solar"] is not None and r["home"]["power"] == 3848
+
+
 def test_settings_validation(client):
+    assert client.patch("/api/settings", json={"pin": PIN, "energy": {"hide": ["solar_power"]}}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "energy": {"entities": {"nope": ""}}}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "energy": {"entities": {"solar_power": "light.kitchen"}}}).status_code == 400
     assert client.patch("/api/settings", json={"pin": PIN, "energy": {"grid_invert": "yes"}}).status_code == 400

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, EnergyCandidate, EnergyGroup, EnergyOptions, EnergySettingsPatch, EnergySlot } from "../api/types";
+import { ApiError, EnergyCandidate, EnergyGroup, EnergyOptions, EnergyPart, EnergySettingsPatch, EnergySlot } from "../api/types";
 import { useApp } from "../state";
 
 const GROUPS: { key: EnergyGroup; label: string; slots: [EnergySlot, string][] }[] = [
@@ -14,7 +14,9 @@ const GROUPS: { key: EnergyGroup; label: string; slots: [EnergySlot, string][] }
   { key: "heat_pump", label: "Heat pump", slots: [["heat_pump_mode", "What it's doing"], ["heat_pump_power", "Power"], ["heat_pump_today", "Used today"],
     ["heat_pump_flow", "Flow temperature"], ["heat_pump_return", "Return temperature"], ["heat_pump_flow_rate", "Water flow rate"],
     ["heat_pump_details", "Controller readings (ESPAltherma)"]] },
-  { key: "temperatures", label: "Temperatures", slots: [["inside_temp", "Inside"], ["heat_pump_tank", "Hot water tank"]] },
+  { key: "temperatures", label: "Temperatures", slots: [["inside_temp", "Inside"], ["heating_target", "Heating set point"],
+    ["inside_humidity", "Inside humidity"], ["heat_pump_tank", "Hot water tank"], ["tank_target", "Hot water set point"], ["outdoor_temp", "Outside"],
+    ["outside_humidity", "Outside humidity"]] },
   { key: "plan", label: "Predbat", slots: [["plan_status", "Status"], ["plan_cost_today", "Cost today"], ["plan_rate_now", "Price now"],
     ["plan_rate_export", "Export price"], ["plan_battery_hours", "Battery hours left"], ["plan_charge_start", "Battery charge starts"],
     ["plan_charge_end", "Battery charge ends"], ["plan_cheap_start", "Cheap rate starts"], ["plan_cheap_end", "Cheap rate ends"], ["cheap_off_peak", "Octopus off-peak"],
@@ -56,16 +58,26 @@ export function EnergyPanel() {
     <section className="panel">
       <h2 className="panel-title">Energy</h2>
       <p className="muted connect-note">The house picture in Energy reads these Home Assistant sensors. Most are found on their own (from
-        Home Assistant's Energy dashboard first); pick any that are wrong, or None to leave something out.</p>
+        Home Assistant's Energy dashboard first); pick any that are wrong, or None to leave something out. The switches put each part on the picture or leave it off.</p>
       {!opts && <p className="muted">Looking in Home Assistant…</p>}
       {opts && GROUPS.map((g) => (
         <div key={g.key} className="en-set-group">
-          <h3 className="sec-set-sub">{g.label}</h3>
+          <h3 className="sec-set-sub">{g.label}{g.key !== "temperatures" && (() => {
+            // A whole part can be left off the picture.
+            const hide = opts.hide ?? [], part = g.key as EnergyPart, shown = !hide.includes(part);
+            return (
+              <button className={"toggle" + (shown ? " on" : "")} aria-pressed={shown} aria-label={`Show ${g.label.toLowerCase()} on the picture`}
+                title="On the picture"
+                onClick={() => save({ hide: shown ? [...hide, part] : hide.filter((h) => h !== part) }, `${shown ? "Hide" : "Show"} ${g.label.toLowerCase()}`)}><span /></button>
+            );
+          })()}</h3>
+          {g.key === "temperatures" && <p className="muted connect-note">The switch beside each one puts it on the picture or leaves it off.</p>}
+          {g.key !== "temperatures" && (opts.hide ?? []).includes(g.key as EnergyPart) && <p className="muted connect-note">Left off the picture.</p>}
           {g.slots.map(([slot, label]) => {
             const s = opts.slots[slot];
             const choices = s.kind === "number" ? [...opts.candidates.number, ...opts.candidates.percent] : opts.candidates[s.kind];
             return (
-              <label key={slot} className="en-set-row"><span>{label}</span>
+              <label key={slot} className={"en-set-row" + (g.key === "temperatures" ? " with-show" : "")}><span>{label}</span>
                 <select className="input" value={s.auto ? "auto" : s.entities[0] ?? ""}
                   onChange={(e) => save({ entities: { [slot]: e.target.value === "auto" ? null : e.target.value } }, `Change ${g.label.toLowerCase()}: ${label.toLowerCase()}`)}>
                   <option value="auto">{s.suggested.length ? `Auto: ${nameOf(s.suggested)}${s.suggested.length === 1 ? reading(byId.get(s.suggested[0])) : ""}` : "Auto: none found"}</option>
@@ -73,6 +85,15 @@ export function EnergyPanel() {
                   {!s.auto && s.entities[0] && !choices.some((c) => c.entity_id === s.entities[0]) && <option value={s.entities[0]}>{s.entities[0]}</option>}
                   {choices.map((c) => <option key={c.entity_id} value={c.entity_id}>{c.name}{reading(c)}</option>)}
                 </select>
+                {g.key === "temperatures" && (() => {
+                  // Each reading can be left off the picture, so a household shows just what it cares about.
+                  const hide = opts.hide ?? [], shown = !hide.includes(slot);
+                  return (
+                    <button className={"toggle" + (shown ? " on" : "")} aria-pressed={shown} aria-label={`Show ${label.toLowerCase()} on the picture`}
+                      title="On the picture"
+                      onClick={(e) => { e.preventDefault(); save({ hide: shown ? [...hide, slot] : hide.filter((h) => h !== slot) }, `${shown ? "Hide" : "Show"} ${label.toLowerCase()}`); }}><span /></button>
+                  );
+                })()}
               </label>
             );
           })}

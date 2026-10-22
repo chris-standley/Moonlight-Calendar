@@ -167,7 +167,7 @@ The Energy section draws your house with the power running between its parts, li
   builds up while Moonlight is running and starts again at midnight.
 - After sunset the picture switches to its night colours on every screen, the iPhone and Apple TV apps and the
   iPhone widget, and back at sunrise (from Home Assistant's sun).
-- **Temperatures**: inside and the hot water tank, each on the picture (outside is in the top bar).
+- **Temperatures**: inside with the heating set point and humidity, the hot water tank with its set point, and outside (from a sensor, or the weather) with its humidity, shown above the heat pump. Each has a switch in Settings › Energy to leave it off the picture. Solar, battery, grid, home, car, heat pump and Predbat each have a switch too.
 - **Predbat**: if Predbat is installed, a row under the picture with its status, the price now, the export price, the
   cost so far today, how long the battery will last, and when it next charges the battery. With the Octopus Energy
   integration it also shows the next cheap slot (or how long the cheap rate lasts) and any bonus slots Intelligent

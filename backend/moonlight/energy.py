@@ -77,6 +77,10 @@ SLOTS: dict[str, tuple[str, str]] = {
     "inside_temp": ("temperature", "temperatures"),
     "outdoor_temp": ("temperature", "temperatures"),
     "heat_pump_tank": ("temperature", "temperatures"),
+    "heating_target": ("temperature", "temperatures"),
+    "tank_target": ("temperature", "temperatures"),
+    "inside_humidity": ("percent", "temperatures"),
+    "outside_humidity": ("percent", "temperatures"),
     "plan_status": ("state", "plan"),
     "plan_cost_today": ("number", "plan"),
     "plan_rate_now": ("number", "plan"),
@@ -107,6 +111,12 @@ DETAIL_ATTRS = {
     "defrost": [r"^defrost operation", r"defrost"],
 }
 FLAGS = ("battery_invert", "grid_invert")
+# Readings the household can leave off the picture (Settings > Energy), by slot -> their key in `temperatures`.
+SHOWABLE = {"inside_temp": "inside", "heating_target": "heating_target", "inside_humidity": "inside_humidity",
+            "heat_pump_tank": "tank", "tank_target": "tank_target", "outdoor_temp": "outside",
+            "outside_humidity": "outside_humidity"}
+# Whole parts of the picture that can be left off too ("plan" covers Predbat and the Octopus cheap times).
+PARTS = ("solar", "battery", "grid", "home", "car", "heat_pump", "plan")
 
 POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
@@ -145,7 +155,8 @@ def saved(c) -> dict:
 
 def apply_settings(c, body: dict) -> bool:
     """PATCH /api/settings `energy`: {entities?: {slot: entity id | "" (none) | null (automatic)},
-    battery_invert?: bool, grid_invert?: bool}. Returns True if `energy` was present."""
+    battery_invert?: bool, grid_invert?: bool, hide?: [slot...] (readings left off the picture)}. Returns True if
+    `energy` was present."""
     if KEY not in body:
         return False
     from .common import bad
@@ -169,6 +180,11 @@ def apply_settings(c, body: dict) -> bool:
             else:
                 merged[slot] = eid
         out["entities"] = merged
+    if "hide" in val:
+        hide = val["hide"]
+        if not isinstance(hide, list) or any(h not in SHOWABLE and h not in PARTS for h in hide):
+            raise bad(f"energy.hide must be a list of: {', '.join((*PARTS, *SHOWABLE))}")
+        out["hide"] = sorted(set(hide))
     for flag in FLAGS:
         if flag in val:
             if val[flag] is not None and not isinstance(val[flag], bool):
@@ -576,7 +592,16 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
         # Nothing picked for it: the heat pump controller's own reading will do.
         if temps[key] is None and attr in d and eff.get("auto", {}).get(slot, True):
             temps[key] = round(d[attr], 1)
-    out["temperatures"] = temps if any(v is not None for v in temps.values()) else None
+    temps |= {"heating_target": number("heating_target"), "tank_target": number("tank_target"),
+              "inside_humidity": number("inside_humidity", 0), "outside_humidity": number("outside_humidity", 0)}
+    for k in ("inside_humidity", "outside_humidity"):
+        if temps[k] is not None:
+            temps[k] = int(temps[k])
+    hidden = [SHOWABLE[h] for h in eff.get("hide") or [] if h in SHOWABLE]
+    for k in hidden:
+        temps[k] = None
+    # `hidden` tells the screens not to put the weather's temperature in place of a hidden outside reading.
+    out["temperatures"] = temps | {"hidden": hidden} if hidden or any(v is not None for v in temps.values()) else None
 
     if has(*PREDBAT):
         def window(a: str, b: str) -> dict | None:
@@ -599,6 +624,12 @@ def build(eff: dict, states: dict[str, dict | None], cop_day: dict | None = None
 
     out["tariff"] = tariff(st("cheap_off_peak"), st("cheap_dispatches"), now) if has("cheap_off_peak", "cheap_dispatches") else None
     out["sun"] = sun(states.get(SUN))
+    # Parts the household left off the picture (worked out first: the home's use counts a hidden battery's power).
+    for part in eff.get("hide") or []:
+        if part in PARTS:
+            out[part] = None
+            if part == "plan":
+                out["tariff"] = None
     return out
 
 
@@ -812,6 +843,13 @@ PATTERNS: dict[str, list[str]] = {
     "inside_temp": [HEAT_PUMP_WORDS + r".*(room|indoor|inside).*temp", r"(indoor|inside)_temp", r"room_temp"],
     "heat_pump_tank": [HEAT_PUMP_WORDS + r".*(tank|dhw|hot_water).*temp", r"(dhw|hot_water)_tank.*temp"],
     "outdoor_temp": [HEAT_PUMP_WORDS + r".*outdoor.*temp"],
+    "heating_target": [r"heating_set_?point", HEAT_PUMP_WORDS + r".*(heating|room|climate\w*).*(set_?point|target)",
+                       r"(room|heating)_(set_?point|target)_temp"],
+    "tank_target": [r"dhw_set_?point", HEAT_PUMP_WORDS + r".*(tank|dhw|hot_water).*(set_?point|target)",
+                    r"(hot_water|tank)_(set_?point|target)"],
+    # Matched on the friendly name too: "Hallway Meter Humidity", "Outside Meter Humidity".
+    "inside_humidity": [r"(living_room|lounge|hall)\w*humid", r"(indoor|inside)\w*humid", r"humidity"],
+    "outside_humidity": [r"(^| )(outside|outdoor)\w*humid", r"(openweathermap|met_office|(^|_)met_|weather|accuweather|pirate)\w*humid"],
 }
 EXCLUDE: dict[str, str] = {
     "solar_power": r"forecast|predbat|estimate",
@@ -820,6 +858,11 @@ EXCLUDE: dict[str, str] = {
     "solar_forecast_tomorrow": r"remaining|predbat|peak|cost|weather|power|d3|day_3",
     "heat_pump_flow_rate": r"gas|air|refrig",
     "inside_temp": r"target|setpoint|set_point|offset|outdoor|outside",
+    "heating_target": r"mode|offset|leaving|flow|dhw|tank|hot_water|predicted|predheat",
+    "tank_target": r"mode|offset|predicted",
+    "inside_humidity": r"outside|fridge|freezer|garage|bath|ensuite|en_suite|(^|_)wc(_|$)|ams|p1s|offset|calibration|test|index|"
+                       r"dew|weather|openweathermap",
+    "outside_humidity": r"fridge|freezer|offset|calibration|test|index|dew|forecast",
     "battery_soc": r"car|ev_|vehicle|e_niro|tesla|phone|predbat|target|reserve|cutoff|min|max",
     "battery_power": r"car|ev_|vehicle|predbat|rate|max|limit",
     "grid_power": r"predbat|limit|export_limit|zappi|eddi|ct",
@@ -942,7 +985,8 @@ def effective(auto: dict[str, list[str]], auto_flags: dict[str, bool], conf: dic
     for f, slot in (("battery_invert", "battery_power"), ("grid_invert", "grid_power")):
         if not isinstance(conf.get(f), bool) and not is_auto[slot]:
             flags[f] = False
-    return {"entities": ents, **flags, "auto": is_auto}
+    hide = [h for h in conf.get("hide") or [] if h in SHOWABLE or h in PARTS]
+    return {"entities": ents, **flags, "auto": is_auto, "hide": hide}
 
 
 def watch_list(eff: dict) -> set[str]:

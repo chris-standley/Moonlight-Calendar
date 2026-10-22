@@ -289,12 +289,17 @@ export type EnergySlot =
   | "home_power" | "home_today" | "car_plug" | "car_status" | "car_power" | "car_soc" | "car_range" | "car_session" | "car_limit" | "car_ready"
   | "heat_pump_mode" | "heat_pump_power" | "heat_pump_today" | "heat_pump_flow" | "heat_pump_return" | "heat_pump_flow_rate"
   | "heat_pump_details" | "inside_temp" | "outdoor_temp" | "heat_pump_tank"
+  | "heating_target" | "tank_target" | "inside_humidity" | "outside_humidity"
   | "plan_status" | "plan_cost_today" | "plan_rate_now" | "plan_rate_export" | "plan_battery_hours"
   | "plan_charge_start" | "plan_charge_end" | "plan_cheap_start" | "plan_cheap_end" | "cheap_off_peak" | "cheap_dispatches";
 export type EnergyKind = "power" | "energy" | "percent" | "temperature" | "number" | "state";
 export type EnergyGroup = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "temperatures" | "plan";
-export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean }
-export interface EnergySettingsPatch { entities?: Partial<Record<EnergySlot, string | null>>; battery_invert?: boolean | null; grid_invert?: boolean | null }
+export interface EnergySettings { entities?: Partial<Record<EnergySlot, string>>; battery_invert?: boolean; grid_invert?: boolean; hide?: EnergyHide[] }
+export interface EnergySettingsPatch { entities?: Partial<Record<EnergySlot, string | null>>; battery_invert?: boolean | null; grid_invert?: boolean | null;
+  /** Parts and readings (the temperatures group) left off the picture. */
+  hide?: EnergyHide[] }
+export type EnergyPart = "solar" | "battery" | "grid" | "home" | "car" | "heat_pump" | "plan";
+export type EnergyHide = EnergyPart | EnergySlot;
 /** Power in watts, energy in kWh; null when the sensor has no reading. Each part is null when nothing is set for it. */
 export interface EnergyOverview {
   configured: boolean; reachable: boolean; error: string | null; updated: string | null;
@@ -313,7 +318,9 @@ export interface EnergyOverview {
   /** heat: watts going into the water; cop: heat ÷ power right now; cop_today: added up since midnight. */
   heat_pump: { running: boolean; doing: string; power: number | null; today: number | null; flow_temp: number | null; heat: number | null; cop: number | null;
     cop_today: { heating: number | null; hot_water: number | null; overall: number | null } | null } | null;
-  temperatures: { inside: number | null; outside: number | null; tank: number | null } | null;
+  /** °C; *_target: the heat pump's set points; humidity in %. */
+  temperatures: { inside: number | null; outside: number | null; tank: number | null; heating_target?: number | null; tank_target?: number | null;
+    inside_humidity?: number | null; outside_humidity?: number | null; hidden?: string[] } | null;
   /** From Predbat. Money in cost_unit/rate_unit (usually "p"); times ISO. */
   plan: { status: string | null; cost_today: number | null; cost_unit: string | null; rate_now: number | null; rate_export: number | null; rate_unit: string | null;
     battery_hours: number | null; charge: EnergyWindow | null; cheap: EnergyWindow | null } | null;
@@ -327,7 +334,7 @@ export interface EnergyWindow { start: string; end: string | null; rate: number 
 export interface EnergyCandidate { entity_id: string; name: string; state: string | null; unit: string | null }
 export interface EnergyOptions {
   slots: Record<EnergySlot, { kind: EnergyKind; group: EnergyGroup; entities: string[]; auto: boolean; suggested: string[] }>;
-  battery_invert: boolean; grid_invert: boolean;
+  battery_invert: boolean; grid_invert: boolean; hide?: EnergyHide[];
   candidates: Record<EnergyKind, EnergyCandidate[]>;
 }
 

@@ -34,6 +34,10 @@ const SLOTS: Record<EnergySlot, [EnergyKind, string, string]> = {
   inside_temp: ["temperature", "sensor.living_room_temperature", "Living room temperature"],
   outdoor_temp: ["temperature", "sensor.heat_pump_outdoor_temperature", "Heat pump outdoor temperature"],
   heat_pump_tank: ["temperature", "sensor.hot_water_tank_temperature", "Hot water tank temperature"],
+  heating_target: ["temperature", "sensor.heating_set_point", "Heating set point"],
+  tank_target: ["temperature", "sensor.dhw_setpoint", "Hot water set point"],
+  inside_humidity: ["percent", "sensor.hallway_humidity", "Hallway humidity"],
+  outside_humidity: ["percent", "sensor.outside_humidity", "Outside humidity"],
   plan_status: ["state", "predbat.status", "Predbat status"],
   plan_cost_today: ["number", "predbat.cost_today", "Cost so far today"],
   plan_rate_now: ["number", "predbat.rates", "Import rates"],
@@ -46,7 +50,7 @@ const SLOTS: Record<EnergySlot, [EnergyKind, string, string]> = {
   cheap_off_peak: ["state", "binary_sensor.octopus_off_peak", "Octopus off peak"],
   cheap_dispatches: ["state", "binary_sensor.octopus_intelligent_dispatching", "Octopus intelligent dispatching"],
 };
-const GROUP = (s: EnergySlot) => (s === "inside_temp" || s === "outdoor_temp" || s === "heat_pump_tank" ? "temperatures"
+const GROUP = (s: EnergySlot) => (["inside_temp", "outdoor_temp", "heat_pump_tank", "heating_target", "tank_target", "inside_humidity", "outside_humidity"].includes(s) ? "temperatures"
   : s.startsWith("heat_pump") ? "heat_pump" : s.split("_")[0]) as EnergyOptions["slots"][EnergySlot]["group"];
 
 /** Today at hh:mm local, as ISO with the offset (the way Home Assistant sends times). */
@@ -60,7 +64,11 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
   let tick = 0;
   setInterval(() => { tick++; emit("energy"); }, 5000);
   const wobble = (base: number, amount: number, phase: number) => Math.round(base + Math.sin(tick / 2 + phase) * amount);
-  const on = (slot: EnergySlot) => (settings()?.entities?.[slot] ?? SLOTS[slot][1]) !== "";
+  const hidden = (slot: EnergySlot) => {
+    const hide: string[] = settings()?.hide ?? [];
+    return hide.includes(slot) || hide.includes(slot.startsWith("cheap") ? "plan" : GROUP(slot));
+  };
+  const on = (slot: EnergySlot) => (settings()?.entities?.[slot] ?? SLOTS[slot][1]) !== "" && !hidden(slot);
   return {
     async energy(): Promise<EnergyOverview> {
       // The sun follows the clock: up from 7:40 to 17:30, strongest at lunchtime.
@@ -94,7 +102,10 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
             heat: Math.round(heat), cop: +(heat / hp).toFixed(1), cop_today: { heating: 3.8, hot_water: 2.7, overall: 3.5 } }
           : null,
         temperatures: on("inside_temp") || on("outdoor_temp") || on("heat_pump_tank")
-          ? { inside: on("inside_temp") ? 19.5 : null, outside: on("outdoor_temp") ? 9 : null, tank: on("heat_pump_tank") ? 47 : null }
+          ? { inside: on("inside_temp") ? 19.5 : null, outside: on("outdoor_temp") ? 9 : null, tank: on("heat_pump_tank") ? 47 : null,
+            heating_target: on("heating_target") ? 19 : null, tank_target: on("tank_target") ? 46 : null,
+            inside_humidity: on("inside_humidity") ? 55 : null, outside_humidity: on("outside_humidity") ? 94 : null,
+            hidden: (settings()?.hide ?? []).map((h) => ({ inside_temp: "inside", heat_pump_tank: "tank", outdoor_temp: "outside" } as Record<string, string>)[h] ?? h) }
           : null,
         plan: on("plan_status")
           ? { status: "Demand", cost_today: 138, cost_unit: "p", rate_now: hour >= 23.5 || hour < 5.5 ? 6.6 : 34.69, rate_export: 12, rate_unit: "p", battery_hours: 4.5,
@@ -116,7 +127,7 @@ export function demoEnergy(emit: (...t: Topic[]) => void, settings: () => Energy
         const ent = auto ? [SLOTS[s][1]] : mine[s] ? [mine[s]!] : [];
         return [s, { kind: SLOTS[s][0], group: GROUP(s), entities: ent, auto, suggested: [SLOTS[s][1]] }];
       })) as EnergyOptions["slots"];
-      return { slots, battery_invert: !!settings()?.battery_invert, grid_invert: !!settings()?.grid_invert, candidates };
+      return { slots, battery_invert: !!settings()?.battery_invert, grid_invert: !!settings()?.grid_invert, hide: settings()?.hide ?? [], candidates };
     },
   };
 }
@@ -129,6 +140,7 @@ export function applyEnergyPatch(cur: EnergySettings | undefined, patch: EnergyS
     if (v === null) delete next.entities![slot];
     else next.entities![slot] = v;
   }
+  if (patch.hide) next.hide = [...new Set(patch.hide)];
   for (const f of ["battery_invert", "grid_invert"] as const) {
     if (patch[f] === null) delete next[f];
     else if (patch[f] !== undefined) next[f] = patch[f]!;
