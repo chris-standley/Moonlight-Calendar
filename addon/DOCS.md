@@ -33,7 +33,8 @@ Every screen opens the same address: `http://<ha-host>:8091/display`. It shows a
 or phone) go to Settings > Screens > Pair, enter the code and the PIN, and give the screen a name. The
 screen remembers its pairing. Tap it in Settings > Screens to rename it, pick its style (Large for a big wall screen,
 Compact for a small touch screen, Phone) and choose what it shows: the sections in its menu, the one it opens on, its
-speaker and when the photo screensaver starts. Remove it there too.
+speaker and when the photo screensaver starts. Remove it there too. A compact screen can hang either way round:
+turned upright, it rearranges every section to suit a tall screen.
 
 Below the screens, "In the Home Assistant app" sets the same choices per style for Moonlight opened from Home
 Assistant's sidebar or phone app. Paired screens follow those until they're given choices of their own.

@@ -68,7 +68,7 @@ const COLORS = { solar: "#f2a33a", battery: "#2fb58a", grid: "#8b7cf0", car: "#4
 /** Energy: the house with solar on the roof, the battery inside, the grid, the car and the heat pump around it, and
  * the power running between them. */
 export function EnergyView() {
-  const { layout } = useApp();
+  const { layout, portrait } = useApp();
   const [data] = useData((a) => a.energy(), ["energy", "settings"], []);
   const [weather] = useData((a) => a.weather(), ["settings"], []);
   if (!data) return <div className="energy" />;
@@ -79,7 +79,7 @@ export function EnergyView() {
     return (
       <div className="energy full">
         <div className={"en-stage" + (data.sun?.night ? " night" : "")}>
-          <House data={data} sky={weather?.current ?? null} bare />
+          <House data={data} small={portrait} sky={weather?.current ?? null} bare />
           <StageClock temp={weather?.current?.temp ?? null} offline={offline} />
           {(data.plan || data.tariff) && <Plan plan={data.plan} tariff={data.tariff} />}
         </div>

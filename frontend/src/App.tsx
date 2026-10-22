@@ -1,7 +1,7 @@
-import { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Api, DEFAULT_SCREENS, Display, Person, Section, Settings, Theme } from "./api/types";
 import { AppProvider, Layout, useApp, useNow } from "./state";
-import { fmtFull, today } from "./dates";
+import { fmtDayMonth, fmtDow, fmtFull, today } from "./dates";
 import { PinPad } from "./components/ui";
 import {
   IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconMusic, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
@@ -58,6 +58,22 @@ function useTheme(theme: Theme | undefined) {
   }, [theme]);
 }
 
+/** A compact screen mounted upright (taller than wide) gets its own arrangement of every section. It follows the
+ * screen's own box rather than the window, so the preview can show it too, and it changes live when the screen turns. */
+function usePortrait(root: RefObject<HTMLDivElement | null>, layout: Layout) {
+  const [portrait, setPortrait] = useState(false);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (layout !== "compact" || !el) { setPortrait(false); return; }
+    const check = () => setPortrait(el.offsetHeight > el.offsetWidth);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [root, layout]);
+  return portrait;
+}
+
 const IDLE_MS = { large: 5 * 60_000, compact: 3 * 60_000, phone: 0 };
 
 interface Burst { id: number; x: number; y: number; color: string }
@@ -78,6 +94,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   const [saver, setSaver] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const nursery = useNurseryFeed(api);
+  const portrait = usePortrait(root, layout);
 
   useEffect(() => {
     const load = () => {
@@ -173,8 +190,8 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   }, [layout, tab]);
 
   return (
-    <AppProvider value={{ api, layout, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
-      <div className={`app layout-${layout}` + (EMBEDDED ? " embedded" : "")} ref={root}>
+    <AppProvider value={{ api, layout, portrait, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
+      <div className={`app layout-${layout}` + (portrait ? " portrait" : "") + (EMBEDDED ? " embedded" : "")} ref={root}>
        <MediaProvider api={api} layout={layout}>
         <nav className="rail">
           <div className="rail-logo"><Logo size={layout === "large" ? 44 : 34} /></div>
@@ -226,13 +243,13 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
 function TopBar({ familyName, music, nursery }: { familyName: string; music: boolean; nursery: NurseryFeed | null }) {
   const now = useNow(10_000);
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
-  const { api, settings } = useApp();
+  const { api, settings, portrait } = useApp();
   useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api, settings?.weather_entity, settings?.temp_unit]);
   const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
   return (
     <header className="topbar">
       <div className="tb-time">{time}</div>
-      <div className="tb-date">{fmtFull(today())}</div>
+      <div className="tb-date">{portrait ? `${fmtDow(today())} ${fmtDayMonth(today())}` : fmtFull(today())}</div>
       {wx && <div className="tb-wx"><WeatherIcon condition={wx.condition} size={34} /> {wx.temp}°</div>}
       {music && <NowPlayingPill />}
       {nursery && <NurseryButton feed={nursery} />}

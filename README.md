@@ -14,7 +14,7 @@ screensaver from Immich; speaker controls and album art through Music Assistant.
 | `custom_components/moonlight/` | HACS custom integration: Moonlight people, chores, stars, lists, meals and calendars as HA entities and services. See its [README](custom_components/moonlight/README.md) |
 | `tests/` | Tests for the integration (`python3 -m pytest tests`; `tests/ha/` needs pytest-homeassistant-custom-component) |
 | `apple/` | Native iPhone, iPad and Apple TV apps (SwiftUI, iOS/tvOS 18). Open `apple/Moonlight.xcodeproj` in Xcode 16+. See its [README](apple/README.md) |
-| `screenshots/` | Every view at large (2560x1440), compact (1920x1200 at 2x zoom) and phone sizes |
+| `screenshots/` | Every view at large (2560x1440), compact (1920x1200 at 2x zoom, landscape and `portrait/`) and phone sizes |
 
 ## Install on Home Assistant
 
@@ -50,6 +50,8 @@ Settings > Screens), guessed from the window size until then. Older `/display/ha
 addresses still work.
 - Large: a big wall screen, e.g. 27in 2560x1440 at browser zoom 1 (root font 20px). Opens on the week calendar.
 - Compact: a small touch screen, e.g. Touch Display 2, 1920x1200, TouchKio at 2x zoom = 960x600 CSS px. Opens on Today.
+  Mounted upright (1200x1920, 600x960 CSS px) it switches to a portrait arrangement of every section by itself: the
+  `portrait` class on `.app` follows the app's own box, so the demo preview's "Compact portrait" frame shows it too.
 - Phone: a phone browser, or the HA sidebar and companion app via ingress.
 - iPhone, iPad and Apple TV: the native apps in [`apple/`](apple/README.md) find Moonlight on the network and pair with a code like the other screens.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.
