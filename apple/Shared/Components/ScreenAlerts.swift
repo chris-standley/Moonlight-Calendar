@@ -78,7 +78,7 @@ struct ScreenAlertsOverlay: View {
     /// A chime for a new notification that asks for one, and for a timer reaching zero (not for old ones on launch).
     private func chime(_ live: [ScreenAlert], _ t: Double) {
         for a in live where a.chime && !chimed.contains(a.key) {
-            let at = a.isTimer ? (a.ends_at ?? 0) : a.created_at
+            let at = a.isTimer && !a.countsUp ? (a.ends_at ?? 0) : a.created_at
             guard at <= t else { continue }
             chimed.insert(a.key)
             if t - at < 30_000 {
@@ -101,6 +101,23 @@ func timeLeft(_ ms: Double) -> String {
     return h > 0 ? String(format: "%d:%02d:%02d", h, m, r) : String(format: "%d:%02d", m, r)
 }
 
+/// Time gone on a timer counting up, the same way: 0:00 at the start, then 4:05.
+func timeSince(_ ms: Double) -> String {
+    timeLeft((max(0, ms) / 1000).rounded(.down) * 1000)
+}
+
+/// "since 10:41" for a timer counting up.
+func sinceText(_ alert: ScreenAlert) -> String {
+    let at = Date(timeIntervalSince1970: (alert.started_at ?? alert.created_at) / 1000)
+    return "since " + at.formatted(date: .omitted, time: .shortened)
+}
+
+/// The big number on a timer.
+func timerText(_ alert: ScreenAlert, _ t: Double) -> String {
+    if alert.isDone(t) { return "Time's up" }
+    return alert.countsUp ? timeSince(t - (alert.started_at ?? t)) : timeLeft((alert.ends_at ?? 0) - t)
+}
+
 private struct AlertCard: View {
     let alert: ScreenAlert
     let now: Double
@@ -108,15 +125,16 @@ private struct AlertCard: View {
     let dismiss: () -> Void
 
     var body: some View {
-        let done = alert.isTimer && now >= (alert.ends_at ?? 0)
+        let done = alert.isDone(now)
+        let detail = alert.description?.isEmpty == false ? alert.description : alert.countsUp ? sinceText(alert) : nil
         HStack(spacing: tv ? 18 : 10) {
             if !alert.icon.isEmpty { Text(alert.icon).font(.system(size: tv ? 44 : 28)) }
             VStack(alignment: .leading, spacing: 2) {
                 if alert.isTimer {
-                    Text(done ? "Time's up" : timeLeft((alert.ends_at ?? 0) - now))
+                    Text(timerText(alert, now))
                         .font(tv ? Theme.font(40, .heavy) : Theme.text(.title2, .heavy)).monospacedDigit()
                         .foregroundStyle(done ? Theme.starText : Theme.text)
-                    Text([alert.label, alert.description].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
+                    Text([alert.label, detail].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
                         .font(tv ? Theme.font(24, .semibold) : Theme.text(.footnote, .semibold))
                         .foregroundStyle(Theme.muted).lineLimit(1)
                 } else {
@@ -137,7 +155,7 @@ private struct AlertCard: View {
                         .background(Theme.surface2, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(done || !alert.isTimer ? "Dismiss" : "Cancel timer")
+                .accessibilityLabel(done || !alert.isTimer || alert.countsUp ? "Dismiss" : "Cancel timer")
             }
         }
         .padding(.vertical, tv ? 20 : 12)
@@ -166,7 +184,7 @@ private struct FullScreenAlert: View {
                         Button("Make small", action: putAway)
                     }
                     if alert.dismissible {
-                        Button(alert.isTimer && t < (alert.ends_at ?? 0) ? "Cancel timer" : "Dismiss", action: dismiss)
+                        Button(alert.isTimer && !alert.countsUp && !alert.isDone(t) ? "Cancel timer" : "Dismiss", action: dismiss)
                     }
                 }
                 .font(tv ? Theme.font(30) : Theme.text(.headline))
@@ -212,26 +230,37 @@ private struct FullScreenAlert: View {
     }
 
     private func timer(_ t: Double) -> some View {
-        let ends = alert.ends_at ?? 0
-        let left = ends - t
-        let total = max(1, ends - (alert.started_at ?? ends))
-        let done = left <= 0
+        let done = alert.isDone(t)
+        let start = alert.started_at ?? t
+        // How much of the ring shows: a countdown fills towards zero; counting up, it fills towards when it goes
+        // (and is full if it stays until dismissed).
+        let fill: Double
+        if alert.countsUp {
+            fill = alert.expires_at.map { min(1, max(0, (t - start) / max(1, $0 - start))) } ?? 1
+        } else {
+            let ends = alert.ends_at ?? 0
+            fill = done ? 1 : min(1, max(0, 1 - (ends - t) / max(1, ends - start)))
+        }
         let size: CGFloat = tv ? 520 : 260
         return VStack(spacing: tv ? 30 : 14) {
             ZStack {
                 Circle().stroke(Theme.surface2, lineWidth: tv ? 26 : 14)
                 Circle()
-                    .trim(from: 0, to: done ? 1 : CGFloat(min(1, max(0, 1 - left / total))))
+                    .trim(from: 0, to: CGFloat(fill))
                     .stroke(done ? Theme.starText : Theme.accent, style: StrokeStyle(lineWidth: tv ? 26 : 14, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: Int(t / 1000))
                 VStack(spacing: 6) {
                     if !alert.icon.isEmpty { Text(alert.icon).font(.system(size: tv ? 80 : 44)) }
-                    Text(done ? "Time's up" : timeLeft(left))
+                    Text(timerText(alert, t))
                         .font(.system(size: tv ? 110 : 54, weight: .heavy, design: .rounded)).monospacedDigit()
                         .foregroundStyle(done ? Theme.starText : Theme.text)
                         .minimumScaleFactor(0.5).lineLimit(1)
                         .padding(.horizontal, tv ? 50 : 24)
+                    if alert.countsUp {
+                        Text(sinceText(alert)).font(tv ? Theme.font(30, .semibold) : Theme.text(.headline, .semibold))
+                            .foregroundStyle(Theme.muted)
+                    }
                 }
             }
             .frame(width: size, height: size)
