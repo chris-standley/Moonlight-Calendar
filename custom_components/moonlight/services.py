@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 from .api import MoonlightApiError, MoonlightError
 from .const import (
     ATTR_CHIME, ATTR_CHORE, ATTR_CONFIG_ENTRY_ID, ATTR_COUNT_UP, ATTR_DATE, ATTR_DESCRIPTION, ATTR_DISMISSIBLE, ATTR_DUE,
-    ATTR_DURATION, ATTR_EMOJI, ATTR_FINISHED_FOR, ATTR_ICON, ATTR_ID, ATTR_IMAGE, ATTR_ITEM, ATTR_LABEL, ATTR_LIST,
+    ATTR_DURATION, ATTR_EMOJI, ATTR_FINISHED_FOR, ATTR_FULL_SCREEN_FOR, ATTR_ICON, ATTR_ID, ATTR_IMAGE, ATTR_ITEM, ATTR_LABEL, ATTR_LIST,
     ATTR_MESSAGE, ATTR_PERSON, ATTR_PIN, ATTR_POINTS, ATTR_REASON, ATTR_SCREENS, ATTR_SINCE, ATTR_STARS, ATTR_STYLE,
     ATTR_TIME_OF_DAY, ATTR_TITLE, ATTR_UNTIL, DOMAIN, SERVICE_ADD_CHORE, SERVICE_ADD_LIST_ITEM, SERVICE_AWARD_STARS,
     SERVICE_CLEAR_NOTIFICATIONS, SERVICE_COMPLETE_CHORE, SERVICE_SHOW_NOTIFICATION, SERVICE_START_TIMER,
@@ -64,6 +64,7 @@ SHOW_NOTIFICATION_SCHEMA = vol.Schema({
     vol.Optional(ATTR_SCREENS): SCREENS,
     vol.Optional(ATTR_STYLE, default="fullscreen"): STYLE,
     vol.Optional(ATTR_DURATION): cv.time_period,  # left out: a toast goes after 10 s, full screen stays; 0 = stays
+    vol.Optional(ATTR_FULL_SCREEN_FOR): cv.positive_time_period,  # then a card in the corner
     vol.Optional(ATTR_ICON, default=""): cv.string,
     vol.Optional(ATTR_IMAGE): cv.string,
     vol.Optional(ATTR_DISMISSIBLE, default=True): cv.boolean,
@@ -81,7 +82,8 @@ START_TIMER_SCHEMA = vol.Schema({
     vol.Optional(ATTR_COUNT_UP, default=False): cv.boolean,
     vol.Optional(ATTR_SINCE): cv.datetime,
     vol.Optional(ATTR_SCREENS): SCREENS,
-    vol.Optional(ATTR_STYLE, default="toast"): STYLE,
+    vol.Optional(ATTR_STYLE): STYLE,  # left out: a toast, or full screen with full_screen_for
+    vol.Optional(ATTR_FULL_SCREEN_FOR): cv.positive_time_period,  # then a card in the corner
     vol.Optional(ATTR_FINISHED_FOR): cv.time_period,  # left out or 0: "Time's up" stays until dismissed or cleared
     vol.Optional(ATTR_ICON, default=""): cv.string,
     vol.Optional(ATTR_DISMISSIBLE, default=True): cv.boolean,
@@ -102,6 +104,11 @@ def _seconds(value: timedelta) -> int:
 def _local(when: datetime) -> datetime:
     """A time without a zone is Home Assistant's local time."""
     return when if when.tzinfo else when.replace(tzinfo=dt_util.get_default_time_zone())
+
+
+def _check_full_screen(data: dict) -> None:
+    if ATTR_FULL_SCREEN_FOR in data and data.get(ATTR_STYLE) == "toast":
+        raise ServiceValidationError("Full screen for is for a full screen one, not a toast")
 
 
 def _optional(data: dict, *keys: str) -> dict[str, Any]:
@@ -225,6 +232,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         d = call.data
         if not d[ATTR_TITLE] and not d[ATTR_MESSAGE]:
             raise ServiceValidationError("Give the notification a title or a message")
+        _check_full_screen(d)
         alert: dict[str, Any] = {
             "kind": "notification", "title": d[ATTR_TITLE], "message": d[ATTR_MESSAGE], "style": d[ATTR_STYLE],
             "icon": d[ATTR_ICON], "dismissible": d[ATTR_DISMISSIBLE], "chime": d[ATTR_CHIME],
@@ -232,6 +240,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
         }
         if ATTR_DURATION in d:
             alert["duration"] = _seconds(d[ATTR_DURATION])
+        if ATTR_FULL_SCREEN_FOR in d:
+            alert["full_screen_for"] = _seconds(d[ATTR_FULL_SCREEN_FOR])
         return await put_up(call, alert)
 
     async def start_timer(call: ServiceCall) -> ServiceResponse:
@@ -243,10 +253,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError("A timer counts down to until or up from since, not both")
         if not count_up and (ATTR_DURATION in d) == (ATTR_UNTIL in d):
             raise ServiceValidationError("Give the timer a duration or an until (or count up)")
+        _check_full_screen(d)
         alert: dict[str, Any] = {
-            "kind": "timer", "label": d[ATTR_LABEL], "description": d[ATTR_DESCRIPTION], "style": d[ATTR_STYLE],
+            "kind": "timer", "label": d[ATTR_LABEL], "description": d[ATTR_DESCRIPTION],
             "icon": d[ATTR_ICON], "dismissible": d[ATTR_DISMISSIBLE],
-            **_optional(d, ATTR_SCREENS, ATTR_ID),
+            **_optional(d, ATTR_SCREENS, ATTR_ID, ATTR_STYLE),
         }
         # Counting up has nothing to get to, so it only chimes (when it appears) if asked.
         alert["chime"] = d[ATTR_CHIME] if ATTR_CHIME in d else not count_up
@@ -258,6 +269,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
             alert["until"] = _local(d[ATTR_UNTIL]).isoformat()
         if ATTR_FINISHED_FOR in d:
             alert["finished_for"] = _seconds(d[ATTR_FINISHED_FOR])
+        if ATTR_FULL_SCREEN_FOR in d:
+            alert["full_screen_for"] = _seconds(d[ATTR_FULL_SCREEN_FOR])
         return await put_up(call, alert)
 
     async def clear_notifications(call: ServiceCall) -> ServiceResponse:

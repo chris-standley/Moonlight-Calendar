@@ -42,6 +42,7 @@ ATTR_UNTIL = "until"
 ATTR_FINISHED_FOR = "finished_for"
 ATTR_COUNT_UP = "count_up"
 ATTR_SINCE = "since"
+ATTR_FULL_SCREEN_FOR = "full_screen_for"
 
 SERVICE_COMPLETE_CHORE = "complete_chore"
 SERVICE_AWARD_STARS = "award_stars"

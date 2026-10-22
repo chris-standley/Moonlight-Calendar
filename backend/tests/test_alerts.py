@@ -153,6 +153,19 @@ def test_count_up_since(devices):
     assert sent == []
 
 
+def test_full_screen_for_then_small(devices):
+    hass = devices["hass"]
+    r = hass.post("/api/alerts", json={"kind": "timer", "label": "Kettle boiled", "since": "now", "full_screen_for": 300})
+    assert r.status_code == 200, r.text
+    k = r.json()
+    assert k["style"] == "fullscreen" and k["shrink_at"] == k["created_at"] + 300_000
+    n = hass.post("/api/alerts", json={"title": "Bins", "full_screen_for": 60}).json()
+    assert n["style"] == "fullscreen" and n["shrink_at"] == n["created_at"] + 60_000
+    assert hass.post("/api/alerts", json={"title": "Bins"}).json()["shrink_at"] is None
+    assert hass.post("/api/alerts", json={"title": "x", "style": "toast", "full_screen_for": 60}).status_code == 400
+    assert hass.post("/api/alerts", json={"title": "x", "full_screen_for": -1}).status_code == 400
+
+
 def test_dismiss_clear_and_events(app, devices):
     hass, kitchen = devices["hass"], devices["kitchen"]
     a = hass.post("/api/alerts", json={"title": "Bins", "id": "bins"}).json()

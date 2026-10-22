@@ -24,7 +24,7 @@ struct ScreenAlertsOverlay: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let t = context.date.timeIntervalSince1970 * 1000 + skew
             let live = alerts.filter { ($0.expires_at ?? .infinity) > t }
-            let corner = Array(live.filter { !$0.isFullScreen || small.contains($0.key) }.reversed().prefix(3))
+            let corner = Array(live.filter { !$0.isFull(at: t) || small.contains($0.key) }.reversed().prefix(3))
             VStack(alignment: .trailing, spacing: tv ? 20 : 10) {
                 ForEach(corner) { a in
                     AlertCard(alert: a, now: t, tv: tv) { dismiss(a) }
@@ -37,8 +37,8 @@ struct ScreenAlertsOverlay: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             .animation(.easeInOut(duration: 0.3), value: corner.map(\.key))
             .onChange(of: Int(t / 1000)) { chime(live, t) }
-            .onChange(of: live.last { $0.isFullScreen && !small.contains($0.key) }?.key) { _, _ in
-                cover = live.last { $0.isFullScreen && !small.contains($0.key) }
+            .onChange(of: live.last { $0.isFull(at: t) && !small.contains($0.key) }?.key) { _, _ in
+                cover = live.last { $0.isFull(at: t) && !small.contains($0.key) }
             }
         }
         .fullScreenCover(item: $cover, onDismiss: {}) { a in
@@ -61,7 +61,7 @@ struct ScreenAlertsOverlay: View {
         skew = now.server_time - Date().timeIntervalSince1970 * 1000
         alerts = now.alerts
         let t = now.server_time
-        let top = alerts.last { $0.isFullScreen && !small.contains($0.key) && ($0.expires_at ?? .infinity) > t }
+        let top = alerts.last { $0.isFull(at: t) && !small.contains($0.key) && ($0.expires_at ?? .infinity) > t }
         if top?.key != cover?.key { cover = top }
         chime(alerts, t)
     }
@@ -123,8 +123,34 @@ private struct AlertCard: View {
     let now: Double
     let tv: Bool
     let dismiss: () -> Void
+    @State private var drag: CGFloat = 0
 
     var body: some View {
+        card
+            .offset(x: drag)
+            .opacity(1 - min(0.8, drag / 400))
+        #if os(iOS)
+            // Swipe right to dismiss (one that can be dismissed).
+            .gesture(swipe, including: alert.dismissible ? .all : .subviews)
+        #endif
+    }
+
+    #if os(iOS)
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { drag = max(0, $0.translation.width) }
+            .onEnded { value in
+                if value.translation.width > 100 || value.predictedEndTranslation.width > 220 {
+                    withAnimation(.easeOut(duration: 0.15)) { drag = 600 }
+                    dismiss()
+                } else {
+                    withAnimation(.spring(duration: 0.25)) { drag = 0 }
+                }
+            }
+    }
+    #endif
+
+    @ViewBuilder private var card: some View {
         let done = alert.isDone(now)
         let detail = alert.description?.isEmpty == false ? alert.description : alert.countsUp ? sinceText(alert) : nil
         HStack(spacing: tv ? 18 : 10) {
@@ -172,6 +198,7 @@ private struct FullScreenAlert: View {
     let tv: Bool
     let dismiss: () -> Void
     let putAway: () -> Void
+    @State private var lift: CGFloat = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -193,10 +220,17 @@ private struct FullScreenAlert: View {
                 .controlSize(.large)
                 #endif
                 Spacer(minLength: 0)
+                #if os(iOS)
+                VStack(spacing: 6) {
+                    Capsule().fill(Theme.muted.opacity(0.5)).frame(width: 44, height: 5)
+                    Text("Swipe up to make small").font(Theme.text(.footnote, .semibold)).foregroundStyle(Theme.muted)
+                }
+                #endif
             }
             .padding(tv ? 80 : 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .multilineTextAlignment(.center)
+            .offset(y: -lift)
             .background {
                 ZStack {
                     Theme.bg
@@ -208,6 +242,17 @@ private struct FullScreenAlert: View {
         }
         #if os(tvOS)
         .onExitCommand(perform: putAway) // Menu puts it away on this TV only
+        #else
+        // Swipe up puts it away on this device only.
+        .gesture(DragGesture(minimumDistance: 12)
+            .onChanged { lift = max(0, -$0.translation.height) }
+            .onEnded { value in
+                if -value.translation.height > 120 || -value.predictedEndTranslation.height > 300 {
+                    putAway()
+                } else {
+                    withAnimation(.spring(duration: 0.25)) { lift = 0 }
+                }
+            })
         #endif
         .interactiveDismissDisabled()
     }

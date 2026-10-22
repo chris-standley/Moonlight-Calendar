@@ -1339,6 +1339,10 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ha-full { position: absolute; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4rem; padding: 2rem; text-align: center; background: var(--bg); animation: fade 0.25s; }
 .ha-full::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 35%, var(--accent-soft), transparent 65%); pointer-events: none; }
 .ha-full > * { position: relative; }
+.ha-full { touch-action: none; }
+.ha-toasts .ha-toast, .ha-toasts .ktimer { touch-action: pan-y; }
+.ha-full-hint { position: absolute; bottom: 1rem; left: 0; right: 0; font-size: 0.85rem; font-weight: 700; color: var(--muted); opacity: 0.7; }
+.ha-full-hint::before { content: ""; display: block; width: 3rem; height: 0.3rem; margin: 0 auto 0.4rem; border-radius: 1rem; background: var(--muted); opacity: 0.5; }
 .ha-full-body { display: flex; flex-direction: column; align-items: center; gap: 1rem; max-width: 60rem; min-height: 0; }
 .ha-full-body h1 { margin: 0; font-size: clamp(2rem, 5.5vw, 4.6rem); line-height: 1.1; letter-spacing: -0.02em; }
 .ha-full-body p { margin: 0; font-size: clamp(1.2rem, 2.6vw, 2.1rem); font-weight: 600; color: var(--text-2); white-space: pre-line; }

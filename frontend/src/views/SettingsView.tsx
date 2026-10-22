@@ -58,7 +58,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
     try {
       if (what === "up") {
         await api.createAlert({ kind: "timer", label: "Test count up", description: "From Settings", icon: "☕", since: "now",
-          duration: 30, screens, id: "test-up" });
+          full_screen_for: 10, duration: 40, screens, id: "test-up" });
       } else if (what === "timer") {
         await api.createAlert({ kind: "timer", style: "fullscreen", label: "Test timer", description: "From Settings", icon: "⏲️", duration: 15,
           finished_for: 30, screens, id: "test-timer" });

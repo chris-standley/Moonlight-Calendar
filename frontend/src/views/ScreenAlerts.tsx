@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ScreenAlert } from "../api/types";
 import { useApp } from "../state";
 import { IconClose } from "../components/icons";
@@ -38,8 +38,9 @@ function progress(a: ScreenAlert, t: number): number {
 }
 
 /** Notifications and timers from Home Assistant (see API.md "Notifications and timers"): full screen ones cover
- * everything, the screensaver too; toasts and small timers stack in the top corner. A tap on × dismisses one on
- * every screen; a full screen timer can also be made small on this screen only. */
+ * everything, the screensaver too (until `shrink_at`, if set); toasts and small timers stack in the top corner. A tap
+ * on × or a swipe right dismisses a corner one on every screen; a swipe up (or Make small, on a timer) puts a full
+ * screen one in the corner on this screen only. */
 export function ScreenAlerts() {
   const { api, toast } = useApp();
   const [alerts, setAlerts] = useState<ScreenAlert[]>([]);
@@ -63,7 +64,7 @@ export function ScreenAlerts() {
   const t = now + skew;
   const live = alerts.filter((a) => a.expires_at === null || a.expires_at > t);
   const timing = live.some((a) => a.kind === "timer");
-  const nextEnd = Math.min(...live.map((a) => a.expires_at ?? Infinity));
+  const nextEnd = Math.min(...live.flatMap((a) => [a.expires_at ?? Infinity, a.shrink_at && a.shrink_at > t ? a.shrink_at : Infinity]));
   useEffect(() => {
     // Tick every second while a timer shows; otherwise only when the next one is due to go.
     const wait = timing ? 1000 - (Date.now() % 1000) + 5 : nextEnd === Infinity ? 0 : Math.max(50, nextEnd - t + 50);
@@ -89,7 +90,7 @@ export function ScreenAlerts() {
   };
   const shrink = (a: ScreenAlert) => setSmall((s) => new Set(s).add(a.id + a.created_at));
 
-  const full = live.filter((a) => a.style === "fullscreen" && !small.has(a.id + a.created_at));
+  const full = live.filter((a) => a.style === "fullscreen" && !small.has(a.id + a.created_at) && !(a.shrink_at && t >= a.shrink_at));
   const corner = live.filter((a) => !full.includes(a)).reverse();
   const top = full[full.length - 1];
   return (
@@ -101,17 +102,69 @@ export function ScreenAlerts() {
             : <NoteCard key={a.id} a={a} onDismiss={dismiss} />))}
         </div>
       )}
-      {top && (
-        <div className={"ha-full" + (isDone(top, t) ? " done" : "")} role="alertdialog" aria-live="assertive">
-          {top.kind === "timer" ? <FullTimer a={top} t={t} /> : <FullNote a={top} />}
-          <div className="ha-full-actions">
-            {top.kind === "timer" && <button className="btn ghost big" onClick={() => shrink(top)}>Make small</button>}
-            {top.dismissible && <button className="btn big" onClick={() => dismiss(top)}>{top.kind === "timer" && !top.count_up && !isDone(top, t) ? "Cancel timer" : "Dismiss"}</button>}
-          </div>
-          {full.length > 1 && <div className="ha-full-more">{full.length - 1} more</div>}
-        </div>
-      )}
+      {top && <FullView key={top.id + top.created_at} a={top} t={t} more={full.length - 1} onShrink={shrink} onDismiss={dismiss} />}
     </>
+  );
+}
+
+/** Dragging one way (right, or up) moves the element with the finger; let go far enough along and `onSwipe` runs,
+ * otherwise it springs back. A drag the other way, or mostly across, is left alone (taps still work). */
+function useSwipe(dir: "right" | "up", onSwipe: (() => void) | null) {
+  const start = useRef<{ x: number; y: number; id: number; moving: boolean } | null>(null);
+  const [off, setOff] = useState(0);
+  const offRef = useRef(0);
+  const move = (v: number) => { offRef.current = v; setOff(v); };
+  const end = (el: HTMLElement, ok: boolean) => {
+    const s = start.current;
+    start.current = null;
+    if (!s?.moving) return;
+    const size = dir === "right" ? el.offsetWidth : el.offsetHeight;
+    if (ok && onSwipe && offRef.current > Math.min(140, size * 0.3)) {
+      move(size * 1.2);
+      setTimeout(onSwipe, 160);
+    } else move(0);
+  };
+  const handlers = onSwipe ? {
+    onPointerDown: (e: ReactPointerEvent<HTMLElement>) => { start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, moving: false }; },
+    onPointerMove: (e: ReactPointerEvent<HTMLElement>) => {
+      const s = start.current;
+      if (!s || e.pointerId !== s.id) return;
+      const along = dir === "right" ? e.clientX - s.x : s.y - e.clientY;
+      const across = Math.abs(dir === "right" ? e.clientY - s.y : e.clientX - s.x);
+      if (!s.moving) {
+        if (across > 12 && across > Math.abs(along)) { start.current = null; return; }
+        if (along < 12) return;
+        s.moving = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+      move(Math.max(0, along));
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLElement>) => end(e.currentTarget, true),
+    onPointerCancel: (e: ReactPointerEvent<HTMLElement>) => end(e.currentTarget, false),
+  } : {};
+  const dragging = start.current?.moving ?? false;
+  const style: CSSProperties | undefined = off || dragging ? {
+    transform: dir === "right" ? `translateX(${off}px)` : `translateY(${-off}px)`,
+    opacity: dir === "right" ? Math.max(0.2, 1 - off / 500) : undefined, // a full screen one slides up whole
+    transition: dragging ? "none" : "transform 0.16s ease-out, opacity 0.16s ease-out",
+  } : undefined;
+  return { handlers, style };
+}
+
+function FullView({ a, t, more, onShrink, onDismiss }: {
+  a: ScreenAlert; t: number; more: number; onShrink: (a: ScreenAlert) => void; onDismiss: (a: ScreenAlert) => void;
+}) {
+  const swipe = useSwipe("up", () => onShrink(a));
+  return (
+    <div className={"ha-full" + (isDone(a, t) ? " done" : "")} role="alertdialog" aria-live="assertive" {...swipe.handlers} style={swipe.style}>
+      {a.kind === "timer" ? <FullTimer a={a} t={t} /> : <FullNote a={a} />}
+      <div className="ha-full-actions">
+        {a.kind === "timer" && <button className="btn ghost big" onClick={() => onShrink(a)}>Make small</button>}
+        {a.dismissible && <button className="btn big" onClick={() => onDismiss(a)}>{a.kind === "timer" && !a.count_up && !isDone(a, t) ? "Cancel timer" : "Dismiss"}</button>}
+      </div>
+      {more > 0 && <div className="ha-full-more">{more} more</div>}
+      <div className="ha-full-hint" aria-hidden>Swipe up to make small</div>
+    </div>
   );
 }
 
@@ -152,8 +205,9 @@ function FullTimer({ a, t }: { a: ScreenAlert; t: number }) {
 }
 
 function NoteCard({ a, onDismiss }: { a: ScreenAlert; onDismiss: (a: ScreenAlert) => void }) {
+  const swipe = useSwipe("right", a.dismissible ? () => onDismiss(a) : null);
   return (
-    <div className="ha-toast">
+    <div className="ha-toast" {...swipe.handlers} style={swipe.style}>
       {a.icon && <span className="ha-toast-icon">{a.icon}</span>}
       <div className="ha-toast-text">
         {a.title && <b>{a.title}</b>}
@@ -168,9 +222,10 @@ function NoteCard({ a, onDismiss }: { a: ScreenAlert; onDismiss: (a: ScreenAlert
 function TimerCard({ a, t, onDismiss }: { a: ScreenAlert; t: number; onDismiss: (a: ScreenAlert) => void }) {
   const done = isDone(a, t);
   const detail = a.description || (a.count_up ? `since ${clockAt(a.started_at!)}` : "");
+  const swipe = useSwipe("right", a.dismissible ? () => onDismiss(a) : null);
   return (
-    <div className={"ktimer ha-timer" + (done ? " ringing" : "") + (a.count_up ? " up" : "")}
-      style={{ ["--done" as string]: `${progress(a, t) * 100}%` }}>
+    <div className={"ktimer ha-timer" + (done ? " ringing" : "") + (a.count_up ? " up" : "")} {...swipe.handlers}
+      style={{ ["--done" as string]: `${progress(a, t) * 100}%`, ...swipe.style }}>
       {a.icon && <span className="ha-toast-icon">{a.icon}</span>}
       <div className="kt-main">
         <b>{done ? "Time's up" : a.count_up ? fmtSince(t - a.started_at!) : fmtLeft(a.ends_at! - t)}</b>
