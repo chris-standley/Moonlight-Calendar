@@ -3,7 +3,7 @@ import { EnergyOverview, EnergyTariff, EnergyWindow } from "../api/types";
 import { useApp, useData, useNow } from "../state";
 import { Empty } from "../components/ui";
 import { WeatherIcon } from "../components/icons";
-import { fmtFull, fmtTime, today } from "../dates";
+import { clockTime, fmtFull, fmtTime, today } from "../dates";
 
 /** "774 W", "2.45 kW", "12.3 kW". */
 export function fmtW(w: number | null | undefined): string {
@@ -112,7 +112,7 @@ export function EnergyView() {
 /** The top bar's time and date, in the sky's top right corner (the weather is on the picture, outside). */
 function StageClock({ offline }: { offline: ReactNode }) {
   const now = useNow(10_000);
-  const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
+  const time = clockTime(now);
   return (
     <div className="en-clock">
       <b>{time}</b>
