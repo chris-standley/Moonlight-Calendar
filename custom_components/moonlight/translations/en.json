@@ -257,7 +257,7 @@
     },
     "start_timer": {
       "name": "Start timer",
-      "description": "Shows a timer or a countdown on Moonlight's screens. When it gets to zero it says time's up (and fires a moonlight_alert event).",
+      "description": "Shows a timer or a countdown on Moonlight's screens. When it gets to zero it says time's up (and fires a moonlight_alert event). Or it counts up from a moment, like how long since the kettle boiled.",
       "fields": {
         "label": {
           "name": "Label",
@@ -269,11 +269,19 @@
         },
         "duration": {
           "name": "Duration",
-          "description": "How long the timer runs. Give this or Until."
+          "description": "How long the timer runs. Give this or Until. Counting up: how long after it started it goes (left out: until dismissed or cleared)."
         },
         "until": {
           "name": "Until",
           "description": "Count down to this date and time instead."
+        },
+        "count_up": {
+          "name": "Count up",
+          "description": "Count up from now (or from Since) instead of down, like a stopwatch."
+        },
+        "since": {
+          "name": "Since",
+          "description": "Count up from this date and time (a moment already gone). Giving it means count up."
         },
         "screens": {
           "name": "Screens",
@@ -297,7 +305,7 @@
         },
         "chime": {
           "name": "Chime",
-          "description": "Play a chime when it gets to zero."
+          "description": "Play a chime when it gets to zero (on by default), or for one counting up when it appears (off by default)."
         },
         "id": {
           "name": "ID",

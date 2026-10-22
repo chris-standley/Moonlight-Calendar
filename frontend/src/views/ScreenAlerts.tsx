@@ -4,6 +4,7 @@ import { useApp } from "../state";
 import { IconClose } from "../components/icons";
 import { chime, unlockAudio } from "../recipes/timers";
 import { fmtClock } from "../recipes/recipeText";
+import { fmtTime } from "../dates";
 
 /** A chime is only played for something that just happened, not for one that was already up when the screen loaded. */
 const FRESH_MS = 30_000;
@@ -14,6 +15,26 @@ export function fmtLeft(ms: number): string {
   if (s < 86_400) return fmtClock(s);
   const d = Math.floor(s / 86_400), h = Math.floor((s % 86_400) / 3600);
   return `${d} ${d === 1 ? "day" : "days"}${h ? ` ${h} hr` : ""}`;
+}
+
+/** Time gone on a timer counting up, the same way: 0:00 at the start, then 4:05. */
+export function fmtSince(ms: number): string {
+  return fmtLeft(Math.floor(Math.max(0, ms) / 1000) * 1000);
+}
+
+/** "10:41am" for an epoch time, on this screen's clock. */
+function clockAt(ms: number): string {
+  const d = new Date(ms);
+  return fmtTime(`0000-00-00T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+}
+
+/** A countdown that got to zero (one counting up never does). */
+const isDone = (a: ScreenAlert, t: number) => a.kind === "timer" && a.ends_at != null && t >= a.ends_at;
+/** How far along the bar or ring is, 0 to 1: a countdown towards zero; counting up, towards when it goes (if set). */
+function progress(a: ScreenAlert, t: number): number {
+  const end = a.count_up ? a.expires_at : a.ends_at;
+  if (end == null) return 0;
+  return Math.min(1, Math.max(0, (t - a.started_at!) / Math.max(1, end - a.started_at!)));
 }
 
 /** Notifications and timers from Home Assistant (see API.md "Notifications and timers"): full screen ones cover
@@ -55,7 +76,7 @@ export function ScreenAlerts() {
   useEffect(() => {
     for (const a of live) {
       if (!a.chime || chimed.current.has(a.id + a.created_at)) continue;
-      const at = a.kind === "timer" ? a.ends_at! : a.created_at;
+      const at = a.kind === "timer" && !a.count_up ? a.ends_at! : a.created_at;
       if (at > t) continue;
       chimed.current.add(a.id + a.created_at);
       if (t - at < FRESH_MS) chime(true);
@@ -81,11 +102,11 @@ export function ScreenAlerts() {
         </div>
       )}
       {top && (
-        <div className={"ha-full" + (top.kind === "timer" && t >= top.ends_at! ? " done" : "")} role="alertdialog" aria-live="assertive">
+        <div className={"ha-full" + (isDone(top, t) ? " done" : "")} role="alertdialog" aria-live="assertive">
           {top.kind === "timer" ? <FullTimer a={top} t={t} /> : <FullNote a={top} />}
           <div className="ha-full-actions">
             {top.kind === "timer" && <button className="btn ghost big" onClick={() => shrink(top)}>Make small</button>}
-            {top.dismissible && <button className="btn big" onClick={() => dismiss(top)}>{top.kind === "timer" && t < top.ends_at! ? "Cancel timer" : "Dismiss"}</button>}
+            {top.dismissible && <button className="btn big" onClick={() => dismiss(top)}>{top.kind === "timer" && !top.count_up && !isDone(top, t) ? "Cancel timer" : "Dismiss"}</button>}
           </div>
           {full.length > 1 && <div className="ha-full-more">{full.length - 1} more</div>}
         </div>
@@ -106,9 +127,9 @@ function FullNote({ a }: { a: ScreenAlert }) {
 }
 
 function FullTimer({ a, t }: { a: ScreenAlert; t: number }) {
-  const left = a.ends_at! - t;
-  const total = Math.max(1, a.ends_at! - a.started_at!);
-  const done = left <= 0;
+  const done = isDone(a, t);
+  // Counting up with no end: the ring stays full.
+  const along = a.count_up && a.expires_at == null ? 1 : progress(a, t);
   const R = 46, C = 2 * Math.PI * R;
   return (
     <div className="ha-full-body">
@@ -116,11 +137,12 @@ function FullTimer({ a, t }: { a: ScreenAlert; t: number }) {
         <svg viewBox="0 0 100 100" aria-hidden>
           <circle cx="50" cy="50" r={R} className="ha-ring-track" />
           <circle cx="50" cy="50" r={R} className="ha-ring-fill" strokeDasharray={C}
-            strokeDashoffset={done ? 0 : C * (1 - Math.min(1, Math.max(0, left / total)))} />
+            strokeDashoffset={done ? 0 : a.count_up ? C * (1 - along) : C * along} />
         </svg>
         <div className="ha-ring-text">
           {a.icon && <span className="ha-ring-icon">{a.icon}</span>}
-          <b>{done ? "Time's up" : fmtLeft(left)}</b>
+          <b>{done ? "Time's up" : a.count_up ? fmtSince(t - a.started_at!) : fmtLeft(a.ends_at! - t)}</b>
+          {a.count_up && <span className="ha-ring-since">since {clockAt(a.started_at!)}</span>}
         </div>
       </div>
       <h1>{a.label}</h1>
@@ -144,18 +166,17 @@ function NoteCard({ a, onDismiss }: { a: ScreenAlert; onDismiss: (a: ScreenAlert
 }
 
 function TimerCard({ a, t, onDismiss }: { a: ScreenAlert; t: number; onDismiss: (a: ScreenAlert) => void }) {
-  const left = a.ends_at! - t;
-  const done = left <= 0;
-  const total = Math.max(1, a.ends_at! - a.started_at!);
+  const done = isDone(a, t);
+  const detail = a.description || (a.count_up ? `since ${clockAt(a.started_at!)}` : "");
   return (
-    <div className={"ktimer ha-timer" + (done ? " ringing" : "")}
-      style={{ ["--done" as string]: `${Math.min(100, Math.max(0, 100 - (left / total) * 100))}%` }}>
+    <div className={"ktimer ha-timer" + (done ? " ringing" : "") + (a.count_up ? " up" : "")}
+      style={{ ["--done" as string]: `${progress(a, t) * 100}%` }}>
       {a.icon && <span className="ha-toast-icon">{a.icon}</span>}
       <div className="kt-main">
-        <b>{done ? "Time's up" : fmtLeft(left)}</b>
-        <span>{a.label}{a.description ? ` · ${a.description}` : ""}</span>
+        <b>{done ? "Time's up" : a.count_up ? fmtSince(t - a.started_at!) : fmtLeft(a.ends_at! - t)}</b>
+        <span>{a.label}{detail ? ` · ${detail}` : ""}</span>
       </div>
-      {a.dismissible && <button className="kt-btn" onClick={() => onDismiss(a)} aria-label={done ? "Dismiss" : "Cancel timer"}><IconClose size={18} /></button>}
+      {a.dismissible && <button className="kt-btn" onClick={() => onDismiss(a)} aria-label={done || a.count_up ? "Dismiss" : "Cancel timer"}><IconClose size={18} /></button>}
     </div>
   );
 }

@@ -294,6 +294,22 @@ async def test_notifications_and_timers(hass: HomeAssistant, moonlight_server) -
                                           blocking=True, return_response=True)
     assert abs(resp["ends_at"] / 1000 - dt_util.as_utc(until.replace(tzinfo=dt_util.get_default_time_zone()))
                .timestamp()) < 2
+    resp = await hass.services.async_call(DOMAIN, "start_timer",
+                                          {"label": "Kettle boiled", "count_up": True, "id": "kettle",
+                                           "duration": "01:00:00"}, blocking=True, return_response=True)
+    assert resp["id"] == "kettle" and resp["ends_at"] is None and resp["expires_at"]
+    ago = (dt_util.now() - timedelta(minutes=5)).replace(tzinfo=None)
+    await hass.services.async_call(DOMAIN, "start_timer", {"label": "Kettle boiled", "since": ago.isoformat(),
+                                                           "id": "kettle"}, blocking=True)
+    shown = await hass.async_add_executor_job(http, moonlight_server, "GET", "/api/alerts")
+    kettle = next(a for a in shown["alerts"] if a["id"] == "kettle")
+    assert kettle["count_up"] and kettle["chime"] is False and kettle["expires_at"] is None
+    assert 290 < shown["server_time"] / 1000 - kettle["started_at"] / 1000 < 310
+    with pytest.raises(ServiceValidationError, match="not both"):
+        await hass.services.async_call(DOMAIN, "start_timer", {"label": "x", "count_up": True,
+                                                               "until": until.isoformat()}, blocking=True)
+    with pytest.raises(ServiceValidationError, match="duration or an until"):
+        await hass.services.async_call(DOMAIN, "start_timer", {"label": "x"}, blocking=True)
     # The egg timer gets to zero: HA hears about it.
     for _ in range(40):
         await asyncio.sleep(0.1)
@@ -307,7 +323,7 @@ async def test_notifications_and_timers(hass: HomeAssistant, moonlight_server) -
                                           blocking=True, return_response=True)
     assert resp["cleared"] == ["dinner"]
     resp = await hass.services.async_call(DOMAIN, "clear_notifications", {}, blocking=True, return_response=True)
-    assert timer_id in resp["cleared"] and len(resp["cleared"]) == 2  # the finished egg timer and the countdown
+    assert timer_id in resp["cleared"] and len(resp["cleared"]) == 3  # the finished egg timer, countdown and kettle
     shown = await hass.async_add_executor_job(http, moonlight_server, "GET", "/api/alerts")
     assert shown["alerts"] == []
     await unload(hass, entry)
