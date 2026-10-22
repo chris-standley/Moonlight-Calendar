@@ -222,7 +222,7 @@ export function NowPlayingPill() {
 
 function NowPlayingSheet({ onClose }: { onClose: () => void }) {
   const { np, at } = useMedia();
-  const { api, layout, toast } = useApp();
+  const { api, layout, toast, go } = useApp();
   const [favs, setFavs] = useState<MediaFavourite[] | null>(null);
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -252,6 +252,9 @@ function NowPlayingSheet({ onClose }: { onClose: () => void }) {
             <Progress np={np} at={at} times />
             <Transport np={np} big />
             <Volume np={np} />
+            <button className="np-more" onClick={() => { onClose(); go("music"); }}>
+              <IconMusic size={18} /> Open Music
+            </button>
             {favs && favs.length > 0 && (
               <div className="np-favs">
                 <span>Favourites</span>

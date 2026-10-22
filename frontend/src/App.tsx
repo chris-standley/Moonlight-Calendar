@@ -1,7 +1,7 @@
 import { CSSProperties, ReactNode, RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Api, BAR_MAX, DEFAULT_SCREENS, Display, Person, Section, Settings, Theme } from "./api/types";
 import { AppProvider, Layout, useApp, useNow } from "./state";
-import { fmtDayMonth, fmtDow, fmtFull, today } from "./dates";
+import { clockTime, fmtDayMonth, fmtDow, fmtFull, today } from "./dates";
 import { PinPad, Sheet } from "./components/ui";
 import {
   IconBolt, IconCalendar, IconChores, IconHome, IconLists, IconMeals, IconMore, IconMusic, IconNursery, IconRecipes, IconSettings, IconShield, IconStar, Logo, WeatherIcon,
@@ -273,7 +273,7 @@ function TopBar({ familyName, music, nursery }: { familyName: string; music: boo
   const [wx, setWx] = useState<{ temp: number; condition: string } | null>(null);
   const { api, settings, portrait } = useApp();
   useEffect(() => { api.weather().then((w) => setWx(w.current)); }, [api, settings?.weather_entity, settings?.temp_unit]);
-  const time = now.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).replace(" ", "");
+  const time = clockTime(now);
   return (
     <header className="topbar">
       <div className="tb-time">{time}</div>
