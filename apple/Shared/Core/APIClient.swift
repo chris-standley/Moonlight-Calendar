@@ -164,6 +164,8 @@ struct APIClient: Sendable {
         return try await send("POST", "/api/media/rooms", body)
     }
     func photos() async throws -> PhotoList { try await get("/api/screensaver/photos") }
+    /// Never show a photo again: Moonlight takes it out of the Immich albums it's shown from.
+    func hidePhoto(_ id: String) async throws -> HideResult { try await send("POST", "/api/screensaver/photos/\(id)/hide") }
     func nursery() async throws -> NurseryConfig { try await get("/api/nursery") }
     func nurseryUpdates() async throws -> [NurseryUpdate] { try await get("/api/nursery/updates") }
     func securityAlerts() async throws -> [SecurityAlert] { try await get("/api/security/alerts") }

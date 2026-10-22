@@ -262,7 +262,16 @@ permissions `album.read`, `asset.read`, `asset.view`, plus `memory.read` for "on
 choose albums, or choose All albums and tap the ones to leave out. Albums with Christmas, Xmas, festive, Yule,
 Advent, Santa, nativity, carol or Boxing Day in their name only show in December, when only they and winter albums
 (winter, snow, frost, skiing...) are shown; turn off "Christmas albums only in December" to stop that. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
-painted landscapes. If Immich is itself a Home Assistant add-on, check its port (2283) is filled in under the add-on's Network settings; Immich opened only through the Home Assistant sidebar can't be reached by Moonlight. If Immich uses HTTPS, start the address with `https://`; when its certificate is self-signed or made for a domain name rather than the IP address, turn on Skip certificate check.
+painted landscapes.
+
+To stop a photo coming up again, tap the crossed-out eye at the top left of the screensaver (on the Apple TV, press
+the remote during a slideshow) and confirm. Moonlight takes it out of every Immich album it is in and never shows it
+again. Removing photos from albums needs two more API key permissions, `albumAsset.delete` (and
+`albumAsset.create` to put one back); without them, or for a shared album you can only view, the photo is still
+hidden from the screens but stays in the album. Settings > Photo screensaver shows how many are hidden; open the
+list to see them a few at a time, each with Show again, which puts it back in its albums.
+
+If Immich is itself a Home Assistant add-on, check its port (2283) is filled in under the add-on's Network settings; Immich opened only through the Home Assistant sidebar can't be reached by Moonlight. If Immich uses HTTPS, start the address with `https://`; when its certificate is self-signed or made for a domain name rather than the IP address, turn on Skip certificate check.
 
 ## Nursery updates (Tapestry)
 

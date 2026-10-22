@@ -1,10 +1,10 @@
 // Demo-mode screens and a simulated Immich server for the photo screensaver. Sample photos are painted on a canvas
 // at runtime (so the single-file preview stays small). Kept in memory only.
-import { Api, ApiError, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, Layout, PhotoAlbum, SECTIONS, SlidePhoto, Topic } from "./types";
+import { Api, ApiError, Display, DisplaySetup, HiddenPhoto, ImmichAlbum, ImmichConfig, ImmichMode, Layout, PhotoAlbum, SECTIONS, SlidePhoto, Topic } from "./types";
 import { addDays, isoDT, today } from "../dates";
 
 type Extras = Pick<Api, "displays" | "approveDisplay" | "revokeDisplay" | "updateDisplay" | "thisScreen" | "immich" | "saveImmich" | "disconnectImmich" |
-  "testImmich" | "immichAlbums" | "screensaverPhotos">;
+  "testImmich" | "immichAlbums" | "screensaverPhotos" | "hidePhoto" | "hiddenPhotos" | "restorePhoto">;
 
 interface Look { name: string; sky: string[]; sun: string; sunY: number; hills: string[]; water?: boolean; stars?: boolean; w?: number; h?: number; ago: number; place?: string }
 const LOOKS: Look[] = [
@@ -90,6 +90,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
   let cfg: Cfg | null = { server_url: "http://192.168.1.10:2283", key: "demo", mode: "albums", album_ids: [ALBUMS[0].id], excluded_album_ids: [],
     festive: true, favorites: false, memories: false };
   let refreshed = ago(2);
+  let hiddenLooks: { look: number; albums: { id: string; name: string }[]; at: string }[] = [];
   let painted: SlidePhoto[] | null = null;
   function library(): SlidePhoto[] {
     if (painted) return painted;
@@ -118,7 +119,7 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     if (!cfg) return [];
     const now = seasonNow(cfg);
     const hidden = now.length ? [] : [...festiveIds(cfg), ...(cfg.mode === "all" ? cfg.excluded_album_ids : [])];
-    const hide = new Set(looksOf(hidden));
+    const hide = new Set([...looksOf(hidden), ...hiddenLooks.map((h) => h.look)]);
     const ids = now.length ? now : cfg.mode === "all" ? ALBUMS.map((a) => a.id).filter((id) => !hidden.includes(id)) : cfg.album_ids.filter((id) => !hidden.includes(id));
     const out = ALBUMS.filter((a) => ids.includes(a.id)).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))
       .map(({ id, name, updated_at, looks }) => ({ id, name, updated_at: updated_at ?? null, looks }));
@@ -202,5 +203,20 @@ export function demoExtras(checkPin: (pin: string) => void, emit: (...t: Topic[]
     screensaverPhotos: async () => cfg
       ? { source: "immich", status: "ok", photos: chosen(), albums: groups().map(({ looks, ...g }) => ({ ...g, photos: looks.map((i) => library()[i].id) })) }
       : { source: "none", status: "unconfigured", photos: [], albums: [] },
+    async hidePhoto(id) {
+      const look = library().findIndex((p) => p.id === id);
+      if (look < 0 || !groups().some((g) => g.looks.includes(look))) throw new ApiError(404, "Photo not found");
+      const removed = ALBUMS.filter((a) => a.looks.includes(look)).map(({ id, name }) => ({ id, name })); // every album it's in
+      hiddenLooks = [{ look, albums: removed, at: isoDT(new Date()) }, ...hiddenLooks];
+      emit("photos");
+      return { ok: true, removed, failed: [] };
+    },
+    hiddenPhotos: async (limit, offset = 0) => ({ total: hiddenLooks.length, photos: hiddenLooks.slice(offset, offset + limit)
+      .map((h): HiddenPhoto => ({ id: library()[h.look].id, albums: h.albums, hidden_at: h.at, url: library()[h.look].url })) }),
+    async restorePhoto(id, pin) {
+      checkPin(pin);
+      hiddenLooks = hiddenLooks.filter((h) => library()[h.look].id !== id);
+      emit("photos");
+    },
   };
 }

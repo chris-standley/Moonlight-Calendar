@@ -203,6 +203,10 @@ export interface SlidePhoto { id: string; width: number | null; height: number |
 export interface PhotoAlbum { id: string; name: string; updated_at: string | null; photos: string[] }
 /** `albums` (newest first) is what the screensaver plays, one whole album at a time; older servers send only `photos`. */
 export interface ScreensaverPhotos { source: "immich" | "none"; status: ImmichStatus; photos: SlidePhoto[]; albums?: PhotoAlbum[] }
+/** The screensaver's hide button: the albums (all it was in) it was taken out of in Immich, and any Immich wouldn't change (still hidden). */
+export interface HideResult { ok: true; removed: { id: string; name: string }[]; failed: { id: string; name: string; error: string }[] }
+/** A photo hidden from the screensaver; "Show again" puts it back in `albums`. */
+export interface HiddenPhoto { id: string; albums: { id: string; name: string }[]; hidden_at: string; url: string }
 
 
 /** Nursery updates from Tapestry (see API.md "Nursery"). The password is never sent back. */
@@ -564,6 +568,11 @@ export interface Api {
   testImmich(t: { server_url?: string; api_key?: string; skip_cert_check?: boolean; pin: string }): Promise<ImmichTest>;
   immichAlbums(): Promise<ImmichAlbum[]>;
   screensaverPhotos(): Promise<ScreensaverPhotos>;
+  /** Never show this photo again: takes it out of the Immich albums it's shown from. No PIN (the screen asks first). */
+  hidePhoto(id: string): Promise<HideResult>;
+  /** Newest first, a page at a time; limit 0 = just the count. */
+  hiddenPhotos(limit: number, offset?: number): Promise<{ total: number; photos: HiddenPhoto[] }>;
+  restorePhoto(id: string, pin: string): Promise<void>;
   // Nursery updates from Tapestry (see API.md "Nursery")
   nursery(): Promise<NurseryConfig>;
   /** Signs in to Tapestry first; 400 with a message when it doesn't accept the login. */
