@@ -134,9 +134,13 @@ struct ScreenAlert: Codable, Identifiable, Equatable {
     let label: String?
     let description: String?
     let started_at: Double?
-    let ends_at: Double?
+    let ends_at: Double?          // nil when it counts up
+    let count_up: Bool?           // counts up from started_at (how long since the kettle boiled)
 
     var isTimer: Bool { kind == "timer" }
+    var countsUp: Bool { count_up == true }
+    /// A countdown that got to zero (one counting up never does).
+    func isDone(_ t: Double) -> Bool { isTimer && ends_at.map { t >= $0 } ?? false }
     var isFullScreen: Bool { style == "fullscreen" }
     /// Tells apart the same id put up again (a restarted timer).
     var key: String { "\(id)@\(Int(created_at))" }

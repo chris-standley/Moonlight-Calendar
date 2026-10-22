@@ -40,6 +40,8 @@ ATTR_LABEL = "label"
 ATTR_DESCRIPTION = "description"
 ATTR_UNTIL = "until"
 ATTR_FINISHED_FOR = "finished_for"
+ATTR_COUNT_UP = "count_up"
+ATTR_SINCE = "since"
 
 SERVICE_COMPLETE_CHORE = "complete_chore"
 SERVICE_AWARD_STARS = "award_stars"

@@ -184,7 +184,8 @@ With the Moonlight integration installed in Home Assistant, automations and scri
 - **`moonlight.show_notification`**: a message full screen or as a toast in the corner, with a title, text, an emoji
   and optionally a picture.
 - **`moonlight.start_timer`**: a timer with a label and a description, for a duration or counting down to a date and
-  time. At zero it chimes and says Time's up.
+  time. At zero it chimes and says Time's up. With `count_up` (or `since`, a time already gone) it counts up
+  instead, like how long since the kettle boiled.
 
 Each goes to every screen or to chosen ones (`screens`: names from Settings > Screens, or `large`, `compact`, `phone`,
 `app`), and stays for a set time or until someone taps it away (gone from every screen) or

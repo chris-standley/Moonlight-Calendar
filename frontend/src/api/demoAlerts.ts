@@ -24,12 +24,19 @@ export function demoAlerts(emit: (...t: Topic[]) => void): Extras {
         if (!b.title && !b.message) throw new ApiError(400, "A notification needs a title or a message");
         const secs = b.duration ?? (style === "toast" ? 10 : 0);
         Object.assign(a, { title: b.title ?? "", message: b.message ?? "", image: b.image || null, expires_at: secs ? now + secs * 1000 : null });
+      } else if (b.since) {
+        if (!b.label) throw new ApiError(400, "label is required");
+        if (b.until) throw new ApiError(400, "A timer counts down to until or up from since, not both");
+        const from = b.since === "now" ? now : Math.min(now, new Date(b.since).getTime());
+        if (!Number.isFinite(from)) throw new ApiError(400, "since must be an ISO date and time, like 2026-12-25T07:00");
+        Object.assign(a, { label: b.label, description: b.description ?? "", count_up: true, started_at: from, ends_at: null,
+          finished: false, finished_for: null, chime: b.chime ?? false, expires_at: b.duration ? from + b.duration * 1000 : null });
       } else {
         if (!b.label) throw new ApiError(400, "label is required");
         const ends = b.until ? new Date(b.until).getTime() : now + (b.duration ?? 0) * 1000;
         if (!(ends > now)) throw new ApiError(400, "A timer needs either duration (seconds) or until (a date and time)");
         const after = b.finished_for || null;
-        Object.assign(a, { label: b.label, description: b.description ?? "", started_at: now, ends_at: ends, finished: false,
+        Object.assign(a, { label: b.label, description: b.description ?? "", count_up: false, started_at: now, ends_at: ends, finished: false,
           finished_for: after, expires_at: after ? ends + after * 1000 : null });
       }
       shown = [...shown.filter((x) => x.id !== a.id), a];
