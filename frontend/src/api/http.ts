@@ -54,7 +54,16 @@ export function httpApi(base = ""): Api {
   let serverVersion: string | null = null; // from the first "hello"; a different one later means Moonlight was updated
   let heard = 0; // when the socket last brought anything (a pong at least every PING_MS while it's alive)
   let connections = 0;
+  let up = false;
+  let again: ReturnType<typeof setTimeout> | undefined; // the next attempt after a drop
+  const watchers = new Set<(up: boolean) => void>();
+  function setUp(u: boolean) {
+    if (u === up) return;
+    up = u;
+    watchers.forEach((w) => w(u));
+  }
   function connect() {
+    clearTimeout(again);
     const url = new URL(base + "/api/ws", location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const token = getToken();
@@ -65,19 +74,21 @@ export function httpApi(base = ""): Api {
     // A screen whose Wi-Fi dozed (old tablets do) can be left holding a socket that's dead without ever closing, and
     // would miss every change from then on. Ask for a pong now and then; when nothing comes back, start again.
     const keepalive = setInterval(() => {
-      if (sock.readyState === WebSocket.CLOSING || sock.readyState === WebSocket.CLOSED) return;
+      if (sock.readyState === WebSocket.CLOSING || sock.readyState === WebSocket.CLOSED) { clearInterval(keepalive); return; }
       if (Date.now() - heard > PING_MS * 2.5) {
         // close() on a dead connection can take minutes to report back, so don't wait for it.
         clearInterval(keepalive);
         sock.onclose = null;
         sock.close();
         if (ws === sock) ws = null;
+        setUp(false);
         connect();
         return;
       }
       if (sock.readyState === WebSocket.OPEN) try { sock.send("ping"); } catch { /* closing anyway */ }
     }, PING_MS);
     sock.onopen = () => {
+      setUp(true);
       // Back after a gap: anything could have changed meanwhile, so everything showing loads again.
       if (connections++ > 0) ALL_TOPICS.forEach((t) => listeners.forEach((l) => l(t)));
     };
@@ -97,7 +108,13 @@ export function httpApi(base = ""): Api {
         }
       } catch { /* ignore */ }
     };
-    sock.onclose = () => { clearInterval(keepalive); if (ws === sock) ws = null; setTimeout(connect, 3000); };
+    sock.onclose = () => {
+      clearInterval(keepalive);
+      if (ws !== sock) return; // already replaced
+      ws = null;
+      setUp(false);
+      again = setTimeout(connect, 3000);
+    };
   }
 
   return {
@@ -106,6 +123,18 @@ export function httpApi(base = ""): Api {
       listeners.add(fn);
       if (!ws) connect();
       return () => listeners.delete(fn);
+    },
+    connection(fn) {
+      watchers.add(fn);
+      fn(up);
+      return () => watchers.delete(fn);
+    },
+    reconnect() {
+      if (ws?.readyState === WebSocket.OPEN) return;
+      const old = ws;
+      ws = null;
+      if (old) { old.onclose = null; try { old.close(); } catch { /* already gone */ } }
+      connect();
     },
     async alerts() {
       const r = await get<AlertsNow>("/api/alerts");

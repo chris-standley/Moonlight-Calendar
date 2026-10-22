@@ -15,6 +15,7 @@ import { TodayView } from "./views/TodayView";
 import { Screensaver } from "./views/Screensaver";
 import { SettingsView } from "./views/SettingsView";
 import { SyncBanner } from "./views/SyncBanner";
+import { ConnectionBanner } from "./views/ConnectionBanner";
 import { MediaProvider, NowPlayingPill } from "./views/NowPlaying";
 import { MusicView } from "./views/MusicView";
 import { TimerTray } from "./views/recipes/TimerTray";
@@ -259,6 +260,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
         {bursts.map((b) => <Confetti key={b.id} {...b} />)}
         {ready && <SecurityAlerts saver={saver}>{saver && <Screensaver onWake={() => setSaver(false)} />}</SecurityAlerts>}
         <ScreenAlerts />
+        <ConnectionBanner />
        </MediaProvider>
       </div>
     </AppProvider>
