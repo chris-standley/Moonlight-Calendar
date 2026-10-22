@@ -88,7 +88,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
         <div className="ss-tr">{/* the photo's details, and under them the button to hide it */}
           {settings?.photo_details !== false && <PhotoCaption photo={shown} />}
           <button className="ss-hide" aria-label="Don't show this photo again" onClick={(e) => { e.stopPropagation(); setHiding(shown); }}>
-            <IconEyeOff size={30} />
+            <IconEyeOff size={24} />
           </button>
         </div>
       )}
