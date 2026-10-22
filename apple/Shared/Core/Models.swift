@@ -126,6 +126,7 @@ struct ScreenAlert: Codable, Identifiable, Equatable {
     let chime: Bool
     let created_at: Double
     let expires_at: Double?
+    let shrink_at: Double?        // a full screen one goes to the corner then
     // notification
     let title: String?
     let message: String?
@@ -142,6 +143,8 @@ struct ScreenAlert: Codable, Identifiable, Equatable {
     /// A countdown that got to zero (one counting up never does).
     func isDone(_ t: Double) -> Bool { isTimer && ends_at.map { t >= $0 } ?? false }
     var isFullScreen: Bool { style == "fullscreen" }
+    /// Full screen at this moment (add-on clock, ms): until `shrink_at`, if it has one.
+    func isFull(at t: Double) -> Bool { isFullScreen && shrink_at.map { t < $0 } ?? true }
     /// Tells apart the same id put up again (a restarted timer).
     var key: String { "\(id)@\(Int(created_at))" }
 }

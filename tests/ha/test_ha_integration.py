@@ -296,8 +296,15 @@ async def test_notifications_and_timers(hass: HomeAssistant, moonlight_server) -
                .timestamp()) < 2
     resp = await hass.services.async_call(DOMAIN, "start_timer",
                                           {"label": "Kettle boiled", "count_up": True, "id": "kettle",
-                                           "duration": "01:00:00"}, blocking=True, return_response=True)
+                                           "duration": "01:00:00", "full_screen_for": "00:05:00"},
+                                          blocking=True, return_response=True)
     assert resp["id"] == "kettle" and resp["ends_at"] is None and resp["expires_at"]
+    shown = await hass.async_add_executor_job(http, moonlight_server, "GET", "/api/alerts")
+    kettle = next(a for a in shown["alerts"] if a["id"] == "kettle")
+    assert kettle["style"] == "fullscreen" and kettle["shrink_at"] == kettle["created_at"] + 300_000
+    with pytest.raises(ServiceValidationError, match="not a toast"):
+        await hass.services.async_call(DOMAIN, "start_timer", {"label": "x", "count_up": True, "style": "toast",
+                                                               "full_screen_for": "00:01:00"}, blocking=True)
     ago = (dt_util.now() - timedelta(minutes=5)).replace(tzinfo=None)
     await hass.services.async_call(DOMAIN, "start_timer", {"label": "Kettle boiled", "since": ago.isoformat(),
                                                            "id": "kettle"}, blocking=True)

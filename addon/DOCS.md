@@ -189,6 +189,9 @@ With the Moonlight integration installed in Home Assistant, automations and scri
   time. At zero it chimes and says Time's up. With `count_up` (or `since`, a time already gone) it counts up
   instead, like how long since the kettle boiled.
 
+`full_screen_for` shows either one full screen for a while, then as a card in the corner. On a screen, swipe a full
+screen one up to make it small there, and swipe a corner card right to dismiss it everywhere.
+
 Each goes to every screen or to chosen ones (`screens`: names from Settings > Screens, or `large`, `compact`, `phone`,
 `app`), and stays for a set time or until someone taps it away (gone from every screen) or
 `moonlight.clear_notifications` clears it. The iPhone, iPad and Apple TV apps show them too. A timer finishing and a

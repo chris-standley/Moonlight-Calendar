@@ -439,6 +439,8 @@ export function pickCalendar(cals: SyncCalendar[], personIds: string[]): string 
 export interface ScreenAlert {
   id: string; kind: "notification" | "timer"; style: "fullscreen" | "toast"; screens: string[];
   icon: string; dismissible: boolean; chime: boolean; created_at: number; expires_at: number | null;
+  /** a full screen one becomes a card in the corner then (null: stays full screen) */
+  shrink_at?: number | null;
   /** notification */
   title?: string; message?: string; image?: string | null;
   /** timer: counts down to `ends_at` (a countdown to a date has a long one); `finished` once it got there. A
@@ -451,7 +453,7 @@ export interface AlertsNow { server_time: number; alerts: ScreenAlert[] }
 export interface AlertIn {
   kind?: "notification" | "timer"; style?: "fullscreen" | "toast"; screens?: string[]; id?: string; icon?: string;
   dismissible?: boolean; chime?: boolean; title?: string; message?: string; image?: string; duration?: number;
-  label?: string; description?: string; until?: string; since?: string; finished_for?: number;
+  label?: string; description?: string; until?: string; since?: string; finished_for?: number; full_screen_for?: number;
 }
 
 export class ApiError extends Error {

@@ -141,7 +141,8 @@ data:
   style: fullscreen
   screens: Hallway
 
-# Counting up instead: how long since the kettle boiled, from now, gone after an hour. The same id again (the next
+# Counting up instead: how long since the kettle boiled, from now, gone after an hour. `full_screen_for` shows it
+# full screen for five minutes first, then as a card in the corner. The same id again (the next
 # boil) starts it from 0:00. `since: "{{ now() - timedelta(minutes=5) }}"` would count from five minutes ago.
 action: moonlight.start_timer
 data:
@@ -150,6 +151,7 @@ data:
   icon: "☕"
   count_up: true
   duration: "01:00:00"
+  full_screen_for: "00:05:00"
   screens: Kitchen
 
 # Take one off, or everything on some screens, or (with neither) everything.
@@ -159,7 +161,9 @@ data:
 ```
 
 Starting a timer with the same `id` again restarts it. `finished_for` sets how long Time's up stays once a timer
-gets to zero. A full screen timer has a Make small button that turns it into a corner card on that screen only.
+gets to zero. A swipe up on anything full screen (or a full screen timer's Make small button) turns it into a corner card on that
+screen only; a swipe right on a corner card dismisses it everywhere, like its ×. `full_screen_for` does the shrinking
+on every screen after a set time.
 
 Two things come back as the event `moonlight_alert`, with `event`, `id`, `kind` (`notification` or `timer`),
 `title` (the title or label), `screen` and `config_entry_id`:

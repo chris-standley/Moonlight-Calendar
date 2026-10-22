@@ -153,6 +153,11 @@ show_notification:
           options:
             - fullscreen
             - toast
+    full_screen_for:
+      required: false
+      example: "00:05:00"
+      selector:
+        duration:
     duration:
       required: false
       example: "00:00:30"
@@ -235,12 +240,16 @@ start_timer:
             - app
     style:
       required: false
-      default: toast
       selector:
         select:
           options:
             - fullscreen
             - toast
+    full_screen_for:
+      required: false
+      example: "00:05:00"
+      selector:
+        duration:
     finished_for:
       required: false
       selector:
