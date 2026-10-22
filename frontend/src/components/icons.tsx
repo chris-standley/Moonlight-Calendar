@@ -113,3 +113,8 @@ export function WeatherIcon({ condition, size = 24 }: { condition: string; size?
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-label={condition}>{g}</svg>;
 }
 export const IconMic = ({ size, ...p }: P) => <svg {...base(size, p)}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" /></svg>;
+export const IconSearch = ({ size, ...p }: P) => <svg {...base(size, p)}><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>;
+export const IconQueue = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M4 6h12M4 11h12M4 16h7" /><path d="M15 15.5v4.5l4-2.25z" fill="currentColor" /></svg>;
+export const IconSpeakers = ({ size, ...p }: P) => <svg {...base(size, p)}><rect x="3" y="4" width="8" height="16" rx="2" /><circle cx="7" cy="14.5" r="2" /><circle cx="7" cy="8" r=".7" fill="currentColor" /><path d="M14 6.5h5a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2h-5" /><circle cx="17" cy="15" r="1.6" /></svg>;
+export const IconPlayNext = ({ size, ...p }: P) => <svg {...base(size, p)}><path d="M4 7h9M4 12h9M4 17h6" /><path d="M16 9.5v7.5l5-3.75z" fill="currentColor" /></svg>;
+export const IconMore = ({ size, ...p }: P) => <svg {...base(size, p)}><circle cx="5.5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="18.5" cy="12" r="1" fill="currentColor" /></svg>;

@@ -94,6 +94,28 @@ put the album art on the screensaver. Moonlight drives the speaker through Home 
 3. Pick it: in Moonlight go to Settings > Screens, tap the screen and choose its speaker (Music Assistant players are
    marked). Compact screens show a card on Today; large screens and phones show a small player in the top bar.
 
+### Music tab
+
+Every screen with a speaker gets a **Music** tab (the iPhone, iPad and Apple TV apps too, once phones have a speaker):
+
+- **Up next**: what's playing and the queue. Tap a track to play it now, play it next, or remove it.
+- **Library**: your Music Assistant library and favourites (playlists, albums, artists, podcasts, radio) through Home
+  Assistant's media browser, plus search on Music Assistant speakers. Play anything now, next, or at the end of the
+  queue.
+- **Rooms**: group other speakers with this one, take them out again, and set each room's volume.
+
+Home Assistant only tells Moonlight the current and next track of a Music Assistant queue. For the whole queue (and to
+reorder or remove tracks), make a long-lived token in the Music Assistant web UI under Settings > Profile and enter it
+in Moonlight under Settings > Music. The address is normally worked out for you; enter it (e.g.
+`http://homeassistant.local:8095`) if not. The token stays in the add-on. A speaker from Home Assistant's own Sonos
+integration shows its whole Sonos queue without a token.
+
+If a screen's speaker is a Music Assistant player that's idle while someone plays on that Sonos from the Sonos app,
+the screen shows and controls what the Sonos app is playing.
+
+The screensaver shows the album art with play/pause, skip and volume while music is playing (and for 15 minutes after
+it's paused); tapping the controls doesn't wake the screen.
+
 Moonlight follows the speaker over Home Assistant's WebSocket API, so changes made in the Sonos or Music Assistant
 apps appear straight away; while Home Assistant restarts it falls back to checking every few seconds. Album art is
 fetched by the add-on and passed on to the screens, which never see a Home Assistant token.

@@ -80,7 +80,7 @@ export function posNow(np: NowPlaying, fetchedAt: number): number | null {
   return np.duration ? Math.min(p, np.duration) : p;
 }
 
-const fmt = (s: number | null) => {
+export const fmtDuration = (s: number | null) => {
   if (s == null || !isFinite(s)) return "";
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
   return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
@@ -102,19 +102,19 @@ export function Art({ np, className }: { np: NowPlaying; className?: string }) {
   );
 }
 
-function Progress({ np, at, times }: { np: NowPlaying; at: number; times?: boolean }) {
+export function Progress({ np, at, times }: { np: NowPlaying; at: number; times?: boolean }) {
   useTick(np.state === "playing");
   const pos = posNow(np, at);
   if (!np.duration || pos == null) return times ? <div className="np-progress live"><i style={{ width: "100%" }} /></div> : null;
   return (
     <div className="np-prog-wrap">
       <div className="np-progress"><i style={{ width: `${Math.min(100, (pos / np.duration) * 100)}%` }} /></div>
-      {times && <div className="np-times"><span>{fmt(pos)}</span><span>-{fmt(np.duration - pos)}</span></div>}
+      {times && <div className="np-times"><span>{fmtDuration(pos)}</span><span>-{fmtDuration(np.duration - pos)}</span></div>}
     </div>
   );
 }
 
-function useCommand() {
+export function useCommand() {
   const { act } = useMedia();
   const { toast } = useApp();
   return useCallback((action: MediaAction, value?: number | boolean | string) => {
@@ -122,7 +122,7 @@ function useCommand() {
   }, [act, toast]);
 }
 
-function Transport({ np, big }: { np: NowPlaying; big?: boolean }) {
+export function Transport({ np, big }: { np: NowPlaying; big?: boolean }) {
   const cmd = useCommand();
   const playing = np.state === "playing" || np.state === "buffering";
   const s = big ? 34 : 24;
@@ -147,29 +147,36 @@ function Transport({ np, big }: { np: NowPlaying; big?: boolean }) {
 }
 
 /** Touch-friendly volume: follows the finger locally, sends at most a few updates a second. */
-function Volume({ np }: { np: NowPlaying }) {
+export function Volume({ np }: { np: NowPlaying }) {
   const cmd = useCommand();
+  if (!np.supports.volume || np.volume == null) return null;
+  return <VolumeSlider volume={np.volume} muted={!!np.muted} canMute={np.supports.mute}
+    onSet={(v) => cmd("volume_set", v)} onMute={(m) => cmd("volume_mute", m)} />;
+}
+
+export function VolumeSlider({ volume, muted, canMute, onSet, onMute, label = "Volume" }: {
+  volume: number; muted: boolean; canMute: boolean; onSet: (v: number) => void; onMute: (m: boolean) => void; label?: string;
+}) {
   const [local, setLocal] = useState<number | null>(null);
   const lastSent = useRef(0);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const release = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); if (release.current) clearTimeout(release.current); }, []);
-  if (!np.supports.volume || np.volume == null) return null;
-  const v = local ?? (np.muted ? 0 : np.volume);
+  const v = local ?? (muted ? 0 : volume);
   function change(x: number) {
     setLocal(x);
     if (release.current) clearTimeout(release.current);
     release.current = setTimeout(() => setLocal(null), 1500); // then follow the speaker again
-    const send = () => { lastSent.current = Date.now(); pending.current = null; cmd("volume_set", x); };
+    const send = () => { lastSent.current = Date.now(); pending.current = null; onSet(x); };
     if (pending.current) clearTimeout(pending.current);
     const wait = 250 - (Date.now() - lastSent.current);
     if (wait <= 0) send(); else pending.current = setTimeout(send, wait);
   }
   return (
     <div className="np-volume" onClick={(e) => e.stopPropagation()}>
-      <button className="np-btn small" aria-label={np.muted ? "Unmute" : "Mute"} disabled={!np.supports.mute}
-        onClick={() => cmd("volume_mute", !np.muted)}>{np.muted || v === 0 ? <IconMute size={22} /> : <IconVolume size={22} />}</button>
-      <input type="range" min={0} max={100} step={1} value={Math.round(v * 100)} aria-label="Volume"
+      <button className="np-btn small" aria-label={muted ? "Unmute" : "Mute"} disabled={!canMute}
+        onClick={() => onMute(!muted)}>{muted || v === 0 ? <IconMute size={22} /> : <IconVolume size={22} />}</button>
+      <input type="range" min={0} max={100} step={1} value={Math.round(v * 100)} aria-label={label}
         style={{ "--v": `${v * 100}%` } as CSSProperties}
         onChange={(e) => change(Number(e.target.value) / 100)} />
     </div>
@@ -258,17 +265,32 @@ function NowPlayingSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Screensaver corner card while music is playing. */
+/** Screensaver corner card while music plays, with the controls and volume (taps on it don't wake the screen). After
+ * a pause it stays for a while so it can be resumed, then gets out of the way. */
 export function ScreensaverNowPlaying() {
   const { np } = useMedia();
-  if (!np?.show || np.state !== "playing") return null;
+  const playing = np?.state === "playing" || np?.state === "buffering";
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    setStale(false);
+    if (playing) return;
+    const t = setTimeout(() => setStale(true), 15 * 60_000);
+    return () => clearTimeout(t);
+  }, [playing, np?.title]);
+  if (!np?.show || (!playing && stale)) return null;
   return (
-    <div className="ss-np">
+    <div className="ss-np" onClick={(e) => e.stopPropagation()}>
       <Art np={np} />
-      <div className="ss-np-text">
-        <span className="ss-np-eq" aria-hidden><i /><i /><i /></span>
-        <b>{np.title}</b>
-        {np.artist && <span>{np.artist}</span>}
+      <div className="ss-np-main">
+        <div className="ss-np-text">
+          {playing && <span className="ss-np-eq" aria-hidden><i /><i /><i /></span>}
+          <b>{np.title}</b>
+          {np.artist && <span>{np.artist}</span>}
+        </div>
+        <div className="ss-np-ctl">
+          <Transport np={np} />
+          <Volume np={np} />
+        </div>
       </div>
     </div>
   );

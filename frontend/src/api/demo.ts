@@ -410,8 +410,8 @@ export function demoApi(): Api {
     return e.calendar_id ?? null;
   };
 
-  // Compact demo screens have a (pretend) Music Assistant kitchen speaker; others have none until set in Settings.
-  const mediaPlayers = () => ({ large: "", compact: "media_player.kitchen", phone: "", ...st.settings.media_players });
+  // Wall screens have a (pretend) Music Assistant kitchen speaker; phones have none until set in Settings.
+  const mediaPlayers = () => ({ large: "media_player.kitchen", compact: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
     return { weather_entity: "", holidays: holidayRegion, ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
@@ -730,7 +730,7 @@ export function demoApi(): Api {
       const s = settingsOut();
       return { ...(s.screens?.[l] ?? DEFAULT_SCREENS[l]), speaker: s.media_players?.[l] ?? "", idle_minutes: s.idle_minutes?.[l] ?? DEFAULT_IDLE[l] };
     }),
-    ...demoMedia(emit, mediaPlayers), // a pretend kitchen speaker
+    ...demoMedia(emit, mediaPlayers, checkPin), // a pretend kitchen speaker
     ...demoNursery(checkPin, emit, () => st.people), // a pretend Tapestry account
     ...demoSecurity(emit, () => st.settings.security, checkPin), // a pretend alarm and cameras
     ...demoEnergy(emit, () => st.settings.energy), // a pretend inverter, car charger and heat pump

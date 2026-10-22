@@ -49,7 +49,8 @@ FAVOURITES_TTL = 15 * 60
 # MediaPlayerEntityFeature bits (homeassistant/components/media_player/const.py)
 FEATURES = {
     "pause": 1, "seek": 2, "volume_set": 4, "volume_mute": 8, "previous": 16, "next": 32,
-    "volume_step": 1024, "stop": 4096, "play": 16384, "shuffle_set": 32768, "repeat_set": 262144,
+    "volume_step": 1024, "stop": 4096, "play": 16384, "shuffle_set": 32768, "browse_media": 131072,
+    "repeat_set": 262144, "grouping": 524288, "media_enqueue": 2097152,
 }
 ACTIVE = ("playing", "paused", "buffering")
 REPEAT = ("off", "all", "one")
@@ -130,8 +131,28 @@ def setup_of(display: dict | None) -> dict:
 
 
 def watched_entities() -> set[str]:
+    """Every speaker a screen uses (styles' and paired screens' own), plus the player each one is handing to
+    (see linked_of), so all of them update live."""
     with db.connect() as c:
-        return {e for e in players_setting(c).values() if e}
+        out = {e for e in players_setting(c).values() if e}
+        for (raw,) in c.execute("SELECT setup FROM displays WHERE setup IS NOT NULL AND revoked = 0"):
+            speaker = setup_of({"setup": raw}).get("speaker")
+            if isinstance(speaker, str) and ENTITY_RE.match(speaker):
+                out.add(speaker)
+    if _service is not None:
+        out |= {link for e in list(out) if (link := linked_of(_service.states.get(e)))}
+    return out
+
+
+def linked_of(state: dict | None) -> str | None:
+    """The other Home Assistant player a Music Assistant player is fronting, if any. Music Assistant names its active
+    queue after the source player: when that is a HA entity (e.g. MA's Home Assistant player provider wrapping
+    media_player.kitchen_sonos_sonos), music started from the Sonos app plays there while the MA entity sits idle."""
+    attrs = (state or {}).get("attributes") or {}
+    link = attrs.get("active_queue")
+    if not is_music_assistant(attrs) or not isinstance(link, str) or not ENTITY_RE.match(link):
+        return None
+    return None if link == (state or {}).get("entity_id") else link
 
 
 # ---------------------------------------------------------------- mapping
@@ -172,14 +193,17 @@ def empty(layout: str, entity: str | None, configured: bool, state: str = "off",
         "layout": layout, "configured": configured, "entity": entity or None, "name": None, "state": state,
         "show": False, "title": None, "artist": None, "album": None, "duration": None, "position": None,
         "position_updated_at": None, "volume": None, "muted": None, "shuffle": None, "repeat": None,
-        "source": None, "app": None, "music_assistant": False, "has_art": False, "art_url": None,
-        "supports": {k: False for k in ("play_pause", "previous", "next", "volume", "mute", "shuffle", "repeat", "seek")},
+        "source": None, "app": None, "music_assistant": False, "via": None, "has_art": False, "art_url": None,
+        "supports": {k: False for k in ("play_pause", "previous", "next", "volume", "mute", "shuffle", "repeat", "seek",
+                                         "grouping")},
         "reachable": error is None, "error": error, "server_time": utc_now_iso(),
     }
 
 
-def now_playing(layout: str, entity: str, state: dict | None, error: str | None = None) -> dict:
-    """Map a HA media_player state object to the /api/media/now-playing shape."""
+def now_playing(layout: str, entity: str, state: dict | None, error: str | None = None,
+                speaker: dict | None = None) -> dict:
+    """Map a HA media_player state object to the /api/media/now-playing shape. `speaker`: the screen's own speaker
+    when `state` is the player it is fronting (see linked_of); its name and Music Assistant-ness are kept."""
     if not entity:
         return empty(layout, None, False)
     if state is None:
@@ -213,6 +237,7 @@ def now_playing(layout: str, entity: str, state: dict | None, error: str | None 
         "source": attrs.get("source") or attrs.get("app_name") or None,
         "app": attrs.get("app_id") or None,
         "music_assistant": is_music_assistant(attrs),
+        "via": None,
         "has_art": picture is not None,
         "art_url": f"/api/media/art?layout={layout}&v={art_key(picture)}" if picture else None,
         "supports": {
@@ -224,8 +249,14 @@ def now_playing(layout: str, entity: str, state: dict | None, error: str | None 
             "shuffle": has("shuffle_set"),
             "repeat": has("repeat_set"),
             "seek": has("seek"),
+            "grouping": has("grouping"),
         },
     })
+    if speaker is not None:
+        sattrs = speaker.get("attributes") or {}
+        out.update({"entity": speaker.get("entity_id") or entity, "via": entity,
+                    "name": sattrs.get("friendly_name") or out["name"],
+                    "music_assistant": is_music_assistant(sattrs)})
     return out
 
 
@@ -374,6 +405,35 @@ class MediaService:
         with contextlib.suppress(Exception):
             return r.json()
         return None
+
+    # ---- one-off WebSocket commands (browse_media, registry reads...)
+    async def _ws_commands(self, *commands: dict, errors: list[str] | None = None) -> list[Any]:
+        """Run WebSocket commands once ([result or None per command]); raises if HA can't be reached at all.
+        `errors` collects HA's message for each command it refused."""
+        results: list[Any] = [None] * len(commands)
+        async with self.ws_connect(self.ws_url) as ws:
+            msg = json.loads(await ws.recv())
+            if msg.get("type") != "auth_required":
+                raise MediaError(f"unexpected greeting {msg.get('type')!r}")
+            await ws.send(json.dumps({"type": "auth", "access_token": self.token}))
+            msg = json.loads(await ws.recv())
+            if msg.get("type") != "auth_ok":
+                raise AuthFailed(msg.get("message") or "authentication failed")
+            for i, cmd in enumerate(commands, start=1):
+                await ws.send(json.dumps({"id": i, **cmd}))
+            pending = set(range(1, len(commands) + 1))
+            while pending:
+                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
+                if msg.get("type") == "result" and msg.get("id") in pending:
+                    pending.discard(msg["id"])
+                    if msg.get("success"):
+                        results[msg["id"] - 1] = msg.get("result")
+                    else:
+                        why = (msg.get("error") or {}).get("message") or "refused"
+                        log.info("Home Assistant said no to %s: %s", commands[msg["id"] - 1]["type"], why)
+                        if errors is not None:
+                            errors.append(why)
+        return results
 
     async def command(self, entity: str, action: str, value: Any = None) -> None:
         service, extra = service_call(action, value)
@@ -645,7 +705,23 @@ def from_env() -> MediaService | None:
 async def _broadcast() -> None:
     from .common import hub
 
+    with contextlib.suppress(Exception):
+        settings_changed()  # follow a player a speaker has just started fronting (linked_of)
     await hub.broadcast("media")
+
+
+async def resolve(svc: MediaService, entity: str) -> tuple[str, dict | None, str | None, dict | None]:
+    """(player to show and drive, its state, error, the speaker's own state if that player is a linked one).
+    A Music Assistant speaker that is idle while the player it fronts is playing (music started from the Sonos
+    app, say) hands over to that player, so the screen shows and controls what is actually playing."""
+    state, error = await svc.get_state(entity)
+    link = linked_of(state)
+    if link and str((state or {}).get("state")) not in ACTIVE:
+        other, _ = await svc.get_state(link)
+        if other is not None and (str(other.get("state")) in ACTIVE
+                                  or (other.get("state") in ("idle", "on") and (other.get("attributes") or {}).get("media_title"))):
+            return link, other, None, state
+    return entity, state, error, None
 
 
 def set_service(svc: MediaService | None) -> None:

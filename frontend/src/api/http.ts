@@ -1,4 +1,4 @@
-import { AlertsNow, Api, ApiError, Display, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
+import { AlertsNow, Api, ApiError, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
@@ -189,6 +189,22 @@ export function httpApi(base = ""): Api {
     mediaPlayers: () => get("/api/media/players"),
     mediaFavourites: (layout) => get("/api/media/favourites" + q({ layout })),
     playFavourite: (layout, uri) => artUrl(req("POST", "/api/media/play", { layout, uri })),
+    async mediaQueue(layout) {
+      const r = await get<MediaQueue>("/api/media/queue" + q({ layout }));
+      return { ...r, items: r.items.map((t) => ({ ...t, thumb: pic(t.thumb) })) };
+    },
+    mediaQueueAction: async (layout, action, key) => { await req("POST", "/api/media/queue", { layout, action, key }); },
+    async mediaBrowse(layout, id, type) {
+      const r = await get<MediaBrowse>("/api/media/browse" + q({ layout, ...(id !== undefined ? { id, type: type ?? "" } : {}) }));
+      return { ...r, thumb: pic(r.thumb), items: r.items.map((i) => ({ ...i, thumb: pic(i.thumb) })) };
+    },
+    mediaSearch: async (layout, text) => (await get<MediaItem[]>("/api/media/search" + q({ layout, q: text }))).map((i) => ({ ...i, thumb: pic(i.thumb) })),
+    mediaPlay: (layout, item, enqueue) => artUrl(req("POST", "/api/media/play", { layout, id: item.id, type: item.type, enqueue })),
+    mediaRooms: (layout) => get("/api/media/rooms" + q({ layout })),
+    mediaRoomAction: (layout, room, action, value) => req("POST", "/api/media/rooms", { layout, room, action, value }),
+    musicAssistant: () => get("/api/media/music-assistant"),
+    saveMusicAssistant: (link) => req("PUT", "/api/media/music-assistant", link),
+    removeMusicAssistant: (pin) => req("DELETE", "/api/media/music-assistant", { pin }),
     async security() {
       const r = await get<SecurityOverview>("/api/security");
       return { ...r, cameras: r.cameras.map(cam), alerts: r.alerts.map(cam) };

@@ -311,13 +311,16 @@ read or control any other entity. Without Home Assistant
   `{layout, configured: bool, entity: str|null, name, state, show: bool, title, artist, album, duration, position,
   position_updated_at, volume: 0..1|null, muted: bool|null, shuffle: bool|null, repeat: "off"|"all"|"one"|null,
   source, app, music_assistant: bool, has_art: bool, art_url: str|null, supports: {play_pause, previous, next, volume,
-  mute, shuffle, repeat, seek}, reachable: bool, error: str|null, server_time}`.
+  mute, shuffle, repeat, seek, grouping}, via: str|null, reachable: bool, error: str|null, server_time}`.
   `state` is HA's (`playing`, `paused`, `idle`, `off`, `standby`, `buffering`, `unavailable`, ...). `show` = worth
   showing: playing/paused/buffering, or idle/on with a track loaded. `duration`/`position` are seconds; the position
   was `position` at `position_updated_at` (HA's clock), so clients tick it locally using `server_time`.
   `supports` comes from the entity's `supported_features`. `music_assistant` = the entity has Music Assistant's
   `mass_player_type` attribute (or `app_id: music_assistant`). If HA is unreachable the last state is kept for 90 s,
   then `state: "unavailable", reachable: false`.
+  `via`: when the speaker is a Music Assistant player that is idle while the Home Assistant entity it hands over to
+  (its `active_queue`, e.g. the Sonos integration's own entity when someone plays from the Sonos app) is playing,
+  NowPlaying describes and controls that entity instead and `via` is its entity id; `entity`/`name` stay the speaker's.
 - `GET /api/media/art?layout=compact&v=<hash>` -> the album art image (or 404). Moonlight fetches HA's
   `entity_picture_local`/`entity_picture` (a `/api/media_player_proxy/...` path, with its own HA token, or a public
   URL fetched without any token) and caches the last 12 images. `v` is a hash of the picture URL; only the layout's
@@ -333,6 +336,42 @@ read or control any other entity. Without Home Assistant
   config entry; cached 15 minutes. Empty for non-Music Assistant players or on any error.
 - `POST /api/media/play` `{layout, uri}` -> NowPlaying. Plays one of those favourites with
   `music_assistant.play_media` (enqueue `replace`); 404 if `uri` isn't a current favourite.
+  `{layout, id, type, enqueue}` plays anything from browse or search: `enqueue` is `replace` (play now, default),
+  `next` (after the current track) or `add` (end of the queue). Music Assistant speakers use
+  `music_assistant.play_media`; others `media_player.play_media` (enqueue only if the player supports it).
+
+### Music tab (queue, library, rooms)
+All of these take the screen's `layout` and act only on its speaker (or the entity it hands over to, see `via`).
+Pictures in their answers are `/api/media/thumb?k=<key>` links: the add-on fetches them (with HA's token for HA
+paths, Music Assistant's token for its image proxy) so no address or token reaches the screen.
+- `GET /api/media/queue?layout=` -> `{source: "music_assistant"|"sonos"|null, full: bool, total, current: int|null,
+  items: [{key, index, title, artist, album, duration, thumb, current}], can_jump, can_remove, can_move}`. Sources:
+  Music Assistant's own API when Moonlight has a Music Assistant token (Settings › Music; up to 80 tracks from the
+  current one), otherwise Home Assistant's `music_assistant.get_queue` (current and next track only, `full: false`),
+  or for a Sonos integration entity `sonos.get_queue` (the whole queue).
+- `POST /api/media/queue` `{layout, action: play|remove|next, key}` -> `{ok}`. Jump to a track, remove it, or move it
+  to play next. 409 if the queue's source can't (see the `can_*` flags).
+- `GET /api/media/browse?layout=&id=&type=` -> `{id, type, title, kind, can_play, can_expand, thumb, items: [same
+  shape plus subtitle], more}`. Home Assistant's media browser for the speaker (`media_player/browse_media`); no `id`
+  is the top level. Local media sources and app shortcuts are left out; at most 500 items (`more` = how many weren't
+  sent).
+- `GET /api/media/search?layout=&q=` -> `[item]` artists, albums, playlists, tracks, podcasts and radio from
+  `music_assistant.search`. 409 for a speaker that isn't a Music Assistant player.
+- `GET /api/media/thumb?k=` -> the picture (404 for an unknown key).
+- `GET /api/media/rooms?layout=` -> `{entity, can_group, rooms: [{entity_id, name, state, this, grouped, volume,
+  muted, playing, can_volume}]}`: this speaker first, then the speakers it can be grouped with (they support
+  grouping, are available, and are the same kind: Music Assistant players with Music Assistant players, Sonos with
+  Sonos).
+- `POST /api/media/rooms` `{layout, room, action: join|unjoin|volume|mute, value?}` -> the rooms, as GET. `join`
+  adds `room` to this speaker's group (`media_player.join`), `unjoin` takes it out, `volume` (0..1) and `mute`
+  (bool) set that room. 404 if `room` isn't one of the listed rooms.
+
+### Music Assistant connection (Settings › Music)
+- `GET /api/media/music-assistant` -> `{url, detected_url, token_set}`. The token is never returned.
+- `PUT /api/media/music-assistant` `{pin, url?, token?}` -> the same. `url` empty = the address Music Assistant gives
+  Home Assistant (learnt from its picture links); token kept if left out. Checked first by asking Music Assistant for
+  its players over its WebSocket API: 400 if the token is refused, 424 if Music Assistant can't be reached.
+- `DELETE /api/media/music-assistant` `{pin}` -> forget the connection.
 
 Live updates: the backend keeps one WebSocket to HA (`ws://supervisor/core/websocket`, or `MOONLIGHT_HA_WS_URL`)
 with `subscribe_trigger` (state trigger on the configured entities). Every change broadcasts the `media` topic.

@@ -190,6 +190,8 @@ async def update(display_id: str, request: Request, body: dict = Body(...)):
                   (d["name"], d["layout"], d.get("setup"), display_id))
         me = auth.current(request)["display"]
         out = display_out(d, me["id"] if me else None, c)
+    if "setup" in body:
+        media.settings_changed()  # its own speaker may be new
     await hub.broadcast("displays")
     return out
 

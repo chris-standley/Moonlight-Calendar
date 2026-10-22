@@ -352,31 +352,6 @@ class SecurityService(media.MediaService):
         self._hls_locks: dict[str, asyncio.Lock] = {}
 
     # ---- discovery
-    async def _ws_commands(self, *commands: dict) -> list[Any]:
-        """Run WebSocket commands once ([result or None per command]); raises if HA can't be reached at all."""
-        results: list[Any] = [None] * len(commands)
-        async with self.ws_connect(self.ws_url) as ws:
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_required":
-                raise media.MediaError(f"unexpected greeting {msg.get('type')!r}")
-            await ws.send(json.dumps({"type": "auth", "access_token": self.token}))
-            msg = json.loads(await ws.recv())
-            if msg.get("type") != "auth_ok":
-                raise media.AuthFailed(msg.get("message") or "authentication failed")
-            for i, cmd in enumerate(commands, start=1):
-                await ws.send(json.dumps({"id": i, **cmd}))
-            pending = set(range(1, len(commands) + 1))
-            while pending:
-                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
-                if msg.get("type") == "result" and msg.get("id") in pending:
-                    pending.discard(msg["id"])
-                    if msg.get("success"):
-                        results[msg["id"] - 1] = msg.get("result")
-                    else:
-                        log.info("Home Assistant said no to %s: %s", commands[msg["id"] - 1]["type"],
-                                 (msg.get("error") or {}).get("message"))
-        return results
-
     async def all_states(self) -> list[dict]:
         async with self._client() as client:
             r = await client.get("/states")
