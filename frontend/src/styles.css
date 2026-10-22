@@ -1257,7 +1257,8 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .sec-cam-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; color: #9a9eab; font-weight: 800; }
 .sec-cam-name { position: absolute; left: 0.7rem; bottom: 0.6rem; padding: 0.2rem 0.7rem; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: #fff; font-weight: 800; }
 .sec-cam-badge { position: absolute; right: 0.7rem; top: 0.6rem; padding: 0.2rem 0.7rem; border-radius: 999px; background: var(--danger); color: #fff; font-weight: 800; }
-.sec-cam.person { box-shadow: 0 0 0 0.25rem var(--danger), var(--shadow); }
+/* Drawn inside the tile: an outside ring is cut off where the camera list scrolls (top and sides). */
+.sec-cam.person::after { content: ""; position: absolute; inset: 0; z-index: 3; border: 0.25rem solid var(--danger); border-radius: inherit; pointer-events: none; }
 .sec-live { position: absolute; inset: 0; z-index: 95; background: rgba(0, 0, 0, 0.82); display: grid; place-items: center; animation: fade 0.15s; }
 .sec-live-frame { position: relative; width: min(92%, calc(82vh * 16 / 9)); border-radius: 1rem; overflow: hidden; background: #000; }
 .sec-live-frame .cam-media { aspect-ratio: 16 / 9; height: auto; }

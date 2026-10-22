@@ -226,29 +226,31 @@ export function CameraVideo({ cam, width, fit = "cover", light = false }: { cam:
     let hls: { destroy(): void } | null = null;
     const fail = () => { if (!gone) setFailed(true); };
     const play = () => { el.play().catch(() => { /* autoplay of a muted video is allowed; ignore a race */ }); };
-    if (el.canPlayType("application/vnd.apple.mpegurl")) {
+    // hls.js wherever the browser has Media Source; the browser's own HLS only where it hasn't (iPhones). Android's
+    // own HLS player says it can play these streams but on older tablets never does.
+    const native = () => {
+      if (!el.canPlayType("application/vnd.apple.mpegurl")) { fail(); return; }
       el.src = video;
       el.addEventListener("error", fail);
       play();
-    } else {
-      import("hls.js").then(({ default: Hls }) => {
-        if (gone) return;
-        if (!Hls.isSupported()) { fail(); return; }
-        const h = new Hls({
-          lowLatencyMode: true, backBufferLength: 10, manifestLoadingTimeOut: 25_000, manifestLoadingMaxRetry: 2,
-          xhrSetup: (xhr) => { const t = getToken(); if (t) xhr.setRequestHeader("Authorization", `Bearer ${t}`); },
-        });
-        let recovered = false;
-        h.on(Hls.Events.ERROR, (_e, d) => {
-          if (!d.fatal) return;
-          if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !recovered) { recovered = true; h.recoverMediaError(); } else fail();
-        });
-        h.on(Hls.Events.MANIFEST_PARSED, play);
-        h.loadSource(video);
-        h.attachMedia(el);
-        hls = h;
-      }).catch(fail);
-    }
+    };
+    import("hls.js").then(({ default: Hls }) => {
+      if (gone) return;
+      if (!Hls.isSupported()) { native(); return; }
+      const h = new Hls({
+        lowLatencyMode: true, backBufferLength: 10, manifestLoadingTimeOut: 25_000, manifestLoadingMaxRetry: 2,
+        xhrSetup: (xhr) => { const t = getToken(); if (t) xhr.setRequestHeader("Authorization", `Bearer ${t}`); },
+      });
+      let recovered = false;
+      h.on(Hls.Events.ERROR, (_e, d) => {
+        if (!d.fatal) return;
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !recovered) { recovered = true; h.recoverMediaError(); } else fail();
+      });
+      h.on(Hls.Events.MANIFEST_PARSED, play);
+      h.loadSource(video);
+      h.attachMedia(el);
+      hls = h;
+    }).catch(native);
     return () => {
       gone = true;
       hls?.destroy();

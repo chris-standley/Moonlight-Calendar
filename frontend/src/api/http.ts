@@ -1,6 +1,10 @@
 import { AlertsNow, Api, ApiError, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
+const PING_MS = 25_000;
+const ALL_TOPICS: Topic[] = ["people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos",
+  "displays", "accounts", "media", "security", "security_alert", "nursery", "alerts", "energy"];
+
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
 export function httpApi(base = ""): Api {
   const listeners = new Set<(t: Topic) => void>();
@@ -48,13 +52,37 @@ export function httpApi(base = ""): Api {
 
   let ws: WebSocket | null = null;
   let serverVersion: string | null = null; // from the first "hello"; a different one later means Moonlight was updated
+  let heard = 0; // when the socket last brought anything (a pong at least every PING_MS while it's alive)
+  let connections = 0;
   function connect() {
     const url = new URL(base + "/api/ws", location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const token = getToken();
     if (token) url.searchParams.set("token", token);
-    ws = new WebSocket(url);
-    ws.onmessage = (m) => {
+    const sock = new WebSocket(url);
+    ws = sock;
+    heard = Date.now();
+    // A screen whose Wi-Fi dozed (old tablets do) can be left holding a socket that's dead without ever closing, and
+    // would miss every change from then on. Ask for a pong now and then; when nothing comes back, start again.
+    const keepalive = setInterval(() => {
+      if (sock.readyState === WebSocket.CLOSING || sock.readyState === WebSocket.CLOSED) return;
+      if (Date.now() - heard > PING_MS * 2.5) {
+        // close() on a dead connection can take minutes to report back, so don't wait for it.
+        clearInterval(keepalive);
+        sock.onclose = null;
+        sock.close();
+        if (ws === sock) ws = null;
+        connect();
+        return;
+      }
+      if (sock.readyState === WebSocket.OPEN) try { sock.send("ping"); } catch { /* closing anyway */ }
+    }, PING_MS);
+    sock.onopen = () => {
+      // Back after a gap: anything could have changed meanwhile, so everything showing loads again.
+      if (connections++ > 0) ALL_TOPICS.forEach((t) => listeners.forEach((l) => l(t)));
+    };
+    sock.onmessage = (m) => {
+      heard = Date.now();
       try {
         const msg = JSON.parse(m.data);
         // Wall screens stay open for weeks: after an update, load the new screens instead of running the old code.
@@ -69,7 +97,7 @@ export function httpApi(base = ""): Api {
         }
       } catch { /* ignore */ }
     };
-    ws.onclose = () => { ws = null; setTimeout(connect, 3000); };
+    sock.onclose = () => { clearInterval(keepalive); if (ws === sock) ws = null; setTimeout(connect, 3000); };
   }
 
   return {
