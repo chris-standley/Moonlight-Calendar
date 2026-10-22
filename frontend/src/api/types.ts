@@ -462,6 +462,10 @@ export class ApiError extends Error {
 export interface Api {
   mode: "live" | "demo";
   subscribe(fn: (topic: Topic) => void): () => void;
+  /** Live link to Moonlight: told now and on every change whether it's up. Only the real add-on has one. */
+  connection?(fn: (up: boolean) => void): () => void;
+  /** Try the live link again straight away instead of waiting for the next attempt. */
+  reconnect?(): void;
   /** Notifications and timers shown on this device. */
   alerts(): Promise<AlertsNow>;
   createAlert(a: AlertIn): Promise<ScreenAlert>;
