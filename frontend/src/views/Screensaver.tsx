@@ -1,8 +1,9 @@
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PhotoAlbum, SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
-import { IconCamera, IconDrop, IconPhotos, WeatherIcon } from "../components/icons";
+import { ApiError } from "../api/types";
+import { IconCamera, IconDrop, IconEyeOff, IconPhotos, WeatherIcon } from "../components/icons";
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 import { alertTitle, useSaverCamera } from "./SecurityAlerts";
 import { CameraVideo } from "./SecurityView";
@@ -36,7 +37,7 @@ function Scene({ s }: { s: (typeof SCENES)[number] }) {
 const REFETCH_MS = 10 * 60_000; // the server refreshes its Immich list every few minutes
 
 export function Screensaver({ onWake }: { onWake: () => void }) {
-  const { settings } = useApp();
+  const { api, settings } = useApp();
   const now = useNow(10000);
   const seconds = Math.max(3, settings?.screensaver_seconds ?? 10);
   const [broken, setBroken] = useState(""); // the photo list whose images wouldn't load (Immich down)
@@ -59,17 +60,39 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const music = !!np?.show;
   const day = weather?.daily.find((d) => d.date === t);
   const cam = useSaverCamera(); // someone at a camera: its video takes the photo's place until they've gone
+  const [hiding, setHiding] = useState<SlidePhoto | null>(null); // asking "hide this photo?"; the slideshow waits
+  const [note, setNote] = useState<{ text: string; at: number } | null>(null);
+  const hide = async (photo: SlidePhoto) => {
+    setHiding(null);
+    try {
+      const r = await api.hidePhoto(photo.id);
+      forget(photo.id, albums);
+      setShown(null);
+      const out = r.removed.length ? ` · taken out of ${names(r.removed)} in Immich` : "";
+      const kept = r.failed.length ? ` · still in ${names(r.failed)} (${r.failed[0].error})` : "";
+      setNote({ text: `Photo hidden${out}${kept}`, at: Date.now() });
+    } catch (e) {
+      setNote({ text: e instanceof ApiError ? `Couldn't hide it: ${e.message}` : "Couldn't hide the photo", at: Date.now() });
+    }
+  };
   return (
     <div className="screensaver" onClick={onWake}>
       {data && (usePhotos
-        ? <PhotoShow key={listKey} albums={albums} seconds={seconds} onFail={() => setBroken(listKey)} onShow={setShown}
+        ? <PhotoShow key={listKey} albums={albums} seconds={seconds} paused={!!hiding} onFail={() => setBroken(listKey)} onShow={setShown}
             onAlbum={(name) => setAlbum({ name, at: Date.now() })} />
         : <SceneShow seconds={seconds} />)}
       {cam && <div className="ss-cam"><CameraVideo key={cam.camera} cam={cam} width={1920} fit="contain" /></div>}
       <div className="ss-shade" />
       {cam && <div className="ss-cam-label"><span className="sec-live-dot" />{alertTitle(cam)}</div>}
       {!cam && usePhotos && shown && settings?.photo_details !== false && <PhotoCaption photo={shown} />}
-      {!cam && usePhotos && album && <AlbumToast key={album.at} name={album.name} />}
+      {!cam && usePhotos && album && !note && <AlbumToast key={album.at} name={album.name} />}
+      {!cam && usePhotos && shown && (
+        <button className="ss-hide" aria-label="Don't show this photo again" onClick={(e) => { e.stopPropagation(); setHiding(shown); }}>
+          <IconEyeOff size={30} />
+        </button>
+      )}
+      {note && <AlbumToast key={note.at} name={note.text} icon={<IconEyeOff size={22} />} onDone={() => setNote(null)} />}
+      {hiding && <HideConfirm photo={hiding} albums={albums} onHide={() => hide(hiding)} onCancel={() => setHiding(null)} />}
       <div className="ss-info">
         {weather && <div className="ss-wx">
           <WeatherIcon condition={weather.current.condition} size={44} /> {weather.current.temp}°
@@ -102,10 +125,51 @@ function PhotoCaption({ photo }: { photo: SlidePhoto }) {
 }
 
 /** The album's name, for a few seconds when the screensaver starts and when it moves on to another album. */
-function AlbumToast({ name }: { name: string }) {
+function AlbumToast({ name, icon, onDone }: { name: string; icon?: ReactNode; onDone?: () => void }) {
   const [on, setOn] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setOn(false), 5000); return () => clearTimeout(t); }, []);
-  return on ? <div className="ss-album" role="status"><IconPhotos size={22} /> {name}</div> : null;
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => { const t = setTimeout(() => { setOn(false); done.current?.(); }, 5000); return () => clearTimeout(t); }, []);
+  return on ? <div className="ss-album" role="status">{icon ?? <IconPhotos size={22} />} {name}</div> : null;
+}
+
+const names = (xs: { name: string }[]) => xs.map((x) => x.name).join(", ");
+/** The real Immich albums a photo is playing from (not favourites or "on this day"). */
+const albumsWith = (id: string, albums: Album[]) =>
+  albums.filter((a) => a.id !== "favorites" && a.id !== "on-this-day" && a.photos.some((p) => p.id === id));
+
+/** "Hide this photo?" over the screensaver. Taps stay inside it, so answering doesn't wake the screen; it gives up
+ * after half a minute if nobody answers. */
+function HideConfirm({ photo, albums, onHide, onCancel }: { photo: SlidePhoto; albums: Album[]; onHide: () => void; onCancel: () => void }) {
+  const from = albumsWith(photo.id, albums);
+  const cancel = useRef(onCancel);
+  cancel.current = onCancel;
+  useEffect(() => { const t = setTimeout(() => cancel.current(), 30_000); return () => clearTimeout(t); }, []);
+  return (
+    <div className="ss-confirm-bg" onClick={(e) => { e.stopPropagation(); onCancel(); }}>
+      <div className="ss-confirm" role="dialog" aria-label="Hide this photo?" onClick={(e) => e.stopPropagation()}>
+        <img src={photo.url} alt="" />
+        <div>
+          <b>Hide this photo?</b>
+          <p>{from.length
+            ? <>It won't be shown on the screens again, and it's taken out of <b>{names(from)}</b> in Immich.</>
+            : <>It won't be shown on the screens again. Nothing changes in Immich.</>}
+          </p>
+          <div className="ss-confirm-btns">
+            <button className="btn ghost" onClick={onCancel}>Cancel</button>
+            <button className="btn danger-fill" onClick={onHide}><IconEyeOff size={20} /> Hide photo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Keep this screen's place in the album when a photo before it is hidden, so it doesn't skip the next one. */
+function forget(id: string, albums: Album[]) {
+  const place = loadPlace();
+  const i = albums.find((a) => a.id === place.album)?.photos.findIndex((p) => p.id === id) ?? -1;
+  if (i >= 0 && place.next !== undefined && i < place.next) savePlace({ ...place, next: place.next - 1 });
 }
 
 function SceneShow({ seconds }: { seconds: number }) {
@@ -172,9 +236,11 @@ function load(url: string): Promise<number> {
 /** Immich photos, one whole album at a time (oldest photo first), crossfading, with a slow Ken Burns zoom (off for
  * prefers-reduced-motion). Carries on where this screen was up to; `onAlbum` names the album when it starts.
  * A photo that won't load is skipped; if several in a row fail, `onFail` hands back to the painted scenes. */
-function PhotoShow({ albums: list, seconds, onFail, onShow, onAlbum }: {
-  albums: Album[]; seconds: number; onFail: () => void; onShow: (p: SlidePhoto) => void; onAlbum: (name: string) => void;
+function PhotoShow({ albums: list, seconds, paused, onFail, onShow, onAlbum }: {
+  albums: Album[]; seconds: number; paused: boolean; onFail: () => void; onShow: (p: SlidePhoto) => void; onAlbum: (name: string) => void;
 }) {
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const box = useRef<HTMLDivElement>(null);
   const [albums] = useState(list); // keyed by the list's ids, so a refetch doesn't restart it
   const [slides, setSlides] = useState<Slide[]>([]);
@@ -224,7 +290,7 @@ function PhotoShow({ albums: list, seconds, onFail, onShow, onAlbum }: {
     };
     advance();
     if (total < 2) return () => { alive = false; };
-    const t = setInterval(advance, seconds * 1000);
+    const t = setInterval(() => { if (!pausedRef.current) advance(); }, seconds * 1000);
     return () => { alive = false; clearInterval(t); };
   }, [albums, seconds]);
   const el = box.current;

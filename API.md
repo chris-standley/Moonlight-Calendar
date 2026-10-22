@@ -595,7 +595,8 @@ see the key. Moonlight stores no photos of its own. Written against the Immich A
 `GET /api/albums`, `POST /api/search/metadata` (album contents and favourites; the flat `albumIds`/`isFavorite`/`type`
 fields, falling back to the v3.2+ `filter` form if a server rejects them), `GET /api/memories?for=<date>&type=on_this_day`
 and `GET /api/assets/{id}/thumbnail?size=preview` (EXIF orientation already applied), all with the `x-api-key` header.
-The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day").
+The key needs `album.read`, `asset.read`, `asset.view` (and `memory.read` for "on this day", `albumAsset.delete` /
+`albumAsset.create` for the hide button and Show again).
 
 ImmichConfig = `{configured, server_url, key_set: bool, mode: "albums"|"all", album_ids: [id], excluded_album_ids: [id],
 festive: bool, festive_now: bool, favorites: bool, memories: bool, skip_cert_check: bool,
@@ -633,8 +634,16 @@ ImmichAlbum = `{id, name, asset_count, shared, updated_at|null}` (`updated_at` =
   else the town Immich found for it (else region, else country); null without location data. Zones are read from HA
   over the same connection as the weather at each refresh; without HA only towns are used. `url` is an absolute path; clients
   prefix their base path.
+- `POST /api/screensaver/photos/{id}/hide` -> `{ok: true, removed: [{id, name}], failed: [{id, name, error}]}`: the
+  screensaver's hide button (no PIN; the screen asks first). Never shows the photo again and takes it out of the Immich
+  albums it is shown from (`DELETE /api/albums/{id}/assets`, needs `albumAsset.delete`), not favourites or memories.
+  It is hidden even when Immich refuses (`failed`: a shared album the key's user can only view, a key without the
+  permission, Immich down). 404 unless the id is in the current photo list.
+- `GET /api/immich/hidden` -> `[{id, albums: [{id, name}], hidden_at, url}]` hidden photos, newest first (`albums` = taken out of).
+- `POST /api/immich/hidden/{id}/restore` `{pin}` -> `{ok: true, restored: [{id, name}], failed: [{id, name, error}]}`:
+  show it again, back into the albums it was taken out of (`PUT /api/albums/{id}/assets`, `albumAsset.create`).
 - `GET /api/immich/assets/{id}/preview` -> the preview image streamed from Immich, `Cache-Control: private, max-age=86400`.
-  404 unless the id is in the current photo list (so the proxy can't read the rest of the library), 502 if Immich fails.
+  404 unless the id is in the current photo list or hidden (so the proxy can't read the rest of the library), 502 if Immich fails.
   Needs the same auth as the rest of `/api` (paired screens send the cookie with `<img>` requests).
 Changes broadcast the `photos` topic.
 

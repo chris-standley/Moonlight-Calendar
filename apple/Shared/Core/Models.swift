@@ -416,6 +416,20 @@ struct MediaRooms: Codable {
     let rooms: [MediaRoom]
 }
 
+/// POST /api/screensaver/photos/{id}/hide: the albums it was taken out of, and any Immich wouldn't change.
+struct HideResult: Decodable {
+    struct AlbumRef: Decodable { let id: String; let name: String; var error: String? = nil }
+    let removed: [AlbumRef]
+    let failed: [AlbumRef]
+
+    var message: String {
+        var out = "Photo hidden"
+        if !removed.isEmpty { out += " · taken out of \(removed.map(\.name).joined(separator: ", ")) in Immich" }
+        if let f = failed.first { out += " · still in \(failed.map(\.name).joined(separator: ", ")) (\(f.error ?? "Immich said no"))" }
+        return out
+    }
+}
+
 struct Photo: Codable, Identifiable, Hashable {
     let id: String
     let url: String

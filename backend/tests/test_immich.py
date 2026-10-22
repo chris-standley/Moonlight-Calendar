@@ -50,6 +50,9 @@ class FakeImmich:
                         self.private: "2024-01-01T10:00:00.000Z"}
         self.favs = [asset(isFavorite=True), asset("VIDEO", isFavorite=True)]
         self.memory = [asset(), asset("VIDEO")]
+        self.removed = [a for xs in self.photos.values() for a in xs]  # to put back the same asset
+        self.view_only: set[str] = set()  # shared albums the key's user can only look at
+        self.no_album_edit = False  # a key without albumAsset.delete / albumAsset.create
 
     def all_assets(self):
         return [a for xs in self.photos.values() for a in xs] + self.favs + self.memory
@@ -69,6 +72,29 @@ class FakeImmich:
                 {"id": k, "albumName": self.names[k], "assetCount": len(v), "shared": False, "albumThumbnailAssetId": None,
                  "updatedAt": self.updated[k], "lastModifiedAssetTimestamp": self.updated[k]}
                 for k, v in self.photos.items()])
+        if path.startswith("/api/albums/") and path.endswith("/assets") and req.method in ("PUT", "DELETE"):
+            if self.no_album_edit:
+                return httpx.Response(403, json={"message": "Missing required permission"})
+            album = path.split("/")[3]
+            if album not in self.photos:
+                return httpx.Response(400, json={"message": "Not found or no album.read access"})
+            out = []
+            for aid in json.loads(req.content)["ids"]:
+                items = self.photos[album]
+                there = next((a for a in items if a["id"] == aid), None)
+                if album in self.view_only:
+                    out.append({"id": aid, "success": False, "error": "no_permission"})
+                elif req.method == "DELETE":
+                    if there:
+                        items.remove(there)
+                        self.updated[album] = "2026-10-22T10:00:00.000Z"
+                    out.append({"id": aid, "success": bool(there), **({} if there else {"error": "not_found"})})
+                else:
+                    if not there:
+                        items.append(next((a for a in self.removed if a["id"] == aid), asset(id=aid)))
+                        self.updated[album] = "2026-10-22T11:00:00.000Z"
+                    out.append({"id": aid, "success": not there, **({"error": "duplicate"} if there else {})})
+            return httpx.Response(200, json=out)
         if path == "/api/search/metadata" and req.method == "POST":
             return self.search(json.loads(req.content))
         if path == "/api/memories":
@@ -520,3 +546,52 @@ def test_festive_and_winter_names():
         assert immich.is_winter(name), name
     for name in ("Ice cream", "Skipton", "Snowdonia"):
         assert not immich.is_winter(name), name
+
+
+def test_hide_photo_removes_it_from_its_albums(client, fake):
+    shared = fake.holiday
+    both = fake.photos[fake.garden][0]
+    fake.photos[shared].append(both)  # in Garden and Holiday 2025
+    connect(client, fake, album_ids=[fake.holiday, fake.garden, fake.private], favorites=True)
+    body = client.get("/api/screensaver/photos").json()
+    assert both["id"] in {p["id"] for p in body["photos"]}
+    fake.view_only.add(shared)  # Holiday 2025 is someone else's shared album
+    r = client.post(f"/api/screensaver/photos/{both['id']}/hide")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["removed"] == [{"id": fake.garden, "name": "Garden"}]
+    assert out["failed"] == [{"id": shared, "name": "Holiday 2025", "error": "Immich only lets you view this album"}]
+    assert both not in fake.photos[fake.garden] and both in fake.photos[shared]
+    # Gone from the screens straight away, and after a refresh (still in Holiday 2025 in Immich).
+    body = client.get("/api/screensaver/photos").json()
+    assert both["id"] not in {p["id"] for p in body["photos"]}
+    assert all(both["id"] not in a["photos"] for a in body["albums"])
+    immich.cache.fetched_at -= immich.REFRESH_SECONDS + 1
+    body = client.get("/api/screensaver/photos").json()
+    assert both["id"] not in {p["id"] for p in body["photos"]}
+    # Settings lists it, with a thumbnail the proxy still serves.
+    hidden = client.get("/api/immich/hidden").json()
+    assert [h["id"] for h in hidden] == [both["id"]] and hidden[0]["albums"] == [{"id": fake.garden, "name": "Garden"}]
+    assert client.get(hidden[0]["url"]).status_code == 200
+    assert client.post(f"/api/screensaver/photos/{both['id']}/hide").status_code == 404  # not on the screens now
+    # Show again: needs the PIN, goes back into Garden.
+    assert client.post(f"/api/immich/hidden/{both['id']}/restore", json={"pin": "0000"}).status_code == 403
+    r = client.post(f"/api/immich/hidden/{both['id']}/restore", json={"pin": PIN}).json()
+    assert r["restored"] == [{"id": fake.garden, "name": "Garden"}] and r["failed"] == []
+    assert both in fake.photos[fake.garden] and client.get("/api/immich/hidden").json() == []
+    assert both["id"] in {p["id"] for p in client.get("/api/screensaver/photos").json()["photos"]}
+
+
+def test_hide_photo_when_immich_refuses_or_not_in_an_album(client, fake):
+    connect(client, fake, favorites=True)
+    fav = fake.favs[0]["id"]
+    r = client.post(f"/api/screensaver/photos/{fav}/hide").json()  # a favourite: nothing to take it out of
+    assert r == {"ok": True, "removed": [], "failed": []}
+    fake.no_album_edit = True
+    one = fake.photos[fake.holiday][0]["id"]
+    r = client.post(f"/api/screensaver/photos/{one}/hide").json()
+    assert r["removed"] == [] and "albumAsset.delete" in r["failed"][0]["error"]
+    ids = {p["id"] for p in client.get("/api/screensaver/photos").json()["photos"]}
+    assert not ids & {fav, one}
+    assert client.post(f"/api/screensaver/photos/{uid()}/hide").status_code == 404
+    assert client.post("/api/screensaver/photos/not-a-uuid/hide").status_code == 404
