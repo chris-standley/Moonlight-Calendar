@@ -838,7 +838,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ss-np-eq i:nth-child(3) { animation-delay: -0.7s; }
 @keyframes eq { from { height: 20%; } to { height: 100%; } }
 /* Controls on the card: play/pause/skip and volume, so music can be changed without waking the screen. */
-.ss-np { align-items: stretch; width: 30rem; max-width: 46vw; color: #fff; cursor: default; }
+.ss-np { align-items: stretch; width: 30rem; max-width: 46vw; color: #fff; cursor: pointer; }
 .ss-np .np-art { align-self: center; }
 .ss-np-main { display: flex; flex-direction: column; justify-content: space-between; gap: 0.2rem; min-width: 0; flex: 1; }
 .ss-np-ctl { display: flex; flex-direction: column; gap: 0; }

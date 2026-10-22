@@ -118,7 +118,7 @@ If a screen's speaker is a Music Assistant player that's idle while someone play
 the screen shows and controls what the Sonos app is playing.
 
 The screensaver shows the album art with play/pause, skip and volume while music is playing (and for 15 minutes after
-it's paused); tapping the controls doesn't wake the screen.
+it's paused); tapping the controls doesn't wake the screen, and tapping anywhere else on the card opens the Music tab.
 
 Moonlight follows the speaker over Home Assistant's WebSocket API, so changes made in the Sonos or Music Assistant
 apps appear straight away; while Home Assistant restarts it falls back to checking every few seconds. Album art is
