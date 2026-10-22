@@ -38,6 +38,10 @@ into its `moonlight/` folder, so edit them here, not there.
 To release: bump `version` in `addon/config.yaml` and `__version__` in `backend/moonlight/__init__.py` (CI checks
 they match) and merge to main; HA then offers the update.
 
+The integration releases separately: bump `version` in `custom_components/moonlight/manifest.json` and merge to
+main. The `Integration release` workflow then publishes a GitHub release tagged `v<version>`, which is what HACS
+offers as the update. Integration changes merged without a version bump are not offered.
+
 Build an image locally from the repo root: `docker build -f addon/Dockerfile --build-arg
 BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20 .` (the Dockerfile builds the frontend itself).
 A local add-on copied into `/addons` is not set up: HA builds those from the add-on folder alone, and this image
