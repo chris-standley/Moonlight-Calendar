@@ -103,6 +103,10 @@ struct Slideshow: View {
     @State private var slide: Slide?
     /// Photos already shown beside another one, so they don't come round again on their own straight after.
     @State private var paired: Set<String> = []
+    /// Hidden with the eye: skipped from now on (Moonlight leaves them out of the list next time).
+    @State private var hidden: Set<String> = []
+    @State private var askHide = false
+    @State private var note: String?
 
     /// What's on screen: one photo, or two portrait ones from the same day side by side.
     struct Slide: Equatable {
@@ -157,26 +161,52 @@ struct Slideshow: View {
                     .transition(.opacity)
                 }
             }
+            // Press the remote to hide the photo for good (it asks first).
+            Image(systemName: "eye.slash").font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+                .shadow(color: .black.opacity(0.6), radius: 10)
+                .padding(.top, 50).padding(.leading, 70)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if let note {
+                Label(note, systemImage: "eye.slash").font(Theme.font(26, .heavy)).foregroundStyle(.white)
+                    .padding(.horizontal, 28).padding(.vertical, 14)
+                    .background(.black.opacity(0.45), in: Capsule())
+                    .padding(.top, 50)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .transition(.opacity)
+            }
             if paused {
                 Image(systemName: "pause.fill").font(.system(size: 60)).foregroundStyle(.white.opacity(0.8))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .focusable()
+        .onTapGesture { if !photos.isEmpty { askHide = true } }
+        .confirmationDialog("Hide this photo?", isPresented: $askHide, titleVisibility: .visible) {
+            Button("Hide photo", role: .destructive) { Task { await hide(photos[index % photos.count]) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("It won't be shown on the screens again, and it's taken out of its albums in Immich.")
+        }
+        .task(id: note) {
+            guard note != nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled { withAnimation { note = nil } }
+        }
         .onPlayPauseCommand { paused.toggle() }
         .onMoveCommand { dir in
             if dir == .right { advance(1) }
             if dir == .left { advance(-1) }
         }
         .onExitCommand { dismiss() }
-        .task(id: "\(index)|\(paused)") {
+        .task(id: "\(index)|\(paused)|\(askHide)") {
             if slide?.index != index, let next = await load(index) {
                 withAnimation(.easeInOut(duration: 1.2)) { slide = next }
                 if let id = next.secondId { paired.insert(id) }
             }
             zoom = false
             withAnimation(.linear(duration: seconds)) { zoom = true }
-            guard !paused else { return }
+            guard !paused, !askHide else { return }
             try? await Task.sleep(for: .seconds(seconds))
             if !Task.isCancelled { advance(1) }
         }
@@ -186,14 +216,26 @@ struct Slideshow: View {
     }
 
     private func advance(_ step: Int) {
-        guard !photos.isEmpty else { return }
+        guard !photos.isEmpty, hidden.count < photos.count else { return }
         if paired.count >= photos.count - 1 { paired = [] }
         var next = (index + step + photos.count) % photos.count
-        // Skip photos already shown as the second of a pair.
-        for _ in 0..<photos.count where paired.contains(photos[next].id) {
+        // Skip photos already shown as the second of a pair, and hidden ones.
+        for _ in 0..<photos.count where paired.contains(photos[next].id) || hidden.contains(photos[next].id) {
             next = (next + step + photos.count) % photos.count
         }
         index = next
+    }
+
+    private func hide(_ photo: Photo) async {
+        guard let api = model.api else { return }
+        do {
+            let r = try await api.hidePhoto(photo.id)
+            hidden.insert(photo.id)
+            withAnimation { note = r.message }
+            if hidden.count >= photos.count { dismiss() } else { advance(1) }
+        } catch {
+            withAnimation { note = "Couldn't hide the photo" }
+        }
     }
 
     /// The photo at `i`; if it's portrait, with another portrait one taken the same day at a different time.
@@ -204,7 +246,7 @@ struct Slideshow: View {
         var out = Slide(index: i, main: main)
         guard isPortrait(main), let day = photo.taken_at?.prefix(10), day.count == 10 else { return out }
         let candidates = photos.filter {
-            $0.id != photo.id && !paired.contains($0.id) && $0.taken_at?.prefix(10) == day && $0.taken_at != photo.taken_at
+            $0.id != photo.id && !paired.contains($0.id) && !hidden.contains($0.id) && $0.taken_at?.prefix(10) == day && $0.taken_at != photo.taken_at
         }
         // Closest in time first; landscape ones are passed over.
         for other in candidates.sorted(by: { gap($0, photo) < gap($1, photo) }).prefix(6) {

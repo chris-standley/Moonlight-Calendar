@@ -431,11 +431,50 @@ export function ScreensaverPanel({ onScreensaver }: { onScreensaver: () => void 
           onChange={(v) => save({ photo_details: v === "show" }, "Change photo details")}
           options={[{ value: "show", label: "Show" }, { value: "hide", label: "Hide" }]} />
       </div>
+      {cfg?.configured && <HiddenPhotos />}
       <p className="muted connect-note">Places use your Home Assistant zones (like Home) when a photo was taken inside one, otherwise the town.</p>
       <p className="muted connect-note">When each screen starts the screensaver is set per screen under Screens.</p>
       <div className="set-row"><span>Try it</span><button className="btn ghost" onClick={onScreensaver}>Show now</button></div>
       {editing && cfg && <ImmichSheet cfg={cfg} onClose={() => setEditing(false)} />}
     </section>
+  );
+}
+
+/** Photos hidden with the screensaver's eye button, newest first, each with "Show again" (back into its albums). */
+const HIDDEN_PAGE = 12;
+
+/** Photos hidden with the screensaver's eye button: just the count until opened, then newest first a page at a time,
+ * each with "Show again" (back into its albums). */
+function HiddenPhotos() {
+  const { api, askPin, toast } = useApp();
+  const [count] = useData((a) => a.hiddenPhotos(0).then((r) => r.total), ["photos"], []);
+  const [open, setOpen] = useState(false);
+  const [pages, setPages] = useState(1);
+  const [page] = useData((a) => (open ? a.hiddenPhotos(pages * HIDDEN_PAGE) : Promise.resolve(null)), ["photos"], [open, pages]);
+  if (!count) return null;
+  async function restore(id: string) {
+    const pin = await askPin("Show this photo on the screensaver again? It goes back into the albums it was taken out of.");
+    if (!pin) return;
+    try { await api.restorePhoto(id, pin); toast("Photo back on the screensaver"); }
+    catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't show it again"); }
+  }
+  const list = page?.photos ?? [];
+  return (
+    <div className="set-col hidden-photos">
+      <div className="set-row hidden-head"><span>Hidden photos ({count})</span>
+        <button className="btn ghost small" aria-expanded={open} onClick={() => { setOpen(!open); setPages(1); }}>{open ? "Hide list" : "Show"}</button>
+      </div>
+      {open && <div className="hidden-grid">
+        {list.map((h) => (
+          <div key={h.id} className="hidden-photo">
+            <img src={h.url} alt="" loading="lazy" />
+            <small>{h.albums.length ? `From ${h.albums.map((a) => a.name).join(", ")}` : "Not in an album"}</small>
+            <button className="btn ghost small" onClick={() => restore(h.id)}>Show again</button>
+          </div>
+        ))}
+      </div>}
+      {open && page && page.total > list.length && <button className="btn ghost small" onClick={() => setPages(pages + 1)}>Show more</button>}
+    </div>
   );
 }
 
@@ -527,7 +566,8 @@ function ImmichSheet({ cfg, onClose }: { cfg: ImmichConfig; onClose: () => void 
         {https && skipCert && <p className="muted connect-note">For a self-signed certificate, or one made for a domain name while you enter the IP address. Only use it on your home network.</p>}
         <p className="muted connect-note">
           In Immich: Account Settings › API Keys › New API Key (permissions album.read, asset.read and asset.view;
-          memory.read for "on this day"). The key stays on this Moonlight add-on and is never sent to the screens.
+          memory.read for "on this day"; albumAsset.delete and albumAsset.create so the screensaver's hide button can take a photo
+          out of its album). The key stays on this Moonlight add-on and is never sent to the screens.
           {api.mode === "demo" && " (Demo: any address and key work; the key “wrong” is rejected.)"}
         </p>
         {error && <div className="connect-error" role="alert">{error}</div>}

@@ -468,12 +468,21 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ss-date { font-size: 1.8rem; font-weight: 700; margin-top: 0.3rem; }
 /* Weather on top, then the clock and date. The icon gets its own shadow (text-shadow doesn't reach SVG), so a
    pale cloud still shows on a bright photo. */
-.ss-wx { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 2rem; font-weight: 800; margin-bottom: 0.6rem; padding: 0.25rem 1rem 0.25rem 0.6rem; border-radius: 1.4rem; background: rgba(0, 0, 0, 0.3); -webkit-backdrop-filter: blur(0.6rem); backdrop-filter: blur(0.6rem); }
+.ss-wx { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 2rem; font-weight: 800; margin-bottom: 0.6rem; text-shadow: 0 0.05rem 0.2rem rgba(0, 0, 0, 0.55), 0 0.1rem 1rem rgba(0, 0, 0, 0.45); }
 .ss-wx svg { filter: drop-shadow(0 0.1rem 0.5rem rgba(0, 0, 0, 0.45)); }
 .ss-hilo { display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.5rem; font-size: 1.3rem; font-weight: 700; opacity: 0.9; }
 .ss-caption { position: absolute; top: 1.4rem; right: 2rem; max-width: 50%; display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; font-weight: 700; opacity: 0.85; text-shadow: 0 0.1rem 0.6rem rgba(0, 0, 0, 0.6); animation: fade 1.6s; }
 .ss-album { position: absolute; top: 1.4rem; left: 50%; transform: translateX(-50%); max-width: 60%; display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.5rem 1.2rem 0.5rem 0.9rem; border-radius: 999px; background: rgba(0, 0, 0, 0.38); -webkit-backdrop-filter: blur(0.8rem); backdrop-filter: blur(0.8rem); font-size: 1.25rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0.1rem 0.6rem rgba(0, 0, 0, 0.4); animation: ss-album 5s ease both; pointer-events: none; }
 @keyframes ss-album { 0% { opacity: 0; transform: translate(-50%, -0.6rem); } 10%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+.ss-hide { position: absolute; top: 1rem; left: 1.4rem; width: 3.6rem; height: 3.6rem; display: grid; place-items: center; border-radius: 50%; color: #fff; opacity: 0.6; transition: opacity 0.2s; animation: fade 1.6s; }
+.ss-hide:active { opacity: 1; }
+.ss-hide svg { filter: drop-shadow(0 0.05rem 0.2rem rgba(0, 0, 0, 0.6)) drop-shadow(0 0.1rem 0.8rem rgba(0, 0, 0, 0.4)); }
+.ss-confirm-bg { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 1.5rem; background: rgba(0, 0, 0, 0.45); animation: fade 0.3s; }
+.ss-confirm { display: flex; align-items: center; gap: 1.4rem; max-width: 36rem; padding: 1.2rem; border-radius: 1.4rem; background: var(--surface); color: var(--text); box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.4); }
+.ss-confirm img { flex: none; width: 9rem; height: 9rem; object-fit: cover; border-radius: 0.9rem; }
+.ss-confirm > div > b { font-size: 1.3rem; }
+.ss-confirm p { margin: 0.4rem 0 1rem; color: var(--muted); line-height: 1.4; }
+.ss-confirm-btns { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .ss-cap-text { display: flex; flex-direction: column; align-items: flex-end; text-align: right; line-height: 1.3; min-width: 0; }
 .ss-cap-text span + span { font-weight: 600; opacity: 0.9; }
 .ss-caption svg { flex: none; filter: drop-shadow(0 0.1rem 0.4rem rgba(0, 0, 0, 0.5)); }
@@ -564,6 +573,10 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-phone .ss-info { left: 1.4rem; bottom: 2rem; }
 .layout-phone .ss-time { font-size: 4rem; }
 .layout-phone .ss-album { top: auto; bottom: 11rem; max-width: 80%; }
+.layout-phone .ss-hide { top: auto; left: auto; right: 1rem; bottom: 1.6rem; }
+.layout-phone .ss-confirm { flex-direction: column; align-items: stretch; text-align: center; }
+.layout-phone .ss-confirm img { width: 100%; height: 12rem; }
+.layout-phone .ss-confirm-btns { justify-content: center; }
 .layout-phone .ss-caption { display: none; } /* the music card and next event sit at the top */
 .layout-phone .ss-right { left: 1.2rem; right: 1.2rem; top: 1.4rem; bottom: auto; align-items: stretch; max-width: none; }
 
@@ -644,6 +657,12 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .immich-ok { margin-top: 0.6rem; padding: 0.7rem 1rem; border-radius: 0.8rem; background: rgba(47, 181, 138, 0.12); color: var(--ok-text); font-weight: 800; }
 .layout-phone .rail-item { min-width: 3rem; }
 
+.hidden-head { width: 100%; padding: 0; border: 0; }
+.hidden-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.8rem; width: 100%; }
+.hidden-photo { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.hidden-photo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 0.7rem; background: var(--line); }
+.hidden-photo small { color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hidden-photo .btn { align-self: flex-start; }
 /* Screensaver with Immich photos: crossfade + slow Ken Burns zoom */
 .ss-photos { position: absolute; inset: 0; overflow: hidden; }
 .ss-photo { position: absolute; inset: 0; overflow: hidden; background: #000; }
@@ -665,6 +684,13 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .cal-panel { grid-column: 1 / -1; }
 .cal-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; }
 .cal-panel-head .panel-title { margin-bottom: 0; }
+.cal-fold { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text); }
+.cal-fold svg { color: var(--muted); transition: transform 0.2s; }
+.cal-fold[aria-expanded="true"] svg { transform: rotate(180deg); }
+.cal-folded { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; width: 100%; text-align: left; font-weight: 600; }
+.cal-folded > span { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; }
+.cal-folded > span.s-auth_failed { color: var(--danger); }
+.cal-folded > span.s-error { color: var(--warn-text); }
 .cal-intro { margin: 0.4rem 0 0.2rem; max-width: 46rem; line-height: 1.45; font-weight: 600; }
 .acct { border-top: 1px solid var(--line); padding: 0.8rem 0 0.4rem; }
 .acct:first-of-type { margin-top: 0.4rem; }
@@ -1641,7 +1667,7 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-compact.portrait .en-stage .en-plan-item b { font-size: 0.85rem; }
 /* Screensaver: the photo's details along the top, then the music and next event; the clock stays bottom left */
 .layout-compact.portrait .ss-info { left: 1.6rem; bottom: 2rem; }
-.layout-compact.portrait .ss-caption { left: 1.6rem; right: 1.6rem; max-width: none; justify-content: flex-end; }
+.layout-compact.portrait .ss-caption { left: 5rem; right: 1.6rem; max-width: none; justify-content: flex-end; }
 .layout-compact.portrait .ss-album { top: auto; bottom: 14.5rem; max-width: 85%; }
 .layout-compact.portrait .ss-right { left: 1.6rem; right: 1.6rem; top: 4.4rem; bottom: auto; align-items: stretch; max-width: none; }
 .layout-compact.portrait .ss-np { left: 0; right: 0; top: 0; bottom: auto; width: auto; max-width: none; }

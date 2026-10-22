@@ -1,4 +1,4 @@
-import { AlertsNow, Api, ApiError, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, Topic, UploadedImage } from "./types";
+import { AlertsNow, Api, ApiError, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, HiddenPhoto, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 const PING_MS = 25_000;
@@ -223,6 +223,12 @@ export function httpApi(base = ""): Api {
       const r = await get<ScreensaverPhotos>("/api/screensaver/photos");
       return { ...r, photos: r.photos.map((p) => ({ ...p, url: base + p.url })) };
     },
+    hidePhoto: (id) => req("POST", `/api/screensaver/photos/${id}/hide`),
+    async hiddenPhotos(limit, offset = 0) {
+      const r = await get<{ total: number; photos: HiddenPhoto[] }>(`/api/immich/hidden?limit=${limit}&offset=${offset}`);
+      return { ...r, photos: r.photos.map((p) => ({ ...p, url: base + p.url })) };
+    },
+    restorePhoto: async (id, pin) => { await req("POST", `/api/immich/hidden/${id}/restore`, { pin }); },
     nursery: () => get("/api/nursery"),
     saveNursery: (c) => req("PUT", "/api/nursery", c),
     disconnectNursery: async (pin) => { await req("DELETE", "/api/nursery", { pin }); },
