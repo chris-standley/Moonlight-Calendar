@@ -52,6 +52,7 @@ addresses still work.
 - Compact: a small touch screen, e.g. Touch Display 2, 1920x1200, TouchKio at 2x zoom = 960x600 CSS px. Opens on Today.
   Mounted upright (1200x1920, 600x960 CSS px) it switches to a portrait arrangement of every section by itself: the
   `portrait` class on `.app` follows the app's own box, so the demo preview's "Compact portrait" frame shows it too.
+  Upright, the menu is a bottom bar: up to four tabs chosen per screen (setup `bar`, else the first four) and More.
 - Phone: a phone browser, or the HA sidebar and companion app via ingress.
 - iPhone, iPad and Apple TV: the native apps in [`apple/`](apple/README.md) find Moonlight on the network and pair with a code like the other screens.
 - Kiosks need an emoji font for chore icons: `sudo apt install fonts-noto-color-emoji` on Raspberry Pi OS.

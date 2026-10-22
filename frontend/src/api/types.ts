@@ -35,7 +35,10 @@ export interface Holiday { date: string; name: string }
 export interface HolidayCountry { code: string; name: string; subdivs: { code: string; name: string }[] }
 export type Section = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "nursery" | "security" | "energy";
 export const SECTIONS: Section[] = ["today", "calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security", "energy"];
-export interface ScreenSetup { start: Section; sections: Section[] }
+/** `bar`: up to four tabs kept in the bottom bar of a compact screen stood upright, the rest under More (unset = the menu's first four). */
+export interface ScreenSetup { start: Section; sections: Section[]; bar?: BarTab[] | null }
+export type BarTab = Section | "music" | "settings";
+export const BAR_MAX = 4;
 export const DEFAULT_SCREENS: Record<Layout, ScreenSetup> = {
   large: { start: "calendar", sections: ["calendar", "chores", "rewards", "meals", "recipes", "lists", "nursery", "security", "energy"] },
   compact: { start: "today", sections: SECTIONS.filter((s) => s !== "nursery") },
@@ -170,7 +173,7 @@ export interface Display {
   setup?: DisplaySetup; own_setup?: boolean;
 }
 /** A paired screen's setup: menu sections, the one it opens on, its speaker ("" = none), screensaver delay (0 = never). */
-export interface DisplaySetup { start: Section; sections: Section[]; speaker: string; idle_minutes: number }
+export interface DisplaySetup { start: Section; sections: Section[]; speaker: string; idle_minutes: number; bar?: BarTab[] | null }
 export interface DisplayPatch { pin: string; name?: string; layout?: Layout; setup?: Partial<DisplaySetup> | null }
 export const DEFAULT_IDLE: Record<Layout, number> = { large: 5, compact: 3, phone: 0 };
 export const STYLE_LABEL: Record<Layout, string> = { large: "Large", compact: "Compact", phone: "Phone" };

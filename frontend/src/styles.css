@@ -1570,6 +1570,13 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 
 /* Compact screen stood upright (the Touch Display 2 is portrait natively): the `portrait` class comes from the app's
    own box (see usePortrait in App), not the window, so the demo's preview frame shows it too. */
+/* The menu is a bottom bar: up to four chosen tabs and More (App.tsx), full width like a phone's tab bar */
+.layout-compact.portrait { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.layout-compact.portrait .main { grid-row: 1; }
+.layout-compact.portrait .rail { grid-row: 2; flex-direction: row; justify-content: space-around; width: auto; padding: 0.3rem 0.6rem 0.4rem; border-right: 0; border-top: 1px solid var(--line); gap: 0.2rem; }
+.layout-compact.portrait .rail-logo { display: none; }
+.layout-compact.portrait .rail-item { flex: 1 1 0; min-width: 0; max-width: 8rem; padding: 0.4rem 0.2rem 0.35rem; gap: 0.15rem; font-size: 0.75rem; }
+.layout-compact.portrait .rail-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layout-compact.portrait .topbar { gap: 0.7rem; }
 .layout-compact.portrait .tb-date { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .layout-compact.portrait .tb-time, .layout-compact.portrait .tb-wx { flex: none; }
@@ -1634,3 +1641,8 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .layout-compact.portrait .ss-np { left: 0; right: 0; top: 0; bottom: auto; width: auto; max-width: none; }
 .layout-compact.portrait .ss-right .ss-next { align-self: flex-start; }
 .layout-compact.portrait .ss-right:has(.ss-np) .ss-next { margin-top: 8rem; }
+/* More: the tabs that aren't in the bottom bar */
+.more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 0.6rem; }
+.more-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 1rem 0.4rem 0.8rem; border-radius: var(--radius); background: var(--surface-2); color: var(--text-2); font-weight: 800; }
+.more-item.on { background: var(--accent-soft); color: var(--accent); }
+.more-item:active { background: var(--line); }

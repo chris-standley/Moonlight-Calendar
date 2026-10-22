@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  ApiError, DEFAULT_IDLE, DEFAULT_SCREENS, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, Layout, MediaPlayerOption, SECTIONS, STYLE_LABEL,
+  ApiError, BAR_MAX, BarTab, DEFAULT_IDLE, DEFAULT_SCREENS, Display, DisplaySetup, ImmichAlbum, ImmichConfig, ImmichMode, Layout, MediaPlayerOption, SECTIONS, STYLE_LABEL,
   Section, Settings,
 } from "../api/types";
 import { useApp, useData, useNow } from "../state";
@@ -27,6 +27,9 @@ const STYLES: { layout: Layout; note: string }[] = [
 const SECTION_LABEL: Record<Section, string> = {
   today: "Today", calendar: "Calendar", chores: "Chores", rewards: "Rewards", meals: "Meals", recipes: "Recipes", lists: "Lists", nursery: "Nursery", security: "Security", energy: "Energy",
 };
+const TAB_LABEL: Record<BarTab, string> = { ...SECTION_LABEL, music: "Music", settings: "Settings" };
+/** The menu's order, with Music (there whenever the screen has a speaker) after Lists. */
+const MENU_ORDER: BarTab[] = [...SECTIONS.slice(0, 7), "music", ...SECTIONS.slice(7), "settings"];
 const SPEAKER_WHERE: Record<Layout, string> = {
   compact: "A Music section, a card on Today, and controls on the screensaver",
   large: "A Music section, a small player in the top bar, and controls on the screensaver",
@@ -172,13 +175,23 @@ function SetupSheet({ display, layout: initialLayout, players, playersError, onC
   const [start, setStart] = useState<Section>(initial.start);
   const [speaker, setSpeaker] = useState(initial.speaker);
   const [idle, setIdle] = useState(initial.idle_minutes);
+  const [bar, setBar] = useState<BarTab[] | null>(initial.bar?.length ? initial.bar : null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const shown = SECTIONS.filter((x) => sections.includes(x));
   const opensOn = shown.includes(start) ? start : shown[0];
-  const setup: DisplaySetup = { sections: shown, start: opensOn, speaker, idle_minutes: idle };
-  const changed = JSON.stringify(setup) !== JSON.stringify({ sections: initial.sections, start: initial.start, speaker: initial.speaker, idle_minutes: initial.idle_minutes });
+  // The bottom bar (compact screens stood upright): the chosen tabs, else the menu's first four.
+  const menu = MENU_ORDER.filter((x) => x === "settings" || (x === "music" ? !!speaker : shown.includes(x)));
+  const inBar = bar ? menu.filter((x) => bar.includes(x)) : menu.slice(0, BAR_MAX);
+  const setup: DisplaySetup = { sections: shown, start: opensOn, speaker, idle_minutes: idle, bar: bar && inBar };
+  const changed = JSON.stringify(setup) !== JSON.stringify({ sections: initial.sections, start: initial.start, speaker: initial.speaker,
+    idle_minutes: initial.idle_minutes, bar: initial.bar?.length ? menu.filter((x) => initial.bar!.includes(x)) : null });
   const title = display ? display.name : `${STYLE_LABEL[initialLayout]} screens`;
+  function toggleBar(x: BarTab) {
+    if (inBar.includes(x)) { const next = inBar.filter((y) => y !== x); setBar(next.length ? next : null); }
+    else if (inBar.length >= BAR_MAX) toast(`Up to ${BAR_MAX}: the rest go under More`);
+    else setBar(menu.filter((y) => y === x || inBar.includes(y)));
+  }
   function toggle(x: Section) {
     if (sections.includes(x)) { if (sections.length > 1) setSections(sections.filter((y) => y !== x)); }
     else setSections([...sections, x]);
@@ -196,7 +209,7 @@ function SetupSheet({ display, layout: initialLayout, players, playersError, onC
         });
       } else {
         await api.updateSettings({
-          pin, screens: { [layout]: { sections: shown, start: opensOn } },
+          pin, screens: { [layout]: { sections: shown, start: opensOn, bar: bar && inBar } },
           media_players: { [layout]: speaker }, idle_minutes: { [layout]: idle },
         });
       }
@@ -258,6 +271,15 @@ function SetupSheet({ display, layout: initialLayout, players, playersError, onC
             <button key={x} type="button" className={"chip-btn" + (opensOn === x ? " on" : "")} onClick={() => setStart(x)}>{SECTION_LABEL[x]}</button>
           ))}
         </div>
+        {layout === "compact" && menu.length > BAR_MAX + 1 && (<>
+          <label className="field-label">Bottom bar when upright</label>
+          <p className="muted connect-note">A compact screen stood on its end has its menu along the bottom. Pick up to {BAR_MAX} tabs for the bar; the rest go under More.</p>
+          <div className="chip-row">
+            {menu.map((x) => (
+              <button key={x} type="button" className={"chip-btn" + (inBar.includes(x) ? " on" : "")} aria-pressed={inBar.includes(x)} onClick={() => toggleBar(x)}>{TAB_LABEL[x]}</button>
+            ))}
+          </div>
+        </>)}
         <label className="field-label">Speaker</label>
         <p className="muted connect-note">{SPEAKER_WHERE[layout]}. Speakers come from Home Assistant; with Music Assistant, Sonos and others appear here.</p>
         {playersError && <div className="form-error">{playersError}</div>}
