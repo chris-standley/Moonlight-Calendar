@@ -1,4 +1,4 @@
-import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, MutableRefObject, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PhotoAlbum, SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
@@ -62,6 +62,27 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const cam = useSaverCamera(); // someone at a camera: its video takes the photo's place until they've gone
   const [hiding, setHiding] = useState<SlidePhoto | null>(null); // asking "hide this photo?"; the slideshow waits
   const [note, setNote] = useState<{ text: string; at: number } | null>(null);
+  // Swipe left for the next photo, right for the one before; a tap (no swipe) still wakes the screen.
+  const skip = useRef<((step: 1 | -1) => void) | null>(null);
+  const touch = useRef<{ x: number; y: number; swiped: boolean } | null>(null);
+  const onDown = (e: PointerEvent) => {
+    const onControl = (e.target as HTMLElement).closest("button, input, a, .ss-np");
+    touch.current = onControl ? null : { x: e.clientX, y: e.clientY, swiped: false };
+  };
+  const onUp = (e: PointerEvent) => {
+    const t0 = touch.current;
+    if (!t0) return;
+    const dx = e.clientX - t0.x, dy = e.clientY - t0.y;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy) && !cam && usePhotos && !hiding) {
+      t0.swiped = true;
+      skip.current?.(dx < 0 ? 1 : -1);
+    }
+  };
+  const onClick = () => {
+    const swiped = touch.current?.swiped;
+    touch.current = null;
+    if (!swiped) onWake();
+  };
   const hide = async (photo: SlidePhoto) => {
     setHiding(null);
     try {
@@ -76,9 +97,9 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
     }
   };
   return (
-    <div className="screensaver" onClick={onWake}>
+    <div className="screensaver" onPointerDown={onDown} onPointerUp={onUp} onClick={onClick} onDragStart={(e) => e.preventDefault()}>
       {data && (usePhotos
-        ? <PhotoShow key={listKey} albums={albums} seconds={seconds} paused={!!hiding} onFail={() => setBroken(listKey)} onShow={setShown}
+        ? <PhotoShow key={listKey} albums={albums} seconds={seconds} paused={!!hiding} skip={skip} onFail={() => setBroken(listKey)} onShow={setShown}
             onAlbum={(name) => setAlbum({ name, at: Date.now() })} />
         : <SceneShow seconds={seconds} />)}
       {cam && <div className="ss-cam"><CameraVideo key={cam.camera} cam={cam} width={1920} fit="contain" /></div>}
@@ -225,7 +246,7 @@ export function pickAlbum(albums: Album[], place: Place, day: string, now = Date
   return pool[pool.length - 1];
 }
 
-interface Slide { key: number; photo: SlidePhoto; aspect: number }
+interface Slide { key: number; photo: SlidePhoto; aspect: number; quick?: boolean }
 
 /** Load and decode an image; resolves with its aspect ratio (from the pixels, so EXIF rotation is already in it). */
 function load(url: string): Promise<number> {
@@ -237,8 +258,9 @@ function load(url: string): Promise<number> {
 /** Immich photos, one whole album at a time (oldest photo first), crossfading, with a slow Ken Burns zoom (off for
  * prefers-reduced-motion). Carries on where this screen was up to; `onAlbum` names the album when it starts.
  * A photo that won't load is skipped; if several in a row fail, `onFail` hands back to the painted scenes. */
-function PhotoShow({ albums: list, seconds, paused, onFail, onShow, onAlbum }: {
-  albums: Album[]; seconds: number; paused: boolean; onFail: () => void; onShow: (p: SlidePhoto) => void; onAlbum: (name: string) => void;
+function PhotoShow({ albums: list, seconds, paused, skip, onFail, onShow, onAlbum }: {
+  albums: Album[]; seconds: number; paused: boolean; skip: MutableRefObject<((step: 1 | -1) => void) | null>;
+  onFail: () => void; onShow: (p: SlidePhoto) => void; onAlbum: (name: string) => void;
 }) {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
@@ -258,6 +280,9 @@ function PhotoShow({ albums: list, seconds, paused, onFail, onShow, onAlbum }: {
     const place = loadPlace();
     let album = albums.find((a) => a.id === place.album);
     let n = place.next ?? 0;
+    // What this screen has shown since the screensaver started, so a swipe back can go over them again.
+    const trail: [Album, SlidePhoto][] = [];
+    let at = -1;
     const nextPhoto = (): [Album, SlidePhoto] => {
       if (!album || n >= album.photos.length) { // finished that album (or none yet): choose another
         const day = today();
@@ -271,29 +296,38 @@ function PhotoShow({ albums: list, seconds, paused, onFail, onShow, onAlbum }: {
       return [album, photo];
     };
     // Swap only once the next photo is decoded, so the crossfade never shows a half-loaded image.
-    const advance = () => {
-      if (busy || !alive) return;
+    const advance = (step: 1 | -1 = 1, quick = false) => {
+      if (busy || !alive || at + step < 0) return;
       busy = true;
-      const [from, photo] = nextPhoto();
+      at += step;
+      if (at === trail.length) trail.push(nextPhoto()); // past the end of what's been shown: carry on as usual
+      const [from, photo] = trail[at];
+      if (trail.length > 200) { trail.shift(); at--; }
       load(photo.url).then((aspect) => {
         failures = 0;
         shown = true;
         busy = false;
         if (!alive) return;
-        setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect }]);
+        setSlides((s) => [...s.slice(-1), { key: Date.now(), photo, aspect, quick }]);
         showRef.current(photo);
         if (named !== from.id) { named = from.id; albumRef.current(from.name); }
       }, () => {
         busy = false;
         if (++failures >= giveUp) { if (alive) failRef.current(); }
         else if (!shown) advance(); // nothing on screen yet: try the next one straight away
+        else if (quick) advance(step, true); // a swipe skips a photo that won't load
       });
     };
     advance();
-    if (total < 2) return () => { alive = false; };
-    const t = setInterval(() => { if (!pausedRef.current) advance(); }, seconds * 1000);
-    return () => { alive = false; clearInterval(t); };
-  }, [albums, seconds]);
+    if (total < 2) return () => { alive = false; skip.current = null; };
+    let t = setInterval(() => { if (!pausedRef.current) advance(); }, seconds * 1000);
+    skip.current = (step) => { // a swipe: show that photo now, and give it the full time on screen
+      advance(step, true);
+      clearInterval(t);
+      t = setInterval(() => { if (!pausedRef.current) advance(); }, seconds * 1000);
+    };
+    return () => { alive = false; clearInterval(t); skip.current = null; };
+  }, [albums, seconds, skip]);
   const el = box.current;
   const screenAspect = el && el.clientHeight ? el.clientWidth / el.clientHeight : window.innerWidth / Math.max(1, window.innerHeight);
   return (
@@ -303,7 +337,7 @@ function PhotoShow({ albums: list, seconds, paused, onFail, onShow, onAlbum }: {
         const fit = Math.max(s.aspect / screenAspect, screenAspect / s.aspect) > 1.4 ? "contain" : "cover";
         const style = { "--kb": `${seconds + 2}s`, "--ox": `${(s.key % 3) * 50}%`, "--oy": `${(s.key % 2) * 100}%` } as CSSProperties;
         return (
-          <div key={s.key} className={`ss-photo ${fit}` + (i === slides.length - 1 ? " top" : "")} style={style}>
+          <div key={s.key} className={`ss-photo ${fit}` + (i === slides.length - 1 ? " top" : "") + (s.quick ? " quick" : "")} style={style}>
             {fit === "contain" && <img className="ss-blur" src={s.photo.url} alt="" />}
             <img className="ss-img" src={s.photo.url} alt="" />
           </div>

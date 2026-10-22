@@ -669,6 +669,8 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .ss-photos { position: absolute; inset: 0; overflow: hidden; }
 .ss-photo { position: absolute; inset: 0; overflow: hidden; background: #000; }
 .ss-photo.top { animation: ss-in 1.6s ease both; }
+.ss-photo.top.quick { animation-duration: 0.45s; } /* swiped to */
+.screensaver { touch-action: none; } /* swipes skip photos rather than scrolling or going back */
 .ss-photo .ss-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: var(--ox, 50%) var(--oy, 50%); animation: ss-kb var(--kb, 12s) ease-out both; }
 .ss-photo.contain .ss-img { object-fit: contain; filter: drop-shadow(0 0 2.5rem rgba(0, 0, 0, 0.45)); transform-origin: 50% 50%; animation-name: ss-kb-soft; }
 .ss-photo .ss-blur { position: absolute; inset: -6%; width: 112%; height: 112%; object-fit: cover; filter: blur(2.5rem) brightness(0.62) saturate(1.15); }
