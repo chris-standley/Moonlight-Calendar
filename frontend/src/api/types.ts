@@ -49,7 +49,7 @@ export type VoiceEvent =
   | { type: "ready" } | { type: "waiting" } | { type: "woke"; phrase: string } | { type: "listening" } | { type: "speech_end" }
   | { type: "heard"; text: string } | { type: "thinking" }
   | { type: "reply"; text: string; kind: string; continue: boolean; conversation_id: string | null }
-  | { type: "audio"; url: string } | { type: "spoken"; entity: string }
+  | { type: "audio"; url: string } | { type: "silent" } | { type: "spoken"; entity: string }
   | { type: "error"; code: string; message: string } | { type: "done" } | { type: "closed" };
 export type VoiceMode = "listen" | "wake" | "text";
 /** One open line to Assist: start a run, feed it 16 kHz 16-bit mono audio, end or drop it. */
