@@ -50,7 +50,8 @@ async def voice_socket(ws: WebSocket, layout: str = "compact"):
     if replies == "speaker":
         speaker = media.entity_for(layout, display)
         replies = "speaker" if speaker else "screen"  # a screen with no speaker answers out loud itself
-    await voice.relay(ws, svc, pipeline=conf["pipeline"], replies=replies, speaker=speaker, display=display)
+    await voice.relay(ws, svc, pipeline=conf["pipeline"], replies=replies, speaker=speaker, display=display,
+                      layout=layout)
     try:
         await ws.close()
     except RuntimeError:

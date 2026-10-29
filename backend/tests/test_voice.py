@@ -278,12 +278,12 @@ def test_streamed_reply_that_never_comes_is_dropped(client, ha):
 def test_text_follow_up_keeps_the_conversation(client, ha):
     with client.websocket_connect("/api/voice/ws") as ws:
         ws.receive_json()
-        ws.send_json({"type": "start", "mode": "text", "text": "what's on today?", "conversation_id": "conv-1"})
+        ws.send_json({"type": "start", "mode": "text", "text": "should I take a coat?", "conversation_id": "conv-1"})
         got = until(ws, "done")
     reply = next(m for m in got if m["type"] == "reply")
     assert reply["continue"] is True  # a question back: the screen listens again
     run = ha.runs[0]
-    assert run["start_stage"] == "intent" and run["input"] == {"text": "what's on today?"}
+    assert run["start_stage"] == "intent" and run["input"] == {"text": "should I take a coat?"}
     assert run["conversation_id"] == "conv-1" and "pipeline" not in run  # HA's preferred one
 
 
@@ -412,8 +412,9 @@ def test_timer_targets_the_asking_screen(client):
     import asyncio as aio
     screen = {"id": "d1", "name": "Kitchen", "layout": "compact"}
     with mock_screen(screen):
-        said = aio.run(voice_commands.run({"do": "start", "seconds": 60, "label": "", "full": False}, screen))
-        assert said == "Timer set for 1 minute."
+        done = aio.run(voice_commands.run({"do": "start", "seconds": 60, "label": "", "full": False},
+                                          {"display": screen, "layout": "compact"}))
+        assert done == {"say": "Timer set for 1 minute."}
         a = next(iter(alerts._alerts.values()))
         assert a["display_ids"] == ["d1"] and alerts.shown_on(a, screen)
         assert not alerts.shown_on(a, {"id": "d2", "name": "Hall", "layout": "large"})

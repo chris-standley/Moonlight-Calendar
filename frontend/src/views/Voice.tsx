@@ -32,6 +32,9 @@ interface VoiceCtx {
 const Ctx = createContext<VoiceCtx>({ status: null, waking: false, open: () => undefined });
 export const useVoice = () => useContext(Ctx);
 
+/** Window event asking the app to show a section, from a voice command; detail is the section's key. */
+export const VOICE_GO = "moonlight:voice-go";
+
 export function VoiceProvider({ api, layout, children }: { api: Api; layout: Layout; children: ReactNode }) {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [shown, setShown] = useState(false);
@@ -175,6 +178,9 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
         a.play().catch(end); // a browser that blocks sound without a tap: the answer is on screen anyway
         break;
       }
+      case "go": // "show the calendar": App switches section (when this screen has it)
+        window.dispatchEvent(new CustomEvent(VOICE_GO, { detail: e.tab }));
+        break;
       case "silent": { // the run ended without saying anything after all: let go of the stream too
         const a = s.audio;
         s.audio = null;

@@ -201,7 +201,7 @@ notification** shows one on that screen. Examples are in the integration's READM
 ## Voice (Assist)
 
 Every screen gets a microphone button at the top. Tap it and ask Home Assistant's Assist anything it can do (turn on
-the lights, add milk to the shopping list, set a timer, what's the weather): the screen shows what it heard and the
+the lights, set a timer, show the calendar, what's the weather): the screen shows what it heard and the
 answer, and says it out loud. You can also type. Moonlight relays the microphone to Home Assistant, so screens need no
 Home Assistant login, and Assist can only touch what you expose to it (Settings > Voice assistants > Expose).
 
@@ -217,6 +217,22 @@ Set up once in Home Assistant:
 Timers are Moonlight's own: "set a 30 minute timer", "full screen timer for 10 minutes", "pasta timer for an hour",
 "how long is left on the timer?" and "cancel the timer" put the timer on the screen you asked (see Notifications and
 timers), since Home Assistant's own voice timers only work on its voice satellite devices.
+
+Everyday things are Moonlight's own too, so they're quick and never reach the conversation agent (an AI one is
+slower, and can't see Moonlight):
+
+- **Screens:** "show the calendar", "go to music", "open the shopping list" (sections this screen has).
+- **Music** on the screen's speaker: "pause", "play", "skip", "previous song", "turn it up", "volume to 4",
+  "what's playing?", "play Fleetwood Mac" (Music Assistant speakers search for it).
+- **Chores:** "tick off Tom's teeth", "Amy has done her bed", "mark reading as done" (today's chores; name the
+  person when two have the same chore). "Tick off milk" ticks off a list item.
+- **Lists:** "add milk to the shopping list", "put eggs, bread on the list" (a list Moonlight hasn't got goes on to
+  Home Assistant, which may have one).
+- **Calendar:** "add dentist to the calendar tomorrow at half past 3 for Tom", "add an event called bin day on
+  Thursday", "what's on tomorrow?". Times without am or pm mean the afternoon from 1 to 6 o'clock; an event with
+  no time is all day, one with a time lasts an hour unless you say ("for half an hour", "from 5 to 6pm").
+
+Anything else goes to Home Assistant, which answers what it can itself (lights, the weather) before the agent.
 
 Then in Moonlight, Settings > Voice: pick the assistant, turn the wake word on for the styles of screen you want, and
 choose where answers are spoken: on the screen itself, on the screen's speaker (as an announcement over the music),

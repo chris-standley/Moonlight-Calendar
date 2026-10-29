@@ -255,7 +255,7 @@ def translate(ev: dict) -> dict | None:
 
 
 async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speaker: str,
-                display: dict | None = None) -> None:
+                display: dict | None = None, layout: str = "compact") -> None:
     """Relay one screen's voice socket (a Starlette WebSocket, already accepted) to Home Assistant until either
     side goes away. One pipeline run at a time; a new `start` replaces the one going."""
     try:
@@ -273,7 +273,8 @@ async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speak
         if msg.get("type") != "auth_ok":
             raise VoiceError("Home Assistant refused Moonlight's token")
         await client.send_json({"type": "ready"})
-        await _relay(client, ha, svc, pipeline=pipeline, replies=replies, speaker=speaker, display=display)
+        await _relay(client, ha, svc, pipeline=pipeline, replies=replies, speaker=speaker, display=display,
+                     layout=layout)
     except VoiceError as e:
         with contextlib.suppress(Exception):
             await client.send_json({"type": "error", "code": "unreachable", "message": str(e)})
@@ -287,7 +288,7 @@ async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speak
 
 
 async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, speaker: str,
-                 display: dict | None = None) -> None:
+                 display: dict | None = None, layout: str = "compact") -> None:
     # The run going: its message id, HA's handler for its audio, and for a speech run (which stops at
     # speech-to-text) what was heard, so the run after it can answer.
     # A run that answers out loud on the screen hands the screen its audio as soon as Home Assistant names it
@@ -308,15 +309,21 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
         return next_id
 
     async def answer(text: str) -> bool:
-        """Moonlight's own answer to `text` (a timer, say); False when it's one for Home Assistant."""
+        """Moonlight's own answer to `text` (a timer, the music, a list); False when it's one for Home Assistant."""
         cmd = voice_commands.parse(text)
         if cmd is None:
             return False
         await client.send_json({"type": "thinking"})
         try:
-            said = await voice_commands.run(cmd, display)
+            done = await voice_commands.run(cmd, {"display": display, "layout": layout})
         except Exception as e:  # e.g. too many timers already
-            said = getattr(e, "detail", None) or "Sorry, I couldn't do that."
+            log.info("Voice command %s failed: %s", cmd.get("do"), _describe(e))
+            done = {"say": getattr(e, "detail", None) or "Sorry, I couldn't do that."}
+        if done is None:
+            return False  # not Moonlight's after all (no list by that name, say)
+        if done.get("go"):
+            await client.send_json({"type": "go", "tab": done["go"]})
+        said = str(done["say"])
         await client.send_json({"type": "reply", "text": said, "kind": "action_done", "continue": False,
                                 "conversation_id": run["conv"]})
         if speak:

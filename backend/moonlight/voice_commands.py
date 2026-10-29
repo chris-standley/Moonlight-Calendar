@@ -12,21 +12,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from . import alerts, db
+from . import alerts, db, voice_home
+from .voice_when import AMOUNT, HALF_HOUR, duration_of
 
-UNITS = {"hour": 3600, "hr": 3600, "minute": 60, "min": 60, "second": 1, "sec": 1}
-WORDS = {
-    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
-    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
-    "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
-    "sixty": 60, "ninety": 90, "couple of": 2, "few": 3,
-}
-NUM = r"(\d+(?:\.\d+)?|" + "|".join(sorted((re.escape(w) for w in WORDS), key=len, reverse=True)) + r")"
-# "twenty five", "twenty-five"
-COMPOUND = r"((?:twenty|thirty|forty|fifty)[ -](?:one|two|three|four|five|six|seven|eight|nine))"
-AMOUNT = re.compile(rf"\b(?:{COMPOUND}|{NUM})(?:\s+and\s+a\s+half)?\s*[- ]?\s*(hours?|hrs?|minutes?|mins?|seconds?|secs?)\b"
-                    r"(\s+and\s+a\s+half)?", re.I)
-HALF_HOUR = re.compile(r"(?<!and a )\bhalf\s+(?:an?\s+)?hour\b", re.I)
 TIMER = re.compile(r"\b(timer|countdown|count\s*down)\b", re.I)
 FULL = re.compile(r"\b(full[- ]?screen|big|large)\b", re.I)
 CANCEL = re.compile(r"\b(cancel|stop|clear|delete|remove|end|dismiss)\b", re.I)
@@ -35,27 +23,6 @@ LABEL_AFTER = re.compile(r"\bfor\s+(?:the\s+|my\s+|a\s+|an\s+)?([a-z][a-z' ]{1,4
 LABEL_BEFORE = re.compile(r"\b(?:an?\s+|the\s+|my\s+)?([a-z][a-z']{1,20}(?:\s+[a-z][a-z']{1,20})?)\s+(?:timer|countdown)\b", re.I)
 FILLER = {"set", "start", "make", "a", "an", "the", "my", "full", "screen", "fullscreen", "big", "large", "new", "please",
           "minute", "minutes", "hour", "hours", "second", "seconds", "one", "kitchen", "and", "for", "me", "can", "you"}
-
-
-def _number(word: str) -> float:
-    word = word.lower().replace("-", " ")
-    if word in WORDS:
-        return WORDS[word]
-    if " " in word:
-        tens, ones = word.split(" ", 1)
-        return WORDS.get(tens, 0) + WORDS.get(ones, 0)
-    return float(word)
-
-
-def duration_of(text: str) -> int:
-    """Seconds said in `text` ("1 hour and 15 minutes", "an hour and a half", "half an hour"), 0 if none."""
-    total = 1800.0 * len(HALF_HOUR.findall(text))
-    for m in AMOUNT.finditer(HALF_HOUR.sub(" ", text)):
-        n = _number(m.group(1) or m.group(2))
-        unit = UNITS[re.sub(r"s$", "", m.group(3).lower())]
-        half = bool(m.group(4)) or "and a half" in m.group(0).lower()
-        total += (n + (0.5 if half else 0)) * unit
-    return int(round(total))
 
 
 def spoken_duration(seconds: int) -> str:
@@ -86,10 +53,12 @@ def _label(text: str) -> str:
 
 
 def parse(text: str) -> dict | None:
-    """What Moonlight should do itself with `text`, or None to pass it to Home Assistant.
-    {"do": "start", "seconds", "label", "full"} · {"do": "cancel"} · {"do": "left"}"""
-    if not text or not TIMER.search(text):
+    """What Moonlight should do itself with `text`, or None to pass it to Home Assistant. Timers:
+    {"do": "start", "seconds", "label", "full"} · {"do": "cancel"} · {"do": "left"}; the rest is voice_home.py's."""
+    if not text:
         return None
+    if not TIMER.search(text):
+        return voice_home.parse(text)
     if CANCEL.search(text):
         return {"do": "cancel"}
     seconds = duration_of(text)
@@ -110,8 +79,15 @@ def _mine(display: dict | None) -> list[dict]:
     return sorted(shown, key=lambda a: a["created_at"], reverse=True)
 
 
-async def run(cmd: dict, display: dict | None) -> str:
-    """Do it; returns what to say."""
+async def run(cmd: dict, ctx: dict) -> dict | None:
+    """Do it on the asking screen (ctx: display, layout): {"say": what to say, "go"?: a section to show}, or None
+    when it isn't Moonlight's after all (the words then go on to Home Assistant)."""
+    if cmd["do"] not in ("start", "cancel", "left"):
+        return await voice_home.run(cmd, ctx)
+    return {"say": await _timer(cmd, ctx.get("display"))}
+
+
+async def _timer(cmd: dict, display: dict | None) -> str:
     if cmd["do"] == "start":
         body: dict[str, Any] = {"kind": "timer", "label": cmd["label"] or "Timer", "duration": cmd["seconds"],
                                 "style": "fullscreen" if cmd["full"] else "toast",

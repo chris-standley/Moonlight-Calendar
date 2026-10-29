@@ -542,6 +542,7 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
     (`continue`: the assistant asked something back), `audio {url}` (the spoken reply, to play on the screen;
     with streaming text-to-speech it comes at the start of the run, before `reply`, so speech can begin while the
     agent is still answering), `silent` (that early audio won't come after all: drop it),
+    `go {tab}` (a voice command asked for a section: "show the calendar"),
     `spoken {entity}` (played on the screen's speaker instead), `error {code, message}` (HA's pipeline error codes,
     e.g. `stt-no-text-recognized`, `wake-word-timeout`), `done`.
   - A wake run waits up to an hour for the wake word, then ends with `wake-word-timeout`; screens start another.
@@ -549,7 +550,11 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
     same conversation, unless Moonlight answers them itself: timers ("set a 30 minute full screen timer", "pasta
     timer for 10 minutes", "cancel the timer", "how long is left on the timer") become Alerts on the asking screen
     (all screens when it isn't paired; full screen when asked), since Home Assistant's own timers need a voice
-    satellite device. Typed questions are checked the same way. Its answer is spoken with a text-to-speech run.
+    satellite device. Everyday commands are Moonlight's too (voice_home.py): sections ("show the calendar"), the
+    screen's speaker ("pause", "skip", "turn it up", "play Fleetwood Mac"), today's chores ("tick off Tom's teeth"),
+    list items ("add milk to the shopping list"; a list Moonlight hasn't got goes on to HA), events ("add dentist to
+    the calendar tomorrow at 3", "what's on tomorrow?"). Typed questions are checked the same way. Its answer is
+    spoken with a text-to-speech run.
 - `GET /api/voice/audio/{key}` -> the spoken reply's audio, streamed from HA (only keys the relay handed out; the
   last 32 are kept).
 Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else
