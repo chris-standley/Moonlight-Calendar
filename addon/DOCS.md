@@ -272,6 +272,9 @@ Advent, Santa, nativity, carol or Boxing Day in their name only show in December
 (winter, snow, frost, skiing...) are shown; turn off "Christmas albums only in December" to stop that. The screens get the photos through Moonlight and never see the key. Without Immich the screensaver shows
 painted landscapes.
 
+Swipe left on a photo for the next one and right to go back (a tap still wakes the screen); on the Apple TV
+slideshow use left and right on the remote.
+
 To stop a photo coming up again, tap the crossed-out eye under the photo's details at the top right of the screensaver (on the Apple TV, press
 the remote during a slideshow) and confirm. Moonlight takes it out of every Immich album it is in and never shows it
 again. Removing photos from albums needs two more API key permissions, `albumAsset.delete` (and
