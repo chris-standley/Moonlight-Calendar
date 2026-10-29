@@ -302,6 +302,11 @@ camera when the device has one. Live video needs a secure page (Moonlight opened
 https address); on a plain http address the button becomes **Take a photo of the barcode** instead. A screen with no
 camera shows just the ISBN box, and a USB or Bluetooth barcode reader connected to it types the number in.
 
+For the pages themselves, **Take photos** in the browser (an iPhone or Android phone, or a tablet) opens the camera
+inside Moonlight: tap the shutter for each page, take out any that came out badly, and tap Done. The pictures stay in
+Moonlight and are never saved to the phone's photo library. Taking more photos or choosing more adds them after the
+pages already there. On a plain http address the button is **Take a photo** instead, one page at a time.
+
 To move recipes to or from another app, use Settings > Recipes on a wall screen or in the browser (or the sort menu
 and + on the iPhone's Recipes). Send to another app makes a file of the whole recipe box, pictures included, for Mela,
 Paprika or any app that reads schema.org recipes. Bring in from another app takes a Mela, Paprika or schema.org file
