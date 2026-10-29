@@ -29,6 +29,7 @@ import json
 import logging
 import re
 import secrets
+import time
 from collections import OrderedDict
 from typing import Any, AsyncIterator
 
@@ -157,16 +158,22 @@ async def fetch_audio(svc: MediaService, key: str) -> AsyncIterator[tuple[int, s
     if path is None:
         raise VoiceError("That reply has gone", 404)
     async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=60), transport=svc.transport) as client:
+        asked = time.monotonic()
         async with client.stream("GET", svc.origin + path, headers={"Authorization": f"Bearer {svc.token}"}) as r:
             ctype = r.headers.get("content-type", "audio/mpeg").split(";")[0].strip()
 
             async def body() -> AsyncIterator[bytes]:
-                sent = 0
+                sent, first = 0, None
                 async for chunk in r.aiter_bytes():
+                    if first is None:
+                        first = time.monotonic() - asked
                     sent += len(chunk)
                     if sent > AUDIO_MAX_BYTES:
                         return
                     yield chunk
+                # How long the voice takes to start talking, for comparing voices and engines.
+                log.info("Spoken reply: first sound after %.2f s, all %d bytes after %.2f s",
+                         first or 0, sent, time.monotonic() - asked)
 
             yield r.status_code, ctype, body()
 
