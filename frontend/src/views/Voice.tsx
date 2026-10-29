@@ -165,13 +165,22 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
         s.again = e.continue;
         break;
       case "audio": {
+        // It can come before the answer is written (streamed speech), so "speaking" waits for the sound itself.
         const a = new Audio(e.url);
         s.audio = a;
-        setPhase("speaking");
         const end = () => { if (s.audio !== a) return; s.audio = null; if (s.done) finish(); };
+        a.onplaying = () => { if (s.audio === a) setPhase("speaking"); };
         a.onended = end;
         a.onerror = end;
         a.play().catch(end); // a browser that blocks sound without a tap: the answer is on screen anyway
+        break;
+      }
+      case "silent": { // the run ended without saying anything after all: let go of the stream too
+        const a = s.audio;
+        s.audio = null;
+        a?.pause();
+        a?.removeAttribute("src");
+        a?.load();
         break;
       }
       case "error":

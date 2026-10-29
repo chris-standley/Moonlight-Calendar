@@ -539,7 +539,9 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
     `{"type": "cancel"}` drops the run. A new `start` drops the run going.
   - screen <- `ready` (connected to HA), then per run: `waiting` (wake word run listening), `woke {phrase}`,
     `listening`, `speech_end`, `heard {text}`, `thinking`, `reply {text, kind, continue, conversation_id}`
-    (`continue`: the assistant asked something back), `audio {url}` (the spoken reply, to play on the screen),
+    (`continue`: the assistant asked something back), `audio {url}` (the spoken reply, to play on the screen;
+    with streaming text-to-speech it comes at the start of the run, before `reply`, so speech can begin while the
+    agent is still answering), `silent` (that early audio won't come after all: drop it),
     `spoken {entity}` (played on the screen's speaker instead), `error {code, message}` (HA's pipeline error codes,
     e.g. `stt-no-text-recognized`, `wake-word-timeout`), `done`.
   - A wake run waits up to an hour for the wake word, then ends with `wake-word-timeout`; screens start another.

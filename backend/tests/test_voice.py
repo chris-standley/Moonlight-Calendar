@@ -38,6 +38,8 @@ class FakePipelineHA:
         self.runs: list[dict] = []
         self.calls: list = []
         self.heard: str | None = None  # what speech-to-text "hears" (default: how many bytes came)
+        self.streaming = False  # name the spoken reply's stream in run-start, as HA does for streaming TTS
+        self.fail_intent = False  # the agent fails, so nothing is said
 
     def connect(self, url):
         return FakeSocket(self)
@@ -121,7 +123,11 @@ class FakeSocket:
                 self.next_handler += 1
                 handler = self.next_handler
                 self.handlers[handler] = mid
-            self.event(mid, "run-start", {"pipeline": "p2", "runner_data": {"stt_binary_handler_id": handler}})
+            start = {"pipeline": "p2", "runner_data": {"stt_binary_handler_id": handler}}
+            if self.ha.streaming and msg["end_stage"] == "tts":
+                start["tts_output"] = {"token": "early.mp3", "url": "/api/tts_proxy/early.mp3",
+                                       "mime_type": "audio/mpeg", "stream_response": True}
+            self.event(mid, "run-start", start)
             if msg["start_stage"] == "wake_word":
                 self.event(mid, "wake_word-start")
                 self.event(mid, "wake_word-end", {"wake_word_output": {"wake_word_id": "ok_nabu",
@@ -148,6 +154,10 @@ class FakeSocket:
                 self.event(mid, "run-end")
                 return
         self.event(mid, "intent-start")
+        if self.ha.fail_intent:
+            self.event(mid, "error", {"code": "intent-failed", "message": "The agent went away"})
+            self.event(mid, "run-end")
+            return
         said = heard or text
         self.event(mid, "intent-end", {"intent_output": {
             "response": {"speech": {"plain": {"speech": f"You said {said}"}}, "response_type": "action_done"},
@@ -243,6 +253,26 @@ def test_listen_streams_audio_and_plays_reply_here(client, ha):
     r = client.get(got[4]["url"])
     assert r.status_code == 200 and r.content == MP3 and r.headers["content-type"] == "audio/mpeg"
     assert client.get("/api/voice/audio/nope").status_code == 404
+
+
+def test_streamed_reply_reaches_the_screen_before_the_answer_is_written(client, ha):
+    ha.streaming = True
+    with client.websocket_connect("/api/voice/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "mode": "text", "text": "tell me a story"})
+        got = until(ws, "done")
+    # The audio comes at run-start, so it can play while the agent is still writing; not again at tts-end.
+    assert [m["type"] for m in got] == ["audio", "thinking", "reply", "done"]
+    assert client.get(got[0]["url"]).content == MP3
+
+
+def test_streamed_reply_that_never_comes_is_dropped(client, ha):
+    ha.streaming, ha.fail_intent = True, True
+    with client.websocket_connect("/api/voice/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "mode": "text", "text": "tell me a story"})
+        got = until(ws, "done")
+    assert [m["type"] for m in got] == ["audio", "thinking", "error", "silent", "done"]
 
 
 def test_text_follow_up_keeps_the_conversation(client, ha):
