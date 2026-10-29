@@ -1082,6 +1082,7 @@ label.btn.disabled { opacity: 0.6; pointer-events: none; }
 .ev-pic img { display: block; width: 6rem; height: 7.5rem; object-fit: cover; border-radius: 0.6rem; box-shadow: var(--shadow); }
 .ev-pic-x { position: absolute; top: -0.5rem; right: -0.5rem; width: 1.9rem; height: 1.9rem; display: grid; place-items: center; border: 0; border-radius: 50%; background: #262836; color: #fff; cursor: pointer; }
 .detail .ev-pics { margin-top: 0.4rem; }
+.ev-notes { padding-top: 0.6rem; resize: vertical; font: inherit; font-weight: 600; line-height: 1.4; }
 /* A cookbook being read (Recipes): progress, then the recipes found to check. */
 .batch-panel { margin: 0 1.6rem 1rem; flex-shrink: 0; max-height: 45%; overflow-y: auto; }
 .batch-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }

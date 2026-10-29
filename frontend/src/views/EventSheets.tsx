@@ -224,7 +224,7 @@ export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: str
         <label className="field-label">Location</label>
         <input className="input" placeholder="Optional" value={location} onChange={(e) => setLocation(e.target.value)} />
         <label className="field-label">Notes</label>
-        <textarea className="input" rows={3} placeholder="Optional" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <textarea className="input ev-notes" rows={3} placeholder="Optional" value={notes} onChange={(e) => setNotes(e.target.value)} />
         {(pics.length > 0 || canScan) && <label className="field-label">Pictures</label>}
         <Pictures pics={pics} onRemove={(i) => setPics((p) => p.filter((x) => x.id !== i))}>
           {canScan && pics.length < 10 && (
