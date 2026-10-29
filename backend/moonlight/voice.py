@@ -34,7 +34,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from . import db
+from . import db, voice_commands
 from .media import AuthFailed, MediaError, MediaService, _describe
 
 log = logging.getLogger("moonlight.voice")
@@ -174,9 +174,10 @@ async def fetch_audio(svc: MediaService, key: str) -> AsyncIterator[tuple[int, s
 # ---------------------------------------------------------------- the relay
 
 def run_message(msg_id: int, cmd: dict, pipeline: str, speak: bool) -> dict:
-    """The `assist_pipeline/run` for a screen's `start`."""
+    """The `assist_pipeline/run` for a screen's `start`. Speech runs stop once it's written down: the relay then
+    answers it itself (voice_commands.py) or sends the words on to the conversation agent in a second run."""
     mode = cmd.get("mode")
-    end = "tts" if speak else "intent"
+    end = "stt" if mode in ("listen", "wake") else "tts" if speak else "intent"
     out: dict[str, Any] = {"id": msg_id, "type": "assist_pipeline/run", "end_stage": end}
     if mode == "text":
         text = cmd.get("text")
@@ -199,6 +200,15 @@ def run_message(msg_id: int, cmd: dict, pipeline: str, speak: bool) -> dict:
 
 
 MARKDOWN = re.compile(r"\*\*|__|`|^#+\s*|^\s*[-*]\s+(?=\S)", re.MULTILINE)
+
+
+def say_message(msg_id: int, text: str, pipeline: str) -> dict:
+    """A text-to-speech run: Moonlight's own answer, in the assistant's voice."""
+    out: dict[str, Any] = {"id": msg_id, "type": "assist_pipeline/run", "start_stage": "tts", "end_stage": "tts",
+                           "input": {"text": text}}
+    if pipeline:
+        out["pipeline"] = pipeline
+    return out
 
 
 def speech_of(intent_output: dict) -> str:
@@ -237,7 +247,8 @@ def translate(ev: dict) -> dict | None:
     return None
 
 
-async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speaker: str) -> None:
+async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speaker: str,
+                display: dict | None = None) -> None:
     """Relay one screen's voice socket (a Starlette WebSocket, already accepted) to Home Assistant until either
     side goes away. One pipeline run at a time; a new `start` replaces the one going."""
     try:
@@ -255,7 +266,7 @@ async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speak
         if msg.get("type") != "auth_ok":
             raise VoiceError("Home Assistant refused Moonlight's token")
         await client.send_json({"type": "ready"})
-        await _relay(client, ha, svc, pipeline=pipeline, replies=replies, speaker=speaker)
+        await _relay(client, ha, svc, pipeline=pipeline, replies=replies, speaker=speaker, display=display)
     except VoiceError as e:
         with contextlib.suppress(Exception):
             await client.send_json({"type": "error", "code": "unreachable", "message": str(e)})
@@ -268,10 +279,42 @@ async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speak
             await ha_cm.__aexit__(None, None, None)
 
 
-async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, speaker: str) -> None:
-    run = {"id": 0, "handler": None}  # the run going: its message id, and HA's handler for its audio
+async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, speaker: str,
+                 display: dict | None = None) -> None:
+    # The run going: its message id, HA's handler for its audio, and for a speech run (which stops at
+    # speech-to-text) what was heard, so the run after it can answer.
+    run: dict[str, Any] = {"id": 0, "handler": None, "speech": False, "heard": "", "conv": None}
     next_id = 0
+    speak = replies != "none"
     speak_on = speaker if replies == "speaker" else ""
+
+    async def send_run(msg: dict) -> None:
+        run.update(id=msg["id"], handler=None, speech=msg["end_stage"] == "stt", heard="")
+        await ha.send(json.dumps(msg))
+
+    def new_id() -> int:
+        nonlocal next_id
+        next_id += 1
+        return next_id
+
+    async def answer(text: str) -> bool:
+        """Moonlight's own answer to `text` (a timer, say); False when it's one for Home Assistant."""
+        cmd = voice_commands.parse(text)
+        if cmd is None:
+            return False
+        await client.send_json({"type": "thinking"})
+        try:
+            said = await voice_commands.run(cmd, display)
+        except Exception as e:  # e.g. too many timers already
+            said = getattr(e, "detail", None) or "Sorry, I couldn't do that."
+        await client.send_json({"type": "reply", "text": said, "kind": "action_done", "continue": False,
+                                "conversation_id": run["conv"]})
+        if speak:
+            await send_run(say_message(new_id(), said, pipeline))
+        else:
+            run["id"] = 0
+            await client.send_json({"type": "done"})
+        return True
 
     async def from_ha() -> None:
         async for raw in ha:
@@ -292,12 +335,13 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
             if msg.get("type") != "event":
                 continue
             ev = msg.get("event") or {}
-            if ev.get("type") == "run-start":
+            kind = ev.get("type")
+            if kind == "run-start":
                 run["handler"] = ((ev.get("data") or {}).get("runner_data") or {}).get("stt_binary_handler_id")
                 continue
-            if ev.get("type") in ("stt-end", "error", "run-end"):
+            if kind in ("stt-end", "error", "run-end"):
                 run["handler"] = None  # no more audio wanted
-            if ev.get("type") == "tts-end":
+            if kind == "tts-end":
                 out = (ev.get("data") or {}).get("tts_output") or {}
                 if speak_on and out.get("media_id"):
                     asyncio.create_task(_announce(svc, speak_on, out["media_id"]))
@@ -305,14 +349,25 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                 elif replies == "screen" and str(out.get("url") or "").startswith("/api/"):
                     await client.send_json({"type": "audio", "url": f"/api/voice/audio/{remember_audio(out['url'])}"})
                 continue
+            if kind == "run-end" and run["speech"]:
+                heard = run["heard"]
+                run["id"] = 0
+                if heard and not await answer(heard):
+                    # On to the conversation agent with the words, as one conversation.
+                    await send_run(run_message(new_id(), {"mode": "text", "text": heard, "conversation_id": run["conv"]},
+                                               pipeline, speak))
+                elif not heard:
+                    await client.send_json({"type": "done"})
+                continue
             out = translate(ev)
             if out is not None:
+                if out["type"] == "heard":
+                    run["heard"] = out["text"]
                 await client.send_json(out)
-            if ev.get("type") == "run-end":
+            if kind == "run-end":
                 run["id"] = 0  # finished: nothing to cancel
 
     async def from_screen() -> None:
-        nonlocal next_id
         while True:
             m = await client.receive()
             if m.get("type") == "websocket.disconnect":
@@ -331,18 +386,19 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
             if kind in ("start", "cancel") and run["id"]:
                 old = run["id"]
                 run.update(id=0, handler=None)
-                await ha.send(json.dumps({"id": (next_id := next_id + 1), "type": "unsubscribe_events",
-                                          "subscription": old}))
+                await ha.send(json.dumps({"id": new_id(), "type": "unsubscribe_events", "subscription": old}))
             if kind == "start":
-                next_id += 1
+                conv = cmd.get("conversation_id")
+                run["conv"] = conv if isinstance(conv, str) and conv else None
                 try:
-                    out = run_message(next_id, cmd, pipeline, replies != "none")
+                    out = run_message(new_id(), cmd, pipeline, speak)
                 except ValueError as e:
                     await client.send_json({"type": "error", "code": "bad-request", "message": str(e)})
                     await client.send_json({"type": "done"})
                     continue
-                run.update(id=next_id, handler=None)
-                await ha.send(json.dumps(out))
+                if cmd.get("mode") == "text" and await answer(out["input"]["text"]):
+                    continue
+                await send_run(out)
             elif kind == "stop" and run["handler"] is not None:
                 handler, run["handler"] = run["handler"], None
                 await ha.send(bytes([handler]))  # end of audio

@@ -543,6 +543,11 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
     `spoken {entity}` (played on the screen's speaker instead), `error {code, message}` (HA's pipeline error codes,
     e.g. `stt-no-text-recognized`, `wake-word-timeout`), `done`.
   - A wake run waits up to an hour for the wake word, then ends with `wake-word-timeout`; screens start another.
+  - Speech runs stop at speech-to-text; the relay then sends the words to the agent in a second (intent) run in the
+    same conversation, unless Moonlight answers them itself: timers ("set a 30 minute full screen timer", "pasta
+    timer for 10 minutes", "cancel the timer", "how long is left on the timer") become Alerts on the asking screen
+    (all screens when it isn't paired; full screen when asked), since Home Assistant's own timers need a voice
+    satellite device. Typed questions are checked the same way. Its answer is spoken with a text-to-speech run.
 - `GET /api/voice/audio/{key}` -> the spoken reply's audio, streamed from HA (only keys the relay handed out; the
   last 32 are kept).
 Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else

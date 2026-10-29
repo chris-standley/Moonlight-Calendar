@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from moonlight import media, voice  # noqa: E402
+from moonlight import alerts, media, voice, voice_commands  # noqa: E402
 from moonlight.main import create_app  # noqa: E402
 
 TOKEN = "supervisor-secret"
@@ -37,6 +37,7 @@ class FakePipelineHA:
         self.sent: list = []  # everything Moonlight sent, after auth
         self.runs: list[dict] = []
         self.calls: list = []
+        self.heard: str | None = None  # what speech-to-text "hears" (default: how many bytes came)
 
     def connect(self, url):
         return FakeSocket(self)
@@ -94,7 +95,7 @@ class FakeSocket:
                 return
             if len(raw) == 1:  # end of audio
                 del self.handlers[raw[0]]
-                self.finish(mid, f"heard {self.audio.get(mid, 0)} bytes")
+                self.finish(mid, self.ha.heard or f"heard {self.audio.get(mid, 0)} bytes")
             else:
                 self.audio[mid] = self.audio.get(mid, 0) + len(raw) - 1
             return
@@ -127,6 +128,11 @@ class FakeSocket:
                                                                        "wake_word_phrase": "Okay Nabu"}})
             if handler:
                 self.event(mid, "stt-start")
+            elif msg["start_stage"] == "tts":
+                self.event(mid, "tts-start")
+                self.event(mid, "tts-end", {"tts_output": {"media_id": "media-source://tts/said",
+                                                           "url": "/api/tts_proxy/said.mp3", "mime_type": "audio/mpeg"}})
+                self.event(mid, "run-end")
             else:
                 self.finish(mid, None, msg["input"]["text"])
         elif msg["type"] == "unsubscribe_events":
@@ -134,15 +140,19 @@ class FakeSocket:
             self.out.put_nowait(json.dumps({"id": mid, "type": "result", "success": True, "result": None}))
 
     def finish(self, mid, heard, text=None):
+        run = next(r for r in self.ha.runs if r["id"] == mid)
         if heard is not None:
             self.event(mid, "stt-vad-end")
             self.event(mid, "stt-end", {"stt_output": {"text": heard}})
+            if run["end_stage"] == "stt":
+                self.event(mid, "run-end")
+                return
         self.event(mid, "intent-start")
         said = heard or text
         self.event(mid, "intent-end", {"intent_output": {
             "response": {"speech": {"plain": {"speech": f"You said {said}"}}, "response_type": "action_done"},
             "conversation_id": "conv-1", "continue_conversation": said.endswith("?")}})
-        if self.ha.runs[-1]["end_stage"] == "tts":
+        if run["end_stage"] == "tts":
             self.event(mid, "tts-start")
             self.event(mid, "tts-end", {"tts_output": {"media_id": "media-source://tts/tts.piper?message=x",
                                                        "url": "/api/tts_proxy/abc.mp3", "mime_type": "audio/mpeg"}})
@@ -224,9 +234,11 @@ def test_listen_streams_audio_and_plays_reply_here(client, ha):
     assert got[1]["text"] == "heard 3200 bytes"
     assert got[3] == {"type": "reply", "text": "You said heard 3200 bytes", "kind": "action_done", "continue": False,
                       "conversation_id": "conv-1"}
-    run = ha.runs[0]
-    assert run["start_stage"] == "stt" and run["end_stage"] == "tts" and run["pipeline"] == "p2"
+    run, then = ha.runs
+    assert run["start_stage"] == "stt" and run["end_stage"] == "stt" and run["pipeline"] == "p2"
     assert run["input"] == {"sample_rate": 16000}
+    # What was heard goes on to the agent in a second run, in the same conversation.
+    assert then["start_stage"] == "intent" and then["end_stage"] == "tts" and then["input"] == {"text": "heard 3200 bytes"}
     # The reply's audio comes through Moonlight; made-up keys don't.
     r = client.get(got[4]["url"])
     assert r.status_code == 200 and r.content == MP3 and r.headers["content-type"] == "audio/mpeg"
@@ -309,3 +321,83 @@ def test_translate_ignores_what_screens_dont_need():
 def test_markdown_from_llm_agents_is_dropped():
     out = {"response": {"speech": {"plain": {"speech": "It's **9:48 PM**.\n- Bins: `recycling`\n## Done"}}}}
     assert voice.speech_of(out) == "It's 9:48 PM.\nBins: recycling\nDone"
+
+
+@pytest.mark.parametrize("said, seconds, label, full", [
+    ("Set a 30 minute timer.", 1800, "", False),
+    ("Set a 30 minute full screen timer", 1800, "", True),
+    ("Pasta timer for 1 hour and 15 minutes", 4500, "Pasta", False),
+    ("Set a timer for an hour and a half for the cake", 5400, "Cake", False),
+    ("Timer for half an hour", 1800, "", False),
+    ("Set a timer for twenty-five minutes", 1500, "", False),
+    ("Start a 2 minute big timer for tea", 120, "Tea", True),
+    ("set a timer for 90 seconds", 90, "", False),
+])
+def test_timer_requests_are_understood(said, seconds, label, full):
+    assert voice_commands.parse(said) == {"do": "start", "seconds": seconds, "label": label, "full": full}
+
+
+def test_other_requests_go_to_home_assistant():
+    assert voice_commands.parse("Turn on the kitchen lights") is None
+    assert voice_commands.parse("What's the timer app called") is None
+    assert voice_commands.parse("Cancel the timer") == {"do": "cancel"}
+    assert voice_commands.parse("How long is left on the timer?") == {"do": "left"}
+    assert voice_commands.spoken_duration(4500) == "1 hour and 15 minutes"
+
+
+def test_spoken_timer_goes_on_this_screen_full_screen(client, ha):
+    ha.heard = "Set a 30 minute full screen timer"
+    with client.websocket_connect("/api/voice/ws?layout=compact") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "mode": "listen"})
+        ws.receive_json()
+        ws.send_bytes(b"\x00" * 640)
+        ws.send_json({"type": "stop"})
+        got = until(ws, "done")
+    assert [m["type"] for m in got] == ["speech_end", "heard", "thinking", "reply", "audio", "done"]
+    assert got[3]["text"] == "Timer set for 30 minutes."
+    # Never reached the conversation agent; the answer is spoken in the assistant's voice.
+    assert [r["start_stage"] for r in ha.runs] == ["stt", "tts"]
+    assert ha.runs[1]["input"] == {"text": "Timer set for 30 minutes."}
+    timers = client.get("/api/alerts").json()["alerts"]
+    assert len(timers) == 1 and timers[0]["kind"] == "timer" and timers[0]["style"] == "fullscreen"
+    assert timers[0]["ends_at"] - timers[0]["started_at"] == 1800 * 1000 and timers[0]["label"] == "Timer"
+
+
+def test_typed_timer_cancel_and_time_left(client, ha):
+    with client.websocket_connect("/api/voice/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "mode": "text", "text": "pasta timer for 10 minutes"})
+        assert next(m for m in until(ws, "done") if m["type"] == "reply")["text"] == "Pasta timer set for 10 minutes."
+        ws.send_json({"type": "start", "mode": "text", "text": "how long is left on the timer"})
+        left = next(m for m in until(ws, "done") if m["type"] == "reply")["text"]
+        assert left.startswith("Pasta has 10 minutes left") or left.startswith("Pasta has 9 minutes")
+        ws.send_json({"type": "start", "mode": "text", "text": "cancel the timer"})
+        assert next(m for m in until(ws, "done") if m["type"] == "reply")["text"] == "Timer cancelled."
+    assert client.get("/api/alerts").json()["alerts"] == []
+    assert all(r["start_stage"] == "tts" for r in ha.runs)  # Home Assistant only lent its voice
+
+
+def test_timer_targets_the_asking_screen(client):
+    import asyncio as aio
+    screen = {"id": "d1", "name": "Kitchen", "layout": "compact"}
+    with mock_screen(screen):
+        said = aio.run(voice_commands.run({"do": "start", "seconds": 60, "label": "", "full": False}, screen))
+        assert said == "Timer set for 1 minute."
+        a = next(iter(alerts._alerts.values()))
+        assert a["display_ids"] == ["d1"] and alerts.shown_on(a, screen)
+        assert not alerts.shown_on(a, {"id": "d2", "name": "Hall", "layout": "large"})
+
+
+class mock_screen:
+    """Pretend `screen` is paired (alerts check names and ids against the paired screens)."""
+
+    def __init__(self, screen):
+        self.screen = screen
+
+    def __enter__(self):
+        self.old = alerts._screens
+        alerts._screens = lambda c: [self.screen]
+
+    def __exit__(self, *a):
+        alerts._screens = self.old

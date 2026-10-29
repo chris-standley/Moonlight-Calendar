@@ -214,6 +214,10 @@ Set up once in Home Assistant:
 4. Each add-on is found under Settings > Devices & services (Wyoming Protocol). Then in Settings > Voice assistants,
    make an assistant that uses them (and pick its wake word, e.g. "Okay Nabu").
 
+Timers are Moonlight's own: "set a 30 minute timer", "full screen timer for 10 minutes", "pasta timer for an hour",
+"how long is left on the timer?" and "cancel the timer" put the timer on the screen you asked (see Notifications and
+timers), since Home Assistant's own voice timers only work on its voice satellite devices.
+
 Then in Moonlight, Settings > Voice: pick the assistant, turn the wake word on for the styles of screen you want, and
 choose where answers are spoken: on the screen itself, on the screen's speaker (as an announcement over the music),
 or not at all. With the wake word on, the screen streams its microphone to Home Assistant, which listens for the word,
