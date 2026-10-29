@@ -17,7 +17,8 @@ MAX_ANSWER_BYTES = 1_000_000
 
 def isbn13(value: str) -> str | None:
     """The ISBN-13 for a barcode or typed ISBN (10 or 13 digits, dashes and spaces allowed), or None if the check
-    digit is wrong. Book barcodes are EAN-13 numbers starting 978 or 979."""
+    digit is wrong. Book barcodes are EAN-13 numbers starting 978 or 979. Ported to frontend/src/recipes/barcode.ts:
+    change both together."""
     s = re.sub(r"[\s-]", "", value or "").upper()
     if re.fullmatch(r"\d{9}[\dX]", s):
         if sum((10 - i) * (10 if ch == "X" else int(ch)) for i, ch in enumerate(s)) % 11:

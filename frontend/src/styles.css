@@ -1690,3 +1690,21 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .more-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 1rem 0.4rem 0.8rem; border-radius: var(--radius); background: var(--surface-2); color: var(--text-2); font-weight: 800; }
 .more-item.on { background: var(--accent-soft); color: var(--accent); }
 .more-item:active { background: var(--line); }
+
+/* Which cookbook: found by its barcode (BookFinder) */
+.book-finder { display: flex; flex-direction: column; gap: 0.6rem; }
+.book-finder > small { font-weight: 600; }
+.book-isbn { display: flex; gap: 0.5rem; }
+.book-isbn .input { flex: 1; min-width: 0; }
+.import-pick.disabled { opacity: 0.5; pointer-events: none; }
+.book-found { display: flex; align-items: flex-start; gap: 0.9rem; padding: 0.8rem; border-radius: 1rem; background: var(--surface-2); }
+.book-found > img, .book-cover-blank { width: 3.6rem; height: 5.1rem; object-fit: cover; border-radius: 0.4rem; box-shadow: var(--shadow); flex: none; }
+.book-cover-blank { display: grid; place-items: center; font-size: 1.6rem; background: rgba(127, 127, 127, 0.15); }
+.book-found > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.book-found > div .input { margin-top: 0.4rem; }
+.book-found > .link { flex: none; font-weight: 800; }
+.book-scan { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.book-scan-view { position: relative; width: 100%; overflow: hidden; border-radius: 1rem; background: #000; }
+.book-scan video { display: block; width: 100%; height: 18rem; object-fit: cover; }
+.book-scan-frame { position: absolute; top: 50%; left: 50%; width: min(70%, 18rem); height: 7rem; transform: translate(-50%, -50%); border: 3px solid #fff; border-radius: 0.8rem; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.25); pointer-events: none; }
+.book-scan > small { font-weight: 700; }

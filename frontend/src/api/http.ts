@@ -1,4 +1,4 @@
-import { AlertsNow, Api, ApiError, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, HiddenPhoto, Topic, UploadedImage } from "./types";
+import { AlertsNow, Api, ApiError, Cookbook, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, HiddenPhoto, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 const PING_MS = 25_000;
@@ -190,7 +190,8 @@ export function httpApi(base = ""): Api {
     async uploadImage(data) { const r = await req<UploadedImage>("POST", "/api/images", data); return { ...r, url: base + r.url }; },
     recipeReader: () => get("/api/recipes-reader"),
     recipeBatches: async () => (await get<RecipeBatch[]>("/api/recipes-batches")).map(batch),
-    scanCookbook: async (images, cheaper = false, book = "") => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images, cheaper, book })),
+    scanCookbook: async (images, cheaper = false, book = "", isbn) => batch(await req<RecipeBatch>("POST", "/api/recipes-batches", { images, cheaper, book, isbn })),
+    findCookbook: async (isbn) => { const b = await get<Cookbook>(`/api/cookbooks/${encodeURIComponent(isbn)}`); return { ...b, cover_url: pic(b.cover_url) }; },
     retryBatch: async (id) => batch(await req<RecipeBatch>("POST", `/api/recipes-batches/${id}/retry`, {})),
     deleteBatch: async (id) => { await req("DELETE", `/api/recipes-batches/${id}`); },
     saveAllDrafts: async (id) => (await req<{ saved: number }>("POST", `/api/recipes-batches/${id}/save-all`, {})).saved,

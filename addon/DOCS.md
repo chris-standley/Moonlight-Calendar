@@ -252,6 +252,11 @@ On the iPhone the scan starts with the camera looking for the barcode on the bac
 Moonlight looks the book up in Open Library, then Google Books, for its title, author and cover, then the camera
 moves on to the pages. Every recipe found is filed under that book, and By cookbook in the sort menu shows its cover.
 
+On a wall screen, tablet or in the browser, Which cookbook? does the same: **Scan the book's barcode** opens the
+camera when the device has one. Live video needs a secure page (Moonlight opened through Home Assistant, or its
+https address); on a plain http address the button becomes **Take a photo of the barcode** instead. A screen with no
+camera shows just the ISBN box, and a USB or Bluetooth barcode reader connected to it types the number in.
+
 To move recipes to or from another app, use Settings > Recipes on a wall screen or in the browser (or the sort menu
 and + on the iPhone's Recipes). Send to another app makes a file of the whole recipe box, pictures included, for Mela,
 Paprika or any app that reads schema.org recipes. Bring in from another app takes a Mela, Paprika or schema.org file
