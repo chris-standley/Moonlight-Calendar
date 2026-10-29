@@ -121,6 +121,7 @@ def test_music_controls(client, fake):
 
 def test_play_starts_a_favourite_when_nothing_is_queued(client, fake):
     fake.states[KITCHEN] = kitchen_state(state="idle", media_title=None, media_artist=None)
+    asyncio.run(media.service().refresh(KITCHEN))  # the screen may have read it already
     assert say("start the music") == {"say": "Playing Sunday Kitchen."}
     assert fake.calls[-1][:2] == ("music_assistant", "play_media")
 
