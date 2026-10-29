@@ -137,6 +137,9 @@ struct EventDetailSheet: View {
                 if let notes = event.notes, !notes.isEmpty {
                     Section("Notes") { Text(notes) }
                 }
+                if let pictures = event.attachments, !pictures.isEmpty {
+                    Section("Pictures") { EventPictures(pictures: pictures) }
+                }
                 if event.editable {
                     Section {
                         Button("Edit event") { editing = true }
@@ -195,6 +198,8 @@ struct EventEditor: View {
     @Environment(\.dismiss) private var dismiss
     var event: Occurrence? = nil
     var day: String? = nil
+    /// Read from a scanned invitation: fills the editor for a new event.
+    var draft: EventDraft? = nil
     var onSaved: () -> Void = {}
 
     @State private var title = ""
@@ -206,6 +211,7 @@ struct EventEditor: View {
     @State private var notes = ""
     @State private var freq = "none"
     @State private var skipHolidays = false
+    @State private var pictures: [EventAttachment] = []
     @State private var saving = false
     @State private var error: String?
     @State private var loaded = false
@@ -253,6 +259,13 @@ struct EventEditor: View {
                 Section {
                     TextField("Location", text: $location)
                     TextField("Notes", text: $notes, axis: .vertical).lineLimit(3...8)
+                } footer: {
+                    if draft?.found_date == false { Text("No date was found on the invite, so it's on today. Pick the right day.") }
+                }
+                if !pictures.isEmpty {
+                    Section("Pictures") {
+                        EventPictures(pictures: pictures) { p in pictures.removeAll { $0.id == p.id } }
+                    }
                 }
                 if let error { Text(error).foregroundStyle(Theme.danger) }
             }
@@ -288,6 +301,16 @@ struct EventEditor: View {
             notes = e.notes ?? ""
             freq = e.`repeat`?.freq ?? "none"
             skipHolidays = e.`repeat`?.skip_holidays == true
+            pictures = e.attachments ?? []
+        } else if let r = draft {
+            title = r.title
+            people = Set(r.person_ids)
+            allDay = r.all_day
+            start = d.date(r.start)
+            end = r.all_day ? d.date(d.addDays(String(r.end.prefix(10)), -1)) : d.date(r.end)
+            location = r.location
+            notes = r.notes
+            pictures = r.attachments
         } else {
             let base = day ?? d.today
             let now = d.calendar.dateComponents([.hour], from: Date()).hour ?? 9
@@ -308,6 +331,7 @@ struct EventEditor: View {
             "all_day": allDay,
             "location": location,
             "notes": notes,
+            "attachments": pictures.map(\.id),
         ]
         if allDay {
             body["start"] = d.iso(start) + "T00:00"

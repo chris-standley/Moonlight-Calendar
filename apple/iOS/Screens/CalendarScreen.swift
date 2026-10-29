@@ -16,6 +16,9 @@ struct CalendarScreen: View {
     @State private var meals: [Meal] = []
     @State private var open: Occurrence?
     @State private var adding: String?
+    @State private var scanningInvite = false
+    @State private var scanned: EventDraft?
+    @State private var pendingScan: EventDraft?
     @State private var room: Room = .narrow
 
     var body: some View {
@@ -45,7 +48,15 @@ struct CalendarScreen: View {
                 }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { adding = day } label: { Image(systemName: "plus") }.accessibilityLabel("New event")
+                Menu {
+                    Button { adding = day } label: { Label("New event", systemImage: "calendar.badge.plus") }
+                    Button { scanningInvite = true } label: { Label("Scan an invite or flier", systemImage: "doc.viewfinder") }
+                } label: {
+                    Image(systemName: "plus")
+                } primaryAction: {
+                    adding = day
+                }
+                .accessibilityLabel("New event")
             }
         }
         .task(id: "\(days.first!)|\(days.last!)|\(model.rev("events", "meals"))") {
@@ -55,6 +66,13 @@ struct CalendarScreen: View {
         }
         .sheet(item: $open) { EventDetailSheet(event: $0) }
         .sheet(item: Binding(get: { adding.map(DayID.init) }, set: { adding = $0?.id })) { EventEditor(day: $0.id) }
+        .sheet(isPresented: $scanningInvite, onDismiss: {
+            scanned = pendingScan
+            pendingScan = nil
+        }) {
+            EventScanView { pendingScan = $0 }
+        }
+        .sheet(item: $scanned) { EventEditor(draft: $0) }
     }
 
     private struct DayID: Identifiable { let id: String }

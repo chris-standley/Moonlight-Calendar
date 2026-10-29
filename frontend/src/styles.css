@@ -1073,6 +1073,15 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .import-thumbs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .import-thumbs img { width: 5.5rem; height: 7rem; object-fit: cover; border-radius: 0.6rem; box-shadow: var(--shadow); }
 .import-thumbs > span { align-self: center; }
+/* Pictures kept with an event (a scanned invite or flier). */
+.scan-invite { display: flex; flex-direction: column; gap: 0.4rem; }
+label.btn.disabled { opacity: 0.6; pointer-events: none; }
+.ev-pics { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.ev-pic { position: relative; }
+.ev-pic > button:first-child { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.ev-pic img { display: block; width: 6rem; height: 7.5rem; object-fit: cover; border-radius: 0.6rem; box-shadow: var(--shadow); }
+.ev-pic-x { position: absolute; top: -0.5rem; right: -0.5rem; width: 1.9rem; height: 1.9rem; display: grid; place-items: center; border: 0; border-radius: 50%; background: #262836; color: #fff; cursor: pointer; }
+.detail .ev-pics { margin-top: 0.4rem; }
 /* A cookbook being read (Recipes): progress, then the recipes found to check. */
 .batch-panel { margin: 0 1.6rem 1rem; flex-shrink: 0; max-height: 45%; overflow-y: auto; }
 .batch-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }

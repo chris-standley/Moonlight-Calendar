@@ -59,6 +59,14 @@ export interface EventIn {
   repeat?: Repeat | null;
   /** Synced calendar to write to; null = only on Moonlight; omitted = server default. */
   calendar_id?: string | null;
+  /** Pictures kept with the event (a scanned invite or flier), uploaded with uploadImage. Stay on Moonlight. */
+  attachments?: UploadedImage[];
+}
+/** An invite or flier read by Claude: an unsaved event, with the photo as its attachment. */
+export interface EventDraft extends EventIn {
+  attachments: UploadedImage[];
+  /** False when no date was printed: the draft is on today, for the family to change. */
+  found_date: boolean;
 }
 export interface CalEvent extends EventIn {
   id: string;
@@ -494,6 +502,8 @@ export interface Api {
   createEvent(e: EventIn): Promise<CalEvent>;
   updateEvent(id: string, e: Partial<EventIn>): Promise<CalEvent>;
   deleteEvent(id: string): Promise<void>;
+  /** Claude reads a photo (from uploadImage) of an invitation or flier. One Anthropic request; 409 with no key. */
+  scanEvent(image: string, today: string): Promise<EventDraft>;
   allChores(): Promise<Chore[]>;
   chores(date: string): Promise<ChoreDay[]>;
   createChore(c: Omit<Chore, "id" | "sort">): Promise<Chore>;

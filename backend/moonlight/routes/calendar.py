@@ -10,13 +10,17 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException
 
-from .. import caldav_sync, db, energy, ha_client, home_security, media, public_holidays, security, seed
+from .. import (
+    caldav_sync, db, energy, event_scan, ha_client, home_security, media, public_holidays, recipe_import, security,
+    seed,
+)
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
     person_exists, req_str, require_pin,
 )
 from ..recurrence import expand_event, normalize_repeat
 from . import displays as displays_routes
+from .recipes import image_url, reader, tidy_images
 from . import immich as immich_routes
 
 router = APIRouter(prefix="/api")
@@ -307,6 +311,7 @@ def event_out(r: dict, known: set[str] | None = None) -> dict:
         "read_only": bool(r.get("cal_read_only")),
         # Only on calendars shown as free/busy blocks: busy | tentative | away | elsewhere | free.
         "busy": (r.get("busy") or "busy") if r.get("cal_busy_blocks") else None,
+        "attachments": [{"id": i, "url": image_url(i)} for i in json.loads(r.get("attachments") or "[]")],
     }
     if known is not None:
         out["person_ids"] = [p for p in out["person_ids"] if p in known]
@@ -364,7 +369,34 @@ def _apply_event_fields(c, ev: dict, body: dict, creating: bool) -> dict:
             ev["repeat"] = normalize_repeat(body.get("repeat"))
         except ValueError as e:
             raise bad(str(e))
+    if creating or "attachments" in body:
+        ev["attachments"] = _attachment_ids(c, body.get("attachments"))
+    else:
+        ev["attachments"] = [a["id"] for a in ev.get("attachments") or []]
     return ev
+
+
+MAX_ATTACHMENTS = 10
+
+
+def _attachment_ids(c, value) -> list[str]:
+    """Pictures kept with an event: uploaded with POST /api/images, given as ids or as {id, url} from GET."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_ATTACHMENTS:
+        raise bad(f"attachments must be a list of at most {MAX_ATTACHMENTS} pictures")
+    ids = [v.get("id") if isinstance(v, dict) else v for v in value]
+    for i in ids:
+        if not isinstance(i, str) or not c.execute("SELECT 1 FROM images WHERE id = ?", (i,)).fetchone():
+            raise bad("attachments must be uploaded pictures (POST /api/images)")
+    return list(dict.fromkeys(ids))
+
+
+def _save_attachments(event_id: str, ids: list[str]) -> None:
+    """Pictures stay on Moonlight, also for events in a synced calendar, so they're written after the event itself
+    (a move between calendars re-creates the row)."""
+    with db.connect() as c:
+        c.execute("UPDATE events SET attachments = ? WHERE id = ?", (json.dumps(ids), event_id))
 
 
 def _save_event(c, ev: dict, insert: bool) -> None:
@@ -436,6 +468,7 @@ async def create_event(body: dict = Body(...)):
         except (caldav_sync.SyncError, ValueError) as e:
             await hub.broadcast("accounts")
             raise _sync_error(e)
+    _save_attachments(ev["id"], ev["attachments"])
     with db.connect() as c:
         out = event_out(_load_event(c, ev["id"]), known_people(c))
     await hub.broadcast("events")
@@ -465,6 +498,7 @@ async def update_event(event_id: str, body: dict = Body(...)):
         if target is None:  # moved from a synced calendar to local-only
             with db.connect() as c:
                 _save_event(c, ev, insert=False)
+    _save_attachments(event_id, ev["attachments"])
     with db.connect() as c:
         out = event_out(_load_event(c, event_id), known_people(c))
     await hub.broadcast("events")
@@ -485,5 +519,33 @@ async def delete_event(event_id: str):
         except caldav_sync.SyncError as e:
             await hub.broadcast("events", "accounts")
             raise _sync_error(e)
+    with db.connect() as c:
+        tidy_images(c)
     await hub.broadcast("events")
     return {"ok": True}
+
+
+@router.post("/events/scan")
+async def scan_event(body: dict = Body(...)):
+    """{image: id from POST /api/images, today?: YYYY-MM-DD}: Claude reads a photo of an invitation or flier into an
+    unsaved draft event, with the photo as its attachment. One Anthropic request per call."""
+    body = body_dict(body)
+    with db.connect() as c:
+        key, model = reader(c)
+        iid = body.get("image")
+        r = db.row(c, "SELECT mime, data FROM images WHERE id = ?", (iid,)) if isinstance(iid, str) else None
+        if not r:
+            raise bad("image must be an uploaded picture (POST /api/images)")
+        people = [person_out(p) for p in db.rows(c, "SELECT * FROM people ORDER BY sort, name")]
+    if not key:
+        raise HTTPException(status_code=409, detail="Reading invitations here needs Claude: add an Anthropic API key in "
+                            "Settings › Recipes. The iPhone app can read them on the phone without one.")
+    today = date.fromisoformat(body["today"]) if isinstance(body.get("today"), str) and re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}", body["today"]) else date.today()
+    try:
+        d = await event_scan.read_invite(key, model, (r["mime"], r["data"]), today, [p["name"] for p in people])
+    except recipe_import.ImportError_ as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    names = {n.casefold() for n in d.pop("for_people")}
+    return {**d, "person_ids": [p["id"] for p in people if p["name"].casefold() in names],
+            "attachments": [{"id": iid, "url": image_url(iid)}]}

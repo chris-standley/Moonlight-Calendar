@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS cookbooks (
 );
 """
 
-# Pictures uploaded from the screens and apps (recipe and step photos). Kept in the database so a backup has them.
+# Pictures uploaded from the screens and apps (recipe and step photos, scanned invites). Kept in the database so a backup has them.
 IMAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS images (
     id         TEXT PRIMARY KEY,
@@ -277,6 +277,9 @@ EVENT_SOURCE_COLUMNS = {
     "custom_repeat": "INTEGER NOT NULL DEFAULT 0",  # 1 = expand from raw_ics (EXDATE, overrides, COUNT...)
     "busy": "TEXT",  # free/busy status of a synced event: busy | tentative | away | elsewhere | free
 }
+# Added to events later: pictures kept with an event (a scanned invite or flier), a JSON list of ids in `images`.
+# Kept on Moonlight only, also for events in a synced calendar.
+EVENT_EXTRA_COLUMNS = {"attachments": "TEXT NOT NULL DEFAULT '[]'"}
 # Added to calendars after the first release (see ics_feed.py).
 CALENDAR_EXTRA_COLUMNS = {
     "busy_auto": "INTEGER NOT NULL DEFAULT 0",  # every summary looks like a free/busy placeholder
@@ -384,7 +387,7 @@ def init_db() -> None:
                 if course:
                     c.execute("UPDATE recipes SET course = ? WHERE id = ?", (course, r[0]))
         have = {r[1] for r in c.execute("PRAGMA table_info(events)")}
-        for col, decl in EVENT_SOURCE_COLUMNS.items():
+        for col, decl in {**EVENT_SOURCE_COLUMNS, **EVENT_EXTRA_COLUMNS}.items():
             if col not in have:
                 c.execute(f"ALTER TABLE events ADD COLUMN {col} {decl}")
         have = {r[1] for r in c.execute("PRAGMA table_info(calendars)")}
