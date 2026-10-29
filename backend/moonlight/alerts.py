@@ -2,7 +2,9 @@
 
 A notification is a message shown full screen or as a toast in the corner. A timer counts down to a moment (from a
 duration, or to a date and time for a countdown) and says "Time's up" when it gets there, or counts up from a moment
-(`since`, e.g. how long ago the kettle boiled). Each goes to every screen or to chosen ones, and stays for a set time or until someone taps it away on a screen or Home Assistant clears it.
+(`since`, e.g. how long ago the kettle boiled). Each goes to every screen or to chosen ones, and stays for a set time
+or until someone taps (or swipes) it away on a screen or Home Assistant clears it. A full screen one can shrink to a
+card in the corner after `full_screen_for` seconds.
 
 They are kept in the database (table `alerts`) so a restart doesn't lose one that waits to be cleared, and in memory
 for the screens. Times are epoch milliseconds; the API sends its own clock as `server_time` so a screen with a wrong
@@ -184,15 +186,21 @@ def build(c, body: dict, now: int | None = None) -> dict:
     kind = body.get("kind") or "notification"
     if kind not in KINDS:
         raise bad("kind must be notification or timer")
-    style = body.get("style") or ("fullscreen" if kind == "notification" else "toast")
+    full_for = body.get("full_screen_for")
+    full_for = 0 if full_for in (None, "") else _seconds(full_for, "full_screen_for")
+    style = body.get("style") or ("fullscreen" if kind == "notification" or full_for else "toast")
     if style not in STYLES:
         raise bad("style must be fullscreen or toast")
+    if full_for and style != "fullscreen":
+        raise bad("full_screen_for is for a full screen one")
     aid = _text(body, "id", 80) or db.new_id("al")
     display_ids, screens = resolve_targets(c, body.get("screens"))
     a: dict[str, Any] = {
         "id": aid, "kind": kind, "style": style, "screens": screens, "display_ids": display_ids,
         "icon": _text(body, "icon", 16), "dismissible": _bool(body, "dismissible", True),
         "created_at": now,
+        # Full screen until then, then a card in the corner; null = full screen until it goes.
+        "shrink_at": now + full_for * 1000 if full_for else None,
     }
     if kind == "notification":
         a["title"] = _text(body, "title", 120)

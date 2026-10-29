@@ -492,6 +492,8 @@ clock.
     is a 400 that lists the screens.
   - `id`: your own id, to replace or clear it later (the same id again replaces it, e.g. restarting a timer); else one
     is made.
+  - `full_screen_for` seconds: full screen that long, then a card in the corner (`shrink_at` on the Alert). Giving it
+    without `style` means full screen; with `style: toast` it is a 400.
   - `icon` (an emoji), `dismissible` (default true; false = only `DELETE` clears it), `chime` (default false for
     notifications, true for timers: played when it appears / reaches zero).
   - notification: `title` and/or `message`, `image` (a web address), `duration` seconds (left out: 10 for a toast,
@@ -503,9 +505,10 @@ clock.
     ago). `duration` seconds is then how long after `since` it goes (left out: until dismissed or cleared); `until`
     is a 400. `chime` defaults to false (played when it appears). It never finishes.
 - Alert = `{id, kind, style, screens, icon, dismissible, chime, created_at, expires_at (null = until dismissed or
-  cleared)}` + notification `{title, message, image}` or timer `{label, description, count_up, started_at, ends_at,
+  cleared), shrink_at (null = full screen until it goes)}` + notification `{title, message, image}` or timer `{label, description, count_up, started_at, ends_at,
   finished, finished_for}` (`ends_at` null when it counts up from `started_at`).
-- `POST /api/alerts/{id}/dismiss` -> `{ok}`: tapped away on a screen; gone from every screen. 409 if not
+- `POST /api/alerts/{id}/dismiss` -> `{ok}`: tapped or swiped away on a screen (the × or a swipe right on a corner
+  card; a swipe up on a full screen one only makes it small on that screen); gone from every screen. 409 if not
   dismissible, 404 if already gone.
 - `DELETE /api/alerts/{id}` -> `{ok}` (404 if gone); `DELETE /api/alerts?screens=Kitchen&screens=large` -> `{cleared:
   [ids]}`: the ones shown on those screens, or with no `screens` every one.

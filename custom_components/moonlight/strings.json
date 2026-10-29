@@ -225,6 +225,10 @@
           "name": "Style",
           "description": "Full screen, or a toast in the corner."
         },
+        "full_screen_for": {
+          "name": "Full screen for",
+          "description": "Shrink it to a card in the corner after this long (and makes it full screen if Style is left out). Left out: full screen until it goes."
+        },
         "duration": {
           "name": "Show for",
           "description": "How long it stays up. Left out: a toast goes after 10 seconds and a full screen one stays. 0 stays until dismissed or cleared."
@@ -290,6 +294,10 @@
         "style": {
           "name": "Style",
           "description": "Full screen, or a toast in the corner."
+        },
+        "full_screen_for": {
+          "name": "Full screen for",
+          "description": "Shrink it to a card in the corner after this long (and makes it full screen if Style is left out). Left out: full screen until it goes."
         },
         "finished_for": {
           "name": "Keep time's up for",

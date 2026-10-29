@@ -189,6 +189,9 @@ With the Moonlight integration installed in Home Assistant, automations and scri
   time. At zero it chimes and says Time's up. With `count_up` (or `since`, a time already gone) it counts up
   instead, like how long since the kettle boiled.
 
+`full_screen_for` shows either one full screen for a while, then as a card in the corner. On a screen, swipe a full
+screen one up to make it small there, and swipe a corner card right to dismiss it everywhere.
+
 Each goes to every screen or to chosen ones (`screens`: names from Settings > Screens, or `large`, `compact`, `phone`,
 `app`), and stays for a set time or until someone taps it away (gone from every screen) or
 `moonlight.clear_notifications` clears it. The iPhone, iPad and Apple TV apps show them too. A timer finishing and a
@@ -248,6 +251,11 @@ the recipes all turn up together.
 On the iPhone the scan starts with the camera looking for the barcode on the back of the book (or type its ISBN).
 Moonlight looks the book up in Open Library, then Google Books, for its title, author and cover, then the camera
 moves on to the pages. Every recipe found is filed under that book, and By cookbook in the sort menu shows its cover.
+
+On a wall screen, tablet or in the browser, Which cookbook? does the same: **Scan the book's barcode** opens the
+camera when the device has one. Live video needs a secure page (Moonlight opened through Home Assistant, or its
+https address); on a plain http address the button becomes **Take a photo of the barcode** instead. A screen with no
+camera shows just the ISBN box, and a USB or Bluetooth barcode reader connected to it types the number in.
 
 To move recipes to or from another app, use Settings > Recipes on a wall screen or in the browser (or the sort menu
 and + on the iPhone's Recipes). Send to another app makes a file of the whole recipe box, pictures included, for Mela,

@@ -14,6 +14,7 @@ import { demoAlerts } from "./demoAlerts";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 import { COURSES } from "../recipes/courses";
+import { isbn13 } from "../recipes/barcode";
 
 interface Completion { chore_id: string; date: string; at: string }
 /** A recipe as the add-on stores it: ingredient lines and steps; the rest is worked out when read (recipeOut). */
@@ -695,6 +696,10 @@ export function demoApi(): Api {
     recipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
     recipeBatches: async () => [],
     async scanCookbook() { throw new ApiError(409, "Scanning a cookbook needs Claude: add an Anthropic API key in Settings › Recipes."); },
+    async findCookbook(isbn) {
+      if (!isbn13(isbn)) throw new ApiError(400, "That isn't a book's barcode (an ISBN starts 978 or 979)");
+      throw new ApiError(422, "This preview can't look books up. On your Moonlight, the barcode finds the book's title, author and cover.");
+    },
     async retryBatch() { throw new ApiError(404, "That scan is finished or was cancelled"); },
     async deleteBatch() { throw new ApiError(404, "That scan is finished or was cancelled"); },
     async saveAllDrafts() { throw new ApiError(404, "That scan is finished or was cancelled"); },

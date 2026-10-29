@@ -15,10 +15,11 @@ export function demoAlerts(emit: (...t: Topic[]) => void): Extras {
     async createAlert(b: AlertIn) {
       const now = Date.now();
       const kind = b.kind ?? "notification";
-      const style = b.style ?? (kind === "notification" ? "fullscreen" : "toast");
+      const style = b.style ?? (kind === "notification" || b.full_screen_for ? "fullscreen" : "toast");
       const a: ScreenAlert = {
         id: b.id || `al_demo${++n}`, kind, style, screens: b.screens?.length ? b.screens : ["all"], icon: b.icon ?? "",
         dismissible: b.dismissible ?? true, chime: b.chime ?? kind === "timer", created_at: now, expires_at: null,
+        shrink_at: b.full_screen_for && style === "fullscreen" ? now + b.full_screen_for * 1000 : null,
       };
       if (kind === "notification") {
         if (!b.title && !b.message) throw new ApiError(400, "A notification needs a title or a message");

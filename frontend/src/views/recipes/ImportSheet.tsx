@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ApiError, Recipe } from "../../api/types";
+import { ApiError, Cookbook, Recipe } from "../../api/types";
 import { useApp, useData } from "../../state";
 import { Segmented, Sheet } from "../../components/ui";
 import { IconPhotos } from "../../components/icons";
 import { shrinkImage } from "../../recipes/images";
+import { BookFinder } from "./BookFinder";
 
 type Mode = "link" | "text" | "photo" | "book";
 
@@ -22,6 +23,7 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
   const [useReader, setUseReader] = useState(true);
   const [cheaper, setCheaper] = useState(false);
   const [book, setBook] = useState("");
+  const [cookbook, setCookbook] = useState<Cookbook | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
           setBusy(`Sending page ${i + 1} of ${files.length}…`);
           ids.push((await api.uploadImage(await shrinkImage(f, 2000, 0.85))).id);
         }
-        await api.scanCookbook(ids, cheaper, book.trim());
+        await api.scanCookbook(ids, cheaper, book.trim(), cookbook?.isbn);
         onScanning?.();
         return;
       } else {
@@ -97,7 +99,7 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
           </label>
           {mode === "book" && <>
             <label className="field-label">Which cookbook? (optional)</label>
-            <input className="input" value={book} onChange={(e) => setBook(e.target.value)} placeholder="The book's name, kept with every recipe found" aria-label="Which cookbook" />
+            <BookFinder book={book} setBook={setBook} cookbook={cookbook} setCookbook={setCookbook} disabled={!!busy} />
           </>}
           {mode === "book" && (
             <div className="set-row"><span>Cheaper, slower<br /><small className="muted" style={{ fontWeight: 400 }}>Half the price. Anthropic reads the pages when it has room: usually within the hour, at most a day.</small></span>

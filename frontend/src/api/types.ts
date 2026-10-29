@@ -146,6 +146,14 @@ export interface RecipeBatch {
   failed: { page: number; error: string }[]; drafts: RecipeDraft[];
 }
 
+/** A cookbook found by the barcode on its back (see API.md "Scanning a cookbook"). */
+export interface Cookbook {
+  isbn: string; title: string; authors: string; publisher: string; year: number | null;
+  cover: string | null; cover_url: string | null;
+  /** How many saved recipes have this book's title. */
+  recipes: number;
+}
+
 export interface WeatherEntity {
   entity_id: string; name: string; available: boolean;
   condition: string | null; temperature: number | null; unit: "C" | "F"; attribution: string | null;
@@ -439,6 +447,8 @@ export function pickCalendar(cals: SyncCalendar[], personIds: string[]): string 
 export interface ScreenAlert {
   id: string; kind: "notification" | "timer"; style: "fullscreen" | "toast"; screens: string[];
   icon: string; dismissible: boolean; chime: boolean; created_at: number; expires_at: number | null;
+  /** a full screen one becomes a card in the corner then (null: stays full screen) */
+  shrink_at?: number | null;
   /** notification */
   title?: string; message?: string; image?: string | null;
   /** timer: counts down to `ends_at` (a countdown to a date has a long one); `finished` once it got there. A
@@ -451,7 +461,7 @@ export interface AlertsNow { server_time: number; alerts: ScreenAlert[] }
 export interface AlertIn {
   kind?: "notification" | "timer"; style?: "fullscreen" | "toast"; screens?: string[]; id?: string; icon?: string;
   dismissible?: boolean; chime?: boolean; title?: string; message?: string; image?: string; duration?: number;
-  label?: string; description?: string; until?: string; since?: string; finished_for?: number;
+  label?: string; description?: string; until?: string; since?: string; finished_for?: number; full_screen_for?: number;
 }
 
 export class ApiError extends Error {
@@ -529,7 +539,9 @@ export interface Api {
   /** Cookbook scans still being read or with recipes to check. */
   recipeBatches(): Promise<RecipeBatch[]>;
   /** Start reading a cookbook: page pictures in order (uploaded first). 409 when there's no Claude key. */
-  scanCookbook(images: string[], cheaper?: boolean, book?: string): Promise<RecipeBatch>;
+  scanCookbook(images: string[], cheaper?: boolean, book?: string, isbn?: string): Promise<RecipeBatch>;
+  /** The cookbook with this ISBN (10 or 13 digits), looked up online the first time. 400 when it isn't an ISBN, 404 when no one knows it. */
+  findCookbook(isbn: string): Promise<Cookbook>;
   retryBatch(id: string): Promise<RecipeBatch>;
   /** Stop reading and drop the recipes not checked yet. */
   deleteBatch(id: string): Promise<void>;

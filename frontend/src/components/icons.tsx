@@ -40,6 +40,10 @@ export const IconCctv = ({ size, ...p }: P) => (
 export const IconPhotos = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><rect x="3" y="4.5" width="18" height="15" rx="3" /><circle cx="9" cy="10" r="1.8" /><path d="M21 16l-5-5-8.5 8.5" /></svg>
 );
+/** A barcode in a viewfinder, for scanning a book's ISBN. */
+export const IconBarcode = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M7.5 8v8M10.5 8v8M13 8v8M16.5 8v8" /></svg>
+);
 /** Nursery: a stack of toy blocks. */
 export const IconNursery = ({ size, ...p }: P) => (
   <svg {...base(size, p)}><rect x="3.5" y="13" width="8" height="7.5" rx="1.5" /><rect x="12.5" y="13" width="8" height="7.5" rx="1.5" /><path d="M12 3.5l4.5 7.5h-9z" /></svg>
