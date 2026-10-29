@@ -37,7 +37,7 @@ function Scene({ s }: { s: (typeof SCENES)[number] }) {
 const REFETCH_MS = 10 * 60_000; // the server refreshes its Immich list every few minutes
 
 export function Screensaver({ onWake }: { onWake: () => void }) {
-  const { api, settings } = useApp();
+  const { api, settings, go } = useApp();
   const now = useNow(10000);
   const seconds = Math.max(3, settings?.screensaver_seconds ?? 10);
   const [broken, setBroken] = useState(""); // the photo list whose images wouldn't load (Immich down)
@@ -104,7 +104,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
         <div className="ss-date">{fmtFull(t)}</div>
       </div>
       <div className="ss-right">
-        {music && <ScreensaverNowPlaying />}
+        {music && <ScreensaverNowPlaying onOpen={() => { go("music"); onWake(); }} />}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
     </div>
