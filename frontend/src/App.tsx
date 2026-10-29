@@ -26,7 +26,7 @@ import { SecurityView } from "./views/SecurityView";
 import { EnergyView } from "./views/EnergyView";
 import { SecurityAlerts } from "./views/SecurityAlerts";
 import { ScreenAlerts } from "./views/ScreenAlerts";
-import { VoiceButton, VoiceProvider } from "./views/Voice";
+import { VOICE_GO, VoiceButton, VoiceProvider } from "./views/Voice";
 
 type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "music" | "nursery" | "security" | "energy" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
@@ -177,6 +177,19 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
   // A new install has nobody yet: still show every view (they point to Settings > Family).
   const ready = peopleLoaded && settings;
   const go = useCallback((t: string) => setTab(t as Tab), []);
+  // "Show the calendar" said to Assist: only sections this screen has, and out of the screensaver.
+  const navKeys = nav.map((n) => n.key).join(" ");
+  useEffect(() => {
+    const onGo = (e: Event) => {
+      const t = (e as CustomEvent<string>).detail;
+      if (!navKeys.split(" ").includes(t) || t === "settings") return;
+      setTab(t as Tab);
+      setMoreOpen(false);
+      setSaver(false);
+    };
+    window.addEventListener(VOICE_GO, onGo);
+    return () => window.removeEventListener(VOICE_GO, onGo);
+  }, [navKeys]);
 
   // On a phone the top bar (clock, date, weather) stays put and the page slides up over it as it scrolls, giving the
   // content the whole screen. Whichever list scrolls inside the page drives it; sheets and sideways scrolling don't.
