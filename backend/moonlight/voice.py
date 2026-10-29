@@ -27,6 +27,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import secrets
 from collections import OrderedDict
 from typing import Any, AsyncIterator
@@ -197,9 +198,14 @@ def run_message(msg_id: int, cmd: dict, pipeline: str, speak: bool) -> dict:
     return out
 
 
+MARKDOWN = re.compile(r"\*\*|__|`|^#+\s*|^\s*[-*]\s+(?=\S)", re.MULTILINE)
+
+
 def speech_of(intent_output: dict) -> str:
+    """The answer to show. LLM agents often answer in Markdown (**9:48 PM**), which a screen would show as is."""
     speech = ((intent_output or {}).get("response") or {}).get("speech") or {}
-    return str((speech.get("plain") or {}).get("speech") or (speech.get("ssml") or {}).get("speech") or "")
+    text = str((speech.get("plain") or {}).get("speech") or (speech.get("ssml") or {}).get("speech") or "")
+    return MARKDOWN.sub("", text).strip()
 
 
 def translate(ev: dict) -> dict | None:

@@ -304,3 +304,8 @@ def test_translate_ignores_what_screens_dont_need():
     assert voice.translate({"type": "intent-progress", "data": {}}) is None
     assert voice.translate({"type": "error", "data": {"code": "stt-no-text-recognized", "message": "No text"}}) == {
         "type": "error", "code": "stt-no-text-recognized", "message": "No text"}
+
+
+def test_markdown_from_llm_agents_is_dropped():
+    out = {"response": {"speech": {"plain": {"speech": "It's **9:48 PM**.\n- Bins: `recycling`\n## Done"}}}}
+    assert voice.speech_of(out) == "It's 9:48 PM.\nBins: recycling\nDone"
