@@ -29,6 +29,7 @@ import json
 import logging
 import re
 import secrets
+import time
 from collections import OrderedDict
 from typing import Any, AsyncIterator
 
@@ -157,16 +158,22 @@ async def fetch_audio(svc: MediaService, key: str) -> AsyncIterator[tuple[int, s
     if path is None:
         raise VoiceError("That reply has gone", 404)
     async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=60), transport=svc.transport) as client:
+        asked = time.monotonic()
         async with client.stream("GET", svc.origin + path, headers={"Authorization": f"Bearer {svc.token}"}) as r:
             ctype = r.headers.get("content-type", "audio/mpeg").split(";")[0].strip()
 
             async def body() -> AsyncIterator[bytes]:
-                sent = 0
+                sent, first = 0, None
                 async for chunk in r.aiter_bytes():
+                    if first is None:
+                        first = time.monotonic() - asked
                     sent += len(chunk)
                     if sent > AUDIO_MAX_BYTES:
                         return
                     yield chunk
+                # How long the voice takes to start talking, for comparing voices and engines.
+                log.info("Spoken reply: first sound after %.2f s, all %d bytes after %.2f s",
+                         first or 0, sent, time.monotonic() - asked)
 
             yield r.status_code, ctype, body()
 
@@ -283,13 +290,16 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                  display: dict | None = None) -> None:
     # The run going: its message id, HA's handler for its audio, and for a speech run (which stops at
     # speech-to-text) what was heard, so the run after it can answer.
-    run: dict[str, Any] = {"id": 0, "handler": None, "speech": False, "heard": "", "conv": None}
+    # A run that answers out loud on the screen hands the screen its audio as soon as Home Assistant names it
+    # (`early`), so speech can start while a streaming agent is still writing a long answer.
+    run: dict[str, Any] = {"id": 0, "handler": None, "speech": False, "heard": "", "conv": None,
+                           "early": False, "tts": False}
     next_id = 0
     speak = replies != "none"
     speak_on = speaker if replies == "speaker" else ""
 
     async def send_run(msg: dict) -> None:
-        run.update(id=msg["id"], handler=None, speech=msg["end_stage"] == "stt", heard="")
+        run.update(id=msg["id"], handler=None, speech=msg["end_stage"] == "stt", heard="", early=False, tts=False)
         await ha.send(json.dumps(msg))
 
     def new_id() -> int:
@@ -337,11 +347,22 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
             ev = msg.get("event") or {}
             kind = ev.get("type")
             if kind == "run-start":
-                run["handler"] = ((ev.get("data") or {}).get("runner_data") or {}).get("stt_binary_handler_id")
+                data = ev.get("data") or {}
+                run["handler"] = (data.get("runner_data") or {}).get("stt_binary_handler_id")
+                early = data.get("tts_output") or {}
+                if replies == "screen" and early.get("stream_response") and str(early.get("url") or "").startswith("/api/"):
+                    run["early"] = True
+                    await client.send_json({"type": "audio", "url": f"/api/voice/audio/{remember_audio(early['url'])}"})
                 continue
             if kind in ("stt-end", "error", "run-end"):
                 run["handler"] = None  # no more audio wanted
+            if kind == "tts-start":
+                run["tts"] = True
+            if kind == "run-end" and run["early"] and not run["tts"]:
+                await client.send_json({"type": "silent"})  # it ended (an error, say) without saying anything
             if kind == "tts-end":
+                if run["early"]:
+                    continue  # the screen has it already
                 out = (ev.get("data") or {}).get("tts_output") or {}
                 if speak_on and out.get("media_id"):
                     asyncio.create_task(_announce(svc, speak_on, out["media_id"]))
