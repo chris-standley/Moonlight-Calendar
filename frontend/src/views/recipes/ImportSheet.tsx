@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError, Cookbook, Recipe } from "../../api/types";
 import { useApp, useData } from "../../state";
 import { Segmented, Sheet } from "../../components/ui";
-import { IconPhotos } from "../../components/icons";
+import { IconCamera, IconClose, IconPhotos } from "../../components/icons";
 import { shrinkImage } from "../../recipes/images";
+import { canStream, hasCamera } from "../../recipes/barcode";
 import { BookFinder } from "./BookFinder";
+import { PageCamera } from "./PageCamera";
 
 type Mode = "link" | "text" | "photo" | "book";
 
 const MAX_BOOK_PAGES = 200;
+const MAX_RECIPE_PAGES = 6;
 
 /** Bring a recipe in from a web page, pasted text or photos of a cookbook. Hands back a draft to check and save. */
 /** "book" reads a whole cookbook in the background instead: `onScanning` is called once the pages are sent. */
@@ -27,6 +30,9 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [camera, setCamera] = useState(false);
+  const [shooting, setShooting] = useState(false);
+  useEffect(() => { void hasCamera().then(setCamera); }, []);
 
   async function run() {
     setError(null);
@@ -61,8 +67,14 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
   }
   const ready = mode === "link" ? /^https?:\/\/\S+$/i.test(url.trim()) : mode === "text" ? text.trim().length > 10 : files.length > 0;
   const photos = mode === "photo" || mode === "book";
+  const max = mode === "book" ? MAX_BOOK_PAGES : MAX_RECIPE_PAGES;
+  // New pages go after the ones already taken or chosen, so a cookbook can be done in several goes.
+  const add = (more: File[]) => setFiles((f) => [...f, ...more].slice(0, max));
+  const thumbs = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => thumbs.forEach((u) => URL.revokeObjectURL(u)), [thumbs]);
 
   return (
+    <>
     <Sheet title="Add a recipe from…" onClose={onClose} footer={<>
       <span style={{ flex: 1 }} />
       <button className="btn ghost" onClick={onClose}>Cancel</button>
@@ -90,13 +102,30 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
         </>}
         {photos && (reader?.configured ? <>
           <p className="muted connect-note">{mode === "book"
-            ? `Choose photos of every page you want, in order (up to ${MAX_BOOK_PAGES}). Claude reads them a few at a time while you carry on; the recipes found appear at the top of Recipes to check and save. Recipes that run over two pages are joined up.`
+            ? `Take or choose photos of every page you want, in order (up to ${MAX_BOOK_PAGES}). Claude reads them a few at a time while you carry on; the recipes found appear at the top of Recipes to check and save. Recipes that run over two pages are joined up.`
             : "Take or choose photos of the recipe, one per page, in order. Claude reads them; you check everything before it's saved."}</p>
-          <label className="btn ghost import-pick"><IconPhotos size={22} /> {files.length ? `${files.length} photo${files.length > 1 ? "s" : ""} chosen` : "Choose photos"}
-            <input type="file" accept="image/*" multiple hidden onChange={(e) => setFiles([...(e.target.files ?? [])]
-              .sort((a, b) => (mode === "book" ? a.name.localeCompare(b.name, undefined, { numeric: true }) : 0))
-              .slice(0, mode === "book" ? MAX_BOOK_PAGES : 6))} />
-          </label>
+          <div className="import-picks">
+            {camera && (canStream()
+              ? <button type="button" className="btn ghost import-pick" disabled={!!busy || files.length >= max} onClick={() => setShooting(true)}><IconCamera size={22} /> {files.length ? "Take more photos" : "Take photos"}</button>
+              // Not https: the browser's own camera, one page a time. Those pictures aren't kept in the photo library either.
+              : <label className={"btn ghost import-pick" + (busy || files.length >= max ? " disabled" : "")}><IconCamera size={22} /> {files.length ? "Take another" : "Take a photo"}
+                <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => { add([...(e.target.files ?? [])]); e.target.value = ""; }} />
+              </label>)}
+            <label className={"btn ghost import-pick" + (busy || files.length >= max ? " disabled" : "")}><IconPhotos size={22} /> Choose photos
+              <input type="file" accept="image/*" multiple hidden onChange={(e) => { add([...(e.target.files ?? [])]
+                .sort((a, b) => (mode === "book" ? a.name.localeCompare(b.name, undefined, { numeric: true }) : 0))); e.target.value = ""; }} />
+            </label>
+          </div>
+          {files.length > 0 && <>
+            <div className="import-thumbs">{thumbs.slice(0, 24).map((u, i) => (
+              <span key={u}>
+                <img src={u} alt={`Page ${i + 1}`} />
+                <button type="button" disabled={!!busy} onClick={() => setFiles((f) => f.filter((_, j) => j !== i))} aria-label={`Take out page ${i + 1}`}><IconClose size={14} /></button>
+              </span>
+            ))}
+              {files.length > 24 && <span className="muted">+{files.length - 24} more</span>}</div>
+            <button type="button" className="link import-clear" disabled={!!busy} onClick={() => setFiles([])}>Remove all {files.length} page{files.length === 1 ? "" : "s"}</button>
+          </>}
           {mode === "book" && <>
             <label className="field-label">Which cookbook? (optional)</label>
             <BookFinder book={book} setBook={setBook} cookbook={cookbook} setCookbook={setCookbook} disabled={!!busy} />
@@ -106,8 +135,6 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
               <button type="button" className={"toggle" + (cheaper ? " on" : "")} onClick={() => setCheaper(!cheaper)} aria-pressed={cheaper} aria-label="Cheaper, slower"><span /></button>
             </div>
           )}
-          {files.length > 0 && <div className="import-thumbs">{files.slice(0, 24).map((f, i) => <img key={i} src={URL.createObjectURL(f)} alt={`Page ${i + 1}`} />)}
-            {files.length > 24 && <span className="muted">+{files.length - 24} more</span>}</div>}
         </> : (
           <div className="import-noreader">
             <p>Reading photos here needs Claude, Anthropic's AI. Add an Anthropic API key in <button type="button" className="link" onClick={() => { onClose(); go("settings"); }}>Settings › Recipes</button>.</p>
@@ -117,5 +144,7 @@ export function ImportSheet({ onDraft, onScanning, onClose, start = "link" }: {
         {error && <div className="connect-error" role="alert">{error}</div>}
       </div>
     </Sheet>
+    {shooting && <PageCamera room={max - files.length} onClose={() => setShooting(false)} onDone={(pages) => { add(pages); setShooting(false); }} />}
+    </>
   );
 }

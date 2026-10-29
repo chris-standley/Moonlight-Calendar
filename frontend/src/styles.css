@@ -1072,7 +1072,30 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .import-pick { align-self: flex-start; cursor: pointer; }
 .import-thumbs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .import-thumbs img { width: 5.5rem; height: 7rem; object-fit: cover; border-radius: 0.6rem; box-shadow: var(--shadow); }
-.import-thumbs > span { align-self: center; }
+.import-thumbs > span.muted { align-self: center; }
+.import-thumbs > span:not(.muted) { position: relative; }
+.import-thumbs > span > button { position: absolute; top: 0.25rem; right: 0.25rem; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; }
+.import-picks { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.import-clear { align-self: flex-start; font-weight: 800; color: var(--danger); }
+/* Taking cookbook pages one after another (PageCamera) */
+.page-cam { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; background: #000; color: #fff; animation: fade 0.15s; }
+.page-cam video { flex: 1; min-height: 0; width: 100%; object-fit: contain; background: #000; }
+.page-cam-top, .page-cam-bar { display: flex; align-items: center; gap: 0.8rem; padding: max(0.8rem, env(safe-area-inset-top)) 1rem 0.8rem; }
+.page-cam-bar { padding: 0.9rem 1rem max(1rem, env(safe-area-inset-bottom)); }
+.page-cam-top > b { flex: 1; text-align: center; font-weight: 800; }
+.page-cam-spacer { flex: 1; display: flex; justify-content: flex-end; }
+.page-cam-top > .page-cam-spacer { flex: none; width: 2.8rem; }
+.page-cam-round { width: 2.8rem; height: 2.8rem; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.16); color: #fff; }
+.page-cam-shutter { width: 4.6rem; height: 4.6rem; border-radius: 50%; background: #fff; border: 0.3rem solid #000; box-shadow: 0 0 0 0.25rem #fff; flex: none; }
+.page-cam-shutter:active { transform: scale(0.93); }
+.page-cam-shutter:disabled { opacity: 0.4; }
+.page-cam-flash { position: absolute; inset: 0; background: #fff; opacity: 0.6; pointer-events: none; }
+.page-cam-strip { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.6rem 1rem 0; }
+.page-cam-thumb { position: relative; flex: none; }
+.page-cam-thumb img { display: block; width: 3.4rem; height: 4.5rem; object-fit: cover; border-radius: 0.4rem; }
+.page-cam-thumb i { position: absolute; left: 0.2rem; bottom: 0.2rem; padding: 0 0.3rem; border-radius: 0.3rem; background: rgba(0, 0, 0, 0.6); font: 800 0.7rem/1.3 inherit; font-style: normal; }
+.page-cam-thumb button { position: absolute; top: -0.35rem; right: -0.35rem; width: 1.4rem; height: 1.4rem; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #000; }
+.page-cam-error { flex: 1; display: grid; place-items: center; padding: 1.5rem; }
 /* Pictures kept with an event (a scanned invite or flier). */
 .sheet-title-row { display: flex; align-items: center; gap: 0.8rem; white-space: nowrap; }
 /* Phones: the camera alone beside the title, so the form keeps its height. */
