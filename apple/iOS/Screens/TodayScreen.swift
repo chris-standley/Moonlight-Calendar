@@ -67,7 +67,7 @@ struct TodayScreen: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { adding = .event } label: { Label("Event", systemImage: "calendar.badge.plus") }
-                    Button { adding = .scan } label: { Label("Scan an invite", systemImage: "doc.viewfinder") }
+                    Button { adding = .scan } label: { Label("Event from image", systemImage: "camera.viewfinder") }
                     Button { adding = .chore } label: { Label("Chore", systemImage: "checkmark.circle") }
                     Button { adding = .item } label: { Label("List item", systemImage: "cart.badge.plus") }
                     Button { adding = .dinner } label: { Label("Tonight's dinner", systemImage: "fork.knife") }

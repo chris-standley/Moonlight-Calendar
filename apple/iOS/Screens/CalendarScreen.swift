@@ -50,7 +50,7 @@ struct CalendarScreen: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { adding = day } label: { Label("New event", systemImage: "calendar.badge.plus") }
-                    Button { scanningInvite = true } label: { Label("Scan an invite or flier", systemImage: "doc.viewfinder") }
+                    Button { scanningInvite = true } label: { Label("Capture from image", systemImage: "camera.viewfinder") }
                 } label: {
                     Image(systemName: "plus")
                 } primaryAction: {

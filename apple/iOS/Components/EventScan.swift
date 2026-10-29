@@ -186,7 +186,7 @@ struct EventScanView: View {
                     Section { Text(error).foregroundStyle(Theme.danger) }
                 }
             }
-            .navigationTitle("Scan an invite")
+            .navigationTitle("Capture from image")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

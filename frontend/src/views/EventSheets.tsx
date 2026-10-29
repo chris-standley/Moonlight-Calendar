@@ -157,36 +157,34 @@ export function EventForm({ initial, id, onClose }: { initial: EventIn; id?: str
       setPics((p) => [...p, pic]);
       if (!scan) return;
       if (!reader?.configured) {
-        setScanNote({ text: "The photo is kept with the event. Fill in the details, or add an Anthropic API key in Settings › Recipes and Claude fills them in from the photo." });
+        setScanNote({ text: "Image kept with the event. Add an Anthropic API key in Settings › Recipes to have Claude fill in the details." });
         return;
       }
       setReading("Claude is reading it…");
       const d = await api.scanEvent(pic.id, today());
       applyDraft(d);
-      setScanNote({ text: d.found_date ? "Filled in by Claude from the photo. Check it before adding." : "Claude couldn't see a date, so it's on today. Pick the right day." });
+      setScanNote({ text: d.found_date ? "Filled in by Claude from the image (one request). Check it before adding." : "Claude couldn't see a date, so it's on today. Pick the right day." });
     } catch (e) {
       setScanNote({ text: e instanceof ApiError ? e.message : "Couldn't read the photo. Fill in the details instead.", error: true });
     } finally { setReading(null); }
   }
 
   return (
-    <Sheet title={id ? "Edit event" : "New event"} onClose={onClose} footer={<>
+    <Sheet title={id || !canScan ? (id ? "Edit event" : "New event") : (
+      <span className="sheet-title-row">New event
+        <label className={"btn ghost small" + (reading ? " disabled" : "")}
+          aria-label="Capture from image" title={reader?.configured ? "Claude reads the photo (one short request); the photo is kept with the event" : "The photo is kept with the event"}>
+          <IconCamera size={18} /> <span>{reading ?? "Capture from image"}</span>
+          <input type="file" accept="image/*" hidden disabled={!!reading} onChange={(e) => { void addPhoto(e.target.files?.[0], true); e.target.value = ""; }} />
+        </label>
+      </span>
+    )} onClose={onClose} footer={<>
       <button className="btn ghost" onClick={onClose}>Cancel</button>
       <span style={{ flex: 1 }} />
       <button className="btn" disabled={!valid || busy} onClick={save}>{id ? "Save" : "Add event"}</button>
     </>}>
       <div className="form">
-        {!id && canScan && (
-          <div className="scan-invite">
-            <label className={"btn ghost import-pick" + (reading ? " disabled" : "")}><IconCamera size={22} /> {reading ?? "Scan an invite or flier"}
-              <input type="file" accept="image/*" hidden disabled={!!reading} onChange={(e) => { void addPhoto(e.target.files?.[0], true); e.target.value = ""; }} />
-            </label>
-            {!scanNote && <p className="muted form-note">{reader?.configured
-              ? "Take or choose a photo. Claude, Anthropic's AI, reads the details in one short request, and the photo is kept with the event."
-              : "Take or choose a photo; it's kept with the event. With an Anthropic API key in Settings › Recipes, Claude fills in the details too."}</p>}
-            {scanNote && <p className={scanNote.error ? "connect-error" : "muted form-note"} role={scanNote.error ? "alert" : undefined}>{scanNote.text}</p>}
-          </div>
-        )}
+        {scanNote && <p className={scanNote.error ? "connect-error" : "muted form-note"} role={scanNote.error ? "alert" : undefined}>{scanNote.text}</p>}
         <input className="input big" placeholder="What's happening?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!!id || !canScan} />
         <label className="field-label">Who</label>
         <PersonPicker people={people} value={who} onChange={setWho} />

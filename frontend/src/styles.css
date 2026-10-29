@@ -1074,7 +1074,10 @@ button.rw-emoji, button.rw-title { cursor: pointer; }
 .import-thumbs img { width: 5.5rem; height: 7rem; object-fit: cover; border-radius: 0.6rem; box-shadow: var(--shadow); }
 .import-thumbs > span { align-self: center; }
 /* Pictures kept with an event (a scanned invite or flier). */
-.scan-invite { display: flex; flex-direction: column; gap: 0.4rem; }
+.sheet-title-row { display: flex; align-items: center; gap: 0.8rem; white-space: nowrap; }
+/* Phones: the camera alone beside the title, so the form keeps its height. */
+.layout-phone .sheet-title-row .btn { padding: 0 0.7rem; }
+.layout-phone .sheet-title-row .btn:not(.disabled) span { display: none; }
 label.btn.disabled { opacity: 0.6; pointer-events: none; }
 .ev-pics { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 .ev-pic { position: relative; }
