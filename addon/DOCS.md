@@ -198,6 +198,43 @@ Each goes to every screen or to chosen ones (`screens`: names from Settings > Sc
 notification being dismissed fire the `moonlight_alert` event in Home Assistant. Settings > Display > **Test a
 notification** shows one on that screen. Examples are in the integration's README.
 
+## Voice (Assist)
+
+Every screen gets a microphone button at the top. Tap it and ask Home Assistant's Assist anything it can do (turn on
+the lights, add milk to the shopping list, set a timer, what's the weather): the screen shows what it heard and the
+answer, and says it out loud. You can also type. Moonlight relays the microphone to Home Assistant, so screens need no
+Home Assistant login, and Assist can only touch what you expose to it (Settings > Voice assistants > Expose).
+
+Set up once in Home Assistant:
+
+1. Add a speech-to-text engine: the **Whisper** add-on (local) or Home Assistant Cloud. Without one, screens can
+   only take typed questions.
+2. Add a voice: the **Piper** add-on (local) or Home Assistant Cloud.
+3. For hands-free use, add the **openWakeWord** add-on.
+4. Each add-on is found under Settings > Devices & services (Wyoming Protocol). Then in Settings > Voice assistants,
+   make an assistant that uses them (and pick its wake word, e.g. "Okay Nabu").
+
+Timers are Moonlight's own: "set a 30 minute timer", "full screen timer for 10 minutes", "pasta timer for an hour",
+"how long is left on the timer?" and "cancel the timer" put the timer on the screen you asked (see Notifications and
+timers), since Home Assistant's own voice timers only work on its voice satellite devices.
+
+Then in Moonlight, Settings > Voice: pick the assistant, turn the wake word on for the styles of screen you want, and
+choose where answers are spoken: on the screen itself, on the screen's speaker (as an announcement over the music),
+or not at all. With the wake word on, the screen streams its microphone to Home Assistant, which listens for the word,
+and the microphone button shows a green dot.
+
+On the screens:
+
+- **A microphone.** A Raspberry Pi and most monitors have none: plug in a USB speakerphone (it's the speaker for the
+  answers too).
+- **https.** Browsers only let a page use the microphone over https (or on the device itself). Open Moonlight's
+  https address on the screen (see Access from the internet; a local DNS entry for the certificate's name keeps it on
+  your network), or start the kiosk browser with
+  `--unsafely-treat-insecure-origin-as-secure=http://homeassistant.local:8091`. Settings > Voice says whether this
+  screen's microphone can work. Typing works either way.
+- **Sound without a tap.** Kiosk browsers usually play sound freely; if a spoken answer stays silent after the wake
+  word, start the browser with `--autoplay-policy=no-user-gesture-required`.
+
 ## Calendars
 
 Settings > Calendars > Connect iCloud with an Apple ID and an app-specific password

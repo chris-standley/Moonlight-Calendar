@@ -12,7 +12,7 @@ from fastapi import APIRouter, Body, HTTPException
 
 from .. import (
     caldav_sync, db, energy, event_scan, ha_client, home_security, media, public_holidays, recipe_import, security,
-    seed,
+    seed, voice,
 )
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
@@ -35,6 +35,7 @@ def settings_out(c) -> dict:
     out["holidays"] = public_holidays.region(c)
     out["security"] = {**home_security.saved(c), "popup": home_security.popup_setting(c)}
     out["energy"] = energy.saved(c)
+    out["voice"] = voice.saved(c)
     saved_wx = db.get_setting(c, "weather_entity", None)
     out["weather_entity"] = ha_client.env_entity() if saved_wx is None else saved_wx
     return out
@@ -101,6 +102,7 @@ async def patch_settings(body: dict = Body(...)):
         displays_routes.apply_settings(c, body)  # screens
         security_changed = home_security.apply_settings(c, body)  # security
         energy_changed = energy.apply_settings(c, body)  # energy
+        voice.apply_settings(c, body)  # voice
         if "weather_entity" in body:
             wx = "" if body["weather_entity"] is None else body["weather_entity"]
             if not isinstance(wx, str) or (wx.strip() and not ha_client.ENTITY_RE.match(wx.strip())):
