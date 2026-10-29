@@ -281,5 +281,36 @@ export function httpApi(base = ""): Api {
     setAlarm: (action, code) => req("POST", "/api/security/alarm", { action, ...(code ? { code } : {}) }),
     energy: () => get("/api/energy"),
     energyOptions: (refresh = false) => get("/api/energy/options" + (refresh ? "?refresh=true" : "")),
+    voiceStatus: (layout) => get("/api/voice" + q({ layout })),
+    voice(layout, onEvent) {
+      const url = new URL(base + "/api/voice/ws", location.href);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.searchParams.set("layout", layout);
+      const token = getToken();
+      if (token) url.searchParams.set("token", token);
+      const sock = new WebSocket(url);
+      sock.binaryType = "arraybuffer";
+      const waiting: (string | ArrayBuffer)[] = []; // sent before the socket opened
+      const send = (m: string | ArrayBuffer) => {
+        if (sock.readyState === WebSocket.OPEN) sock.send(m);
+        else if (sock.readyState === WebSocket.CONNECTING && (typeof m === "string" || waiting.length < 50)) waiting.push(m);
+      };
+      sock.onopen = () => { waiting.splice(0).forEach((m) => sock.send(m)); };
+      sock.onmessage = (m) => {
+        if (typeof m.data !== "string") return;
+        try {
+          const e = JSON.parse(m.data);
+          onEvent(e.type === "audio" ? { ...e, url: base + e.url } : e);
+        } catch { /* ignore */ }
+      };
+      sock.onclose = () => onEvent({ type: "closed" });
+      return {
+        start: (mode, opts) => send(JSON.stringify({ type: "start", mode, ...opts })),
+        audio: (pcm) => send(pcm),
+        stop: () => send(JSON.stringify({ type: "stop" })),
+        cancel: () => send(JSON.stringify({ type: "cancel" })),
+        close: () => { sock.onclose = null; sock.close(); },
+      };
+    },
   };
 }

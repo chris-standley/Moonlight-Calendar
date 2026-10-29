@@ -13,6 +13,7 @@ import { NurseryPanel } from "./NurserySettings";
 import { SecurityPanel } from "./SecuritySettings";
 import { EnergyPanel } from "./EnergySettings";
 import { MusicPanel } from "./MusicSettings";
+import { VoicePanel } from "./VoiceSettings";
 import { useHolidayRegionName } from "../components/holidays";
 
 export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
@@ -114,6 +115,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
         <SecurityPanel />
         <EnergyPanel />
         <MusicPanel />
+        <VoicePanel />
         <SampleDataPanel />
         <ScreensPanel />
         <ScreensaverPanel onScreensaver={onScreensaver} />

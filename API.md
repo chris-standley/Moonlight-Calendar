@@ -15,7 +15,8 @@ implementation of the same contract, used for the published preview). Keep them 
 - `GET /api/settings` -> `{family_name, week_start: "monday"|"sunday", temp_unit: "C"|"F", theme: "auto"|"light"|"dark", pin_set: bool, chore_approval: bool, timezone,
   screensaver_seconds: int, idle_minutes: {large, compact, phone}, photo_details: bool,
   media_players: {large, compact, phone}, screens: {large, compact, phone}, holidays: {country, subdiv},
-  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}, energy: {entities?, battery_invert?, grid_invert?, hide?}}`
+  security: {alarm_entity?, cameras?, popup: {large, compact, phone, tv}}, energy: {entities?, battery_invert?, grid_invert?, hide?},
+  voice: {pipeline, wake: {large, compact, phone}, replies}}`
   Keys are screen styles (`large` wall screen, `compact` small touch screen, `phone`; the old names `hallway` and
   `kitchen` are accepted as input). These per-style values are what the Home Assistant app shows, and what a paired
   screen uses until it has its own setup (see Screens).
@@ -38,7 +39,9 @@ implementation of the same contract, used for the published preview). Keep them 
   code (`""` = whole country), e.g. `{country: "GB", subdiv: "ENG"}`, the default when the timezone is Europe/London
   (otherwise none). Dates come from the `holidays` package (see Public holidays).
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, theme, chore_approval, timezone,
-  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security, energy`, plus `pin` (required) -> settings.
+  screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security, energy, voice`, plus `pin` (required) -> settings.
+  `voice` (merged, see Voice): `pipeline` an Assist pipeline id or `""` (Home Assistant's preferred one), `wake:
+  {large?, compact?, phone?: bool}` (default all off), `replies`: `screen` (default) | `speaker` | `none`.
   `security` (merged, see Security): `alarm_entity` an `alarm_control_panel.*` id, `""` none, null automatic;
   `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
   `popup: {large?, compact?, phone?, tv?: bool}` (default large and compact on; `tv` is the Apple TV app, off). Broadcasts `security` and `security_alert`.
@@ -523,6 +526,27 @@ clock.
 Live updates: topic `alerts`. A timer reaching zero and a screen dismissing one also send
 `{"type": "alert", "event": "finished"|"dismissed", id, kind, title, screen}` on the WebSocket (`screen`: the name of
 the screen that dismissed it); the integration fires these as `moonlight_alert` events.
+
+## Voice (Assist from Home Assistant)
+Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so they need no Home Assistant login.
+- `GET /api/voice?layout=` -> `{available, reason?, pipelines: [{id, name, language, stt, tts, wake_word, agent}],
+  preferred, pipeline, wake_engine, wake, wake_by_layout, replies}`. `pipeline` is the one screens use (the saved one
+  if it still exists, else HA's preferred); `stt`/`tts` say whether it has speech-to-text and a voice; `wake_engine`
+  whether HA has a wake word engine (openWakeWord); `wake` whether the wake word is on for that style.
+- WebSocket `/api/voice/ws?layout=` relays one screen to `assist_pipeline/run`, one run at a time:
+  - screen -> `{"type": "start", "mode": "listen" | "wake" | "text", "text"?, "conversation_id"?}`, then binary
+    16 kHz 16-bit mono PCM (listen, wake); `{"type": "stop"}` ends the audio (HA also ends it on silence);
+    `{"type": "cancel"}` drops the run. A new `start` drops the run going.
+  - screen <- `ready` (connected to HA), then per run: `waiting` (wake word run listening), `woke {phrase}`,
+    `listening`, `speech_end`, `heard {text}`, `thinking`, `reply {text, kind, continue, conversation_id}`
+    (`continue`: the assistant asked something back), `audio {url}` (the spoken reply, to play on the screen),
+    `spoken {entity}` (played on the screen's speaker instead), `error {code, message}` (HA's pipeline error codes,
+    e.g. `stt-no-text-recognized`, `wake-word-timeout`), `done`.
+  - A wake run waits up to an hour for the wake word, then ends with `wake-word-timeout`; screens start another.
+- `GET /api/voice/audio/{key}` -> the spoken reply's audio, streamed from HA (only keys the relay handed out; the
+  last 32 are kept).
+Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else
+its style's); a screen with no speaker speaks them itself.
 
 ## Summary (for the Home Assistant integration)
 - `GET /api/summary?date=YYYY-MM-DD&now=YYYY-MM-DDTHH:MM` (both optional; default today / now) ->

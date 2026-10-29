@@ -26,6 +26,7 @@ import { SecurityView } from "./views/SecurityView";
 import { EnergyView } from "./views/EnergyView";
 import { SecurityAlerts } from "./views/SecurityAlerts";
 import { ScreenAlerts } from "./views/ScreenAlerts";
+import { VoiceButton, VoiceProvider } from "./views/Voice";
 
 type Tab = "today" | "calendar" | "chores" | "rewards" | "meals" | "recipes" | "lists" | "music" | "nursery" | "security" | "energy" | "settings";
 const NAV: { key: Tab; label: string; icon: (p: { size?: number }) => ReactNode }[] = [
@@ -199,6 +200,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
     <AppProvider value={{ api, layout, portrait, screen: screen ?? null, people, settings, personById, askPin, toast, celebrate, go }}>
       <div className={`app layout-${layout}` + (portrait ? " portrait" : "") + (EMBEDDED ? " embedded" : "")} ref={root}>
        <MediaProvider api={api} layout={layout}>
+       <VoiceProvider api={api} layout={layout}>
         <nav className="rail">
           <div className="rail-logo"><Logo size={layout === "large" ? 44 : 34} /></div>
           {bar.map((n) => (
@@ -261,6 +263,7 @@ export function App({ api, layout, onLayout }: { api: Api; layout: Layout; onLay
         {ready && <SecurityAlerts saver={saver}>{saver && <Screensaver onWake={() => setSaver(false)} />}</SecurityAlerts>}
         <ScreenAlerts />
         <ConnectionBanner />
+       </VoiceProvider>
        </MediaProvider>
       </div>
     </AppProvider>
@@ -281,6 +284,7 @@ function TopBar({ familyName, music, nursery }: { familyName: string; music: boo
       {wx && <div className="tb-wx"><WeatherIcon condition={wx.condition} size={34} /> {wx.temp}°</div>}
       {music && <NowPlayingPill />}
       {nursery && <NurseryButton feed={nursery} />}
+      <VoiceButton />
       <div className="tb-family">{familyName}</div>
     </header>
   );

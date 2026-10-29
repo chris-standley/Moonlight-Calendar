@@ -10,6 +10,7 @@ import { demoMedia } from "./demoMedia";
 import { demoNursery } from "./demoNursery";
 import { demoSecurity } from "./demoSecurity";
 import { applyEnergyPatch, demoEnergy } from "./demoEnergy";
+import { DEFAULT_VOICE, demoVoice } from "./demoVoice";
 import { demoAlerts } from "./demoAlerts";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
@@ -415,7 +416,7 @@ export function demoApi(): Api {
   const mediaPlayers = () => ({ large: "media_player.kitchen", compact: "media_player.kitchen", phone: "", ...st.settings.media_players });
   const settingsOut = (): Settings => {
     const { pin, ...rest } = st.settings;
-    return { weather_entity: "", holidays: holidayRegion, ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), pin_set: !!pin };
+    return { weather_entity: "", holidays: holidayRegion, ...rest, screens: { ...DEFAULT_SCREENS, ...rest.screens }, media_players: mediaPlayers(), voice: rest.voice ?? DEFAULT_VOICE, pin_set: !!pin };
   };
 
   return {
@@ -425,7 +426,7 @@ export function demoApi(): Api {
     async updateSettings({ pin, new_pin, ...patch }) {
       checkPin(pin);
       if (new_pin != null && new_pin !== "" && !/^\d{4}$/.test(new_pin)) throw new ApiError(400, "new_pin must be 4 digits");
-      const { media_players, idle_minutes, screens, security, energy, ...rest } = patch;
+      const { media_players, idle_minutes, screens, security, energy, voice, ...rest } = patch;
       if (rest.weather_entity != null && rest.weather_entity !== "" && !/^weather\.[a-z0-9_]+$/.test(rest.weather_entity))
         throw new ApiError(400, "weather_entity must be a weather entity id like weather.home, or empty for demo weather");
       if (rest.weather_entity === null) rest.weather_entity = "";
@@ -457,6 +458,10 @@ export function demoApi(): Api {
         st.settings.security = next;
       }
       if (energy) st.settings.energy = applyEnergyPatch(st.settings.energy, energy);
+      if (voice) {
+        const cur = st.settings.voice ?? DEFAULT_VOICE;
+        st.settings.voice = { ...cur, ...voice, wake: { ...cur.wake, ...voice.wake } };
+      }
       if (idle_minutes) st.settings.idle_minutes = { ...st.settings.idle_minutes, ...idle_minutes };
       if (screens) {
         const cur = { ...DEFAULT_SCREENS, ...st.settings.screens };
@@ -742,6 +747,7 @@ export function demoApi(): Api {
     ...demoNursery(checkPin, emit, () => st.people), // a pretend Tapestry account
     ...demoSecurity(emit, () => st.settings.security, checkPin), // a pretend alarm and cameras
     ...demoEnergy(emit, () => st.settings.energy), // a pretend inverter, car charger and heat pump
+    ...demoVoice(() => st.settings.voice), // a pretend Assist
     ...demoAlerts(emit), // notifications and timers, as Home Assistant would send them
     accounts: async () => accts().map(acctOut),
     async connectAccount(a) {

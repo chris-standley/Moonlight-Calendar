@@ -29,6 +29,37 @@ export interface Settings {
   security?: SecuritySettings;
   /** Settings > Energy: entity per slot ("" = none, absent = automatic) and sign flips. */
   energy?: EnergySettings;
+  /** Settings > Voice: Assist pipeline ("" = Home Assistant's preferred one), wake word per style, where replies play. */
+  voice?: VoiceSettings;
+}
+/** Where a spoken reply plays: on the screen itself, on the screen's speaker (as an announcement), or nowhere. */
+export type VoiceReplies = "screen" | "speaker" | "none";
+export interface VoiceSettings { pipeline: string; wake: Record<Layout, boolean>; replies: VoiceReplies }
+export interface VoicePipeline { id: string; name: string; language: string; stt: boolean; tts: boolean; wake_word: string; agent: string }
+/** GET /api/voice: what Assist can do for this style of screen. `pipeline` is the one in use. */
+export interface VoiceStatus {
+  available: boolean; reason?: string; pipelines: VoicePipeline[]; preferred: string; pipeline: string;
+  /** Home Assistant has a wake word engine (openWakeWord). */
+  wake_engine: boolean;
+  /** Hands-free wake word is on for this style of screen. */
+  wake: boolean; wake_by_layout: Record<Layout, boolean>; replies: VoiceReplies;
+}
+/** What the voice link reports as a run goes (see backend voice.py). */
+export type VoiceEvent =
+  | { type: "ready" } | { type: "waiting" } | { type: "woke"; phrase: string } | { type: "listening" } | { type: "speech_end" }
+  | { type: "heard"; text: string } | { type: "thinking" }
+  | { type: "reply"; text: string; kind: string; continue: boolean; conversation_id: string | null }
+  | { type: "audio"; url: string } | { type: "spoken"; entity: string }
+  | { type: "error"; code: string; message: string } | { type: "done" } | { type: "closed" };
+export type VoiceMode = "listen" | "wake" | "text";
+/** One open line to Assist: start a run, feed it 16 kHz 16-bit mono audio, end or drop it. */
+export interface VoiceLink {
+  start(mode: VoiceMode, opts?: { text?: string; conversation_id?: string | null }): void;
+  audio(pcm: ArrayBuffer): void;
+  /** The person stopped talking (Home Assistant also notices by itself). */
+  stop(): void;
+  cancel(): void;
+  close(): void;
 }
 export interface HolidayRegion { country: string; subdiv: string }
 export interface Holiday { date: string; name: string }
@@ -491,7 +522,8 @@ export interface Api {
   dismissAlert(id: string): Promise<void>;
   settings(): Promise<Settings>;
   /** `new_pin` (4 digits) replaces the parent PIN; `pin` must be the current one. */
-  updateSettings(patch: Partial<Omit<Settings, "screens" | "security" | "energy">> & { security?: SecuritySettingsPatch; energy?: EnergySettingsPatch; screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
+  updateSettings(patch: Partial<Omit<Settings, "screens" | "security" | "energy" | "voice">> & { security?: SecuritySettingsPatch; energy?: EnergySettingsPatch;
+    voice?: Partial<Omit<VoiceSettings, "wake">> & { wake?: Partial<Record<Layout, boolean>> }; screens?: Partial<Record<Layout, Partial<ScreenSetup>>>; pin: string; new_pin?: string }): Promise<Settings>;
   verifyPin(pin: string): Promise<boolean>;
   people(): Promise<Person[]>;
   createPerson(p: PersonIn): Promise<Person>;
@@ -655,5 +687,8 @@ export interface Api {
   energy(): Promise<EnergyOverview>;
   /** For Settings > Energy; `refresh` asks Home Assistant again. */
   energyOptions(refresh?: boolean): Promise<EnergyOptions>;
+  // Voice: Assist from Home Assistant (see API.md "Voice")
+  voiceStatus(layout: Layout): Promise<VoiceStatus>;
+  voice(layout: Layout, onEvent: (e: VoiceEvent) => void): VoiceLink;
   resetDemo?(): Promise<void>;
 }

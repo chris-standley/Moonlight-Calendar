@@ -20,6 +20,7 @@ from .routes import accounts, alerts as alert_routes, calendar, chores, displays
 from .routes import energy as energy_routes
 from .routes import home_security as security_routes
 from .routes import media as media_routes
+from .routes import voice as voice_routes
 from .routes import summary as summary_routes
 from .auth import AuthMiddleware
 from .seed import default_seed_path, seed_file
@@ -104,6 +105,7 @@ def create_app(
     app.include_router(security_routes.router)
     app.include_router(energy_routes.router)
     app.include_router(alert_routes.router)
+    app.include_router(voice_routes.router)
 
     # Follow the configured media players over Home Assistant's WebSocket (only when HA is reachable at all).
     async def start_media():
