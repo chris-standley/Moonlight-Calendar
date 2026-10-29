@@ -63,7 +63,9 @@ def tidy_images(c) -> None:
     for (iid,) in c.execute("SELECT id FROM images WHERE created_at < ?", (cutoff,)).fetchall():
         used = c.execute("SELECT 1 FROM recipes WHERE photo = ? OR steps LIKE ? UNION ALL "
                          "SELECT 1 FROM recipe_batch_pages WHERE image = ? UNION ALL "
-                         "SELECT 1 FROM cookbooks WHERE cover = ? LIMIT 1", (iid, f'%"{iid}"%', iid, iid)).fetchone()
+                         "SELECT 1 FROM cookbooks WHERE cover = ? UNION ALL "
+                         "SELECT 1 FROM events WHERE attachments LIKE ? LIMIT 1",
+                         (iid, f'%"{iid}"%', iid, iid, f'%"{iid}"%')).fetchone()
         if not used:
             c.execute("DELETE FROM images WHERE id = ?", (iid,))
 

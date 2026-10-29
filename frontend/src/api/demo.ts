@@ -523,6 +523,9 @@ export function demoApi(): Api {
       Object.assign(ev, patch); emit("events"); return decorate(clone(ev));
     },
     async deleteEvent(id) { writable(id); st.events = st.events.filter((e) => e.id !== id); emit("events"); },
+    async scanEvent() {
+      throw new ApiError(409, "Reading invitations here needs Claude: add an Anthropic API key in Settings › Recipes. The iPhone app can read them on the phone without one.");
+    },
     allChores: async () => clone(st.chores),
     async chores(date) {
       return st.chores.filter((c) => isDue(c, date)).sort((a, b) => a.sort - b.sort).map((c): ChoreDay => {

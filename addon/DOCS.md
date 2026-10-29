@@ -220,6 +220,14 @@ public holidays. Pick the country and region in Settings > Display > Public holi
 until you choose, when Home Assistant's timezone is Europe/London). Skipped dates are written to iCloud too, so
 the event is also missing on those days on phones.
 
+To add a party invitation, school letter or event poster, use **Capture from image** next to the New event title
+(on a phone, tablet or computer; wall screens without a camera don't show it), or + > Capture from image in the
+iPhone app (Event from image on Today). The photo is kept with the event (tap it in the event to see it whole), and the title, date, time, place and
+notes such as RSVP details are filled in for you to check. The iPhone reads the words on the phone itself; turn on
+Read with Claude there for handwriting or fancy lettering. Elsewhere Claude reads the photo, using the Anthropic API
+key in Settings > Recipes: one short request per scan. Without a key the photo is still kept and you type the details.
+Pictures stay on Moonlight, also for events in an iCloud calendar.
+
 ## Recipes
 
 The Recipes section holds the family's recipes: picture, rating, servings and times, ingredients and steps (with step

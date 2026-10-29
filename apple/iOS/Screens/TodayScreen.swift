@@ -11,10 +11,12 @@ struct TodayScreen: View {
     @State private var grocery: [ListItem] = []
     @State private var open: Occurrence?
     @State private var adding: Adding?
+    @State private var scanned: EventDraft?
+    @State private var pendingScan: EventDraft?
 
     /// What the + menu adds: everything Today shows.
     enum Adding: String, Identifiable {
-        case event, chore, item, dinner
+        case event, scan, chore, item, dinner
         var id: String { rawValue }
     }
 
@@ -65,6 +67,7 @@ struct TodayScreen: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { adding = .event } label: { Label("Event", systemImage: "calendar.badge.plus") }
+                    Button { adding = .scan } label: { Label("Event from image", systemImage: "camera.viewfinder") }
                     Button { adding = .chore } label: { Label("Chore", systemImage: "checkmark.circle") }
                     Button { adding = .item } label: { Label("List item", systemImage: "cart.badge.plus") }
                     Button { adding = .dinner } label: { Label("Tonight's dinner", systemImage: "fork.knife") }
@@ -76,9 +79,14 @@ struct TodayScreen: View {
         }
         .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points", "lists"))") { await load(today) }
         .sheet(item: $open) { EventDetailSheet(event: $0) }
-        .sheet(item: $adding) { what in
+        .sheet(item: $scanned) { EventEditor(draft: $0) }
+        .sheet(item: $adding, onDismiss: {
+            scanned = pendingScan
+            pendingScan = nil
+        }) { what in
             switch what {
             case .event: EventEditor()
+            case .scan: EventScanView { pendingScan = $0 }
             case .chore: ChoreEditor(chore: nil, personId: model.kids.first?.id ?? model.people.first?.id)
             case .item: ItemAdder(lists: lists)
             case .dinner:

@@ -179,10 +179,17 @@ struct Occurrence: Codable, Identifiable, Hashable {
     let busy: String?
     let read_only: Bool?
     let calendar_id: String?
+    /// Pictures kept with the event, e.g. a scanned invitation (`url` is under /api).
+    let attachments: [EventAttachment]?
 
     var key: String { occurrence_id }
     var editable: Bool { read_only != true && busy == nil }
     var startDay: String { String(start.prefix(10)) }
+}
+
+struct EventAttachment: Codable, Hashable, Identifiable {
+    let id: String
+    let url: String
 }
 
 struct ChoreDay: Codable, Identifiable, Hashable {

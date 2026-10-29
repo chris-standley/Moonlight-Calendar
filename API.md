@@ -83,12 +83,19 @@ implementation of the same contract, used for the published preview). Keep them 
 - `POST /api/events` Event without id -> Event
 - `PATCH /api/events/{id}` partial -> Event (edits the whole series)
 - `DELETE /api/events/{id}` -> `{ok: true}`
+- `POST /api/events/scan` `{image: id from POST /api/images, today?: YYYY-MM-DD}` -> draft event (not saved):
+  `{title, start, end, all_day, location, notes, person_ids, attachments: [{id, url}], found_date: bool}`. Claude reads
+  a photo of an invitation or flier (one Anthropic request, the key in Settings > Recipes); 409 without a key, 422
+  when no event is found. A missing date gives today with `found_date: false`, a missing time all day, a missing end
+  two hours on. `person_ids` are the family named on it.
 
 Events also carry `calendar_id` (null = local-only), `source` (null | `"icloud"` | `"caldav"` | `"ics"`),
 `custom_repeat` (bool), `color` (the calendar's colour, null for local events), `read_only` (bool: in a
 read-only calendar, edits get 403) and `busy` (null, or on calendars shown as busy blocks one of
 `"busy"|"tentative"|"away"|"elsewhere"`; `"free"` events of such calendars are left out). See Calendar sync
 and Calendar links.
+`attachments` = `[{id, url}]`: pictures kept with the event (a scanned invite), stored on Moonlight only, also for
+synced events. Send `attachments` as a list of image ids (or the `{id, url}` objects) to set them, at most 10.
 
 ## Calendar sync (iCloud / CalDAV)
 iCloud is the master. Moonlight caches events locally and polls every account (default every 120 s,

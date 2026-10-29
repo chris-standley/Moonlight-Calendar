@@ -1,4 +1,4 @@
-import { AlertsNow, Api, ApiError, Cookbook, Display, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, HiddenPhoto, Topic, UploadedImage } from "./types";
+import { AlertsNow, Api, ApiError, CalEvent, Cookbook, Display, EventDraft, EventIn, MediaBrowse, MediaItem, MediaQueue, NowPlaying, NurseryUpdate, Occurrence, SecurityAlert, SecurityOverview, Recipe, RecipeBatch, ScreensaverPhotos, HiddenPhoto, Topic, UploadedImage } from "./types";
 import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 const PING_MS = 25_000;
@@ -42,6 +42,7 @@ export function httpApi(base = ""): Api {
   const q = (o: Record<string, string>) => "?" + new URLSearchParams(o).toString();
   // Picture urls are absolute API paths; under Home Assistant ingress they need the ingress prefix.
   const pic = (u: string | null) => (u ? base + u : null);
+  const evPics = <T extends EventIn>(e: T): T => (e.attachments ? { ...e, attachments: e.attachments.map((a) => ({ ...a, url: base + a.url })) } : e);
   const rec = (r: Recipe): Recipe => ({ ...r, photo_url: pic(r.photo_url), steps: r.steps.map((s) => ({ ...s, photo_url: pic(s.photo_url) })) });
   const recipe = async (p: Promise<Recipe>) => rec(await p);
   const batch = (b: RecipeBatch): RecipeBatch => ({ ...b, drafts: b.drafts.map((d) => ({ ...d, recipe: rec(d.recipe) })) });
@@ -149,9 +150,10 @@ export function httpApi(base = ""): Api {
     createPerson: (p) => req("POST", "/api/people", p),
     updatePerson: (id, patch) => req("PATCH", `/api/people/${id}`, patch),
     deletePerson: async (id, pin) => { await req("DELETE", `/api/people/${id}`, { pin }); },
-    events: (start, end) => get("/api/events" + q({ start, end })),
-    createEvent: (e) => req("POST", "/api/events", e),
-    updateEvent: (id, e) => req("PATCH", `/api/events/${id}`, e),
+    events: async (start, end) => (await get<Occurrence[]>("/api/events" + q({ start, end }))).map(evPics),
+    createEvent: async (e) => evPics(await req<CalEvent>("POST", "/api/events", e)),
+    updateEvent: async (id, e) => evPics(await req<CalEvent>("PATCH", `/api/events/${id}`, e)),
+    scanEvent: async (image, today) => evPics(await req<EventDraft>("POST", "/api/events/scan", { image, today })),
     deleteEvent: async (id) => { await req("DELETE", `/api/events/${id}`); },
     allChores: () => get("/api/chores/all"),
     chores: (date) => get("/api/chores" + q({ date })),

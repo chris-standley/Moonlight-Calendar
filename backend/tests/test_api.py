@@ -648,3 +648,79 @@ def test_theme_setting(client):
     pin = {"pin": PIN}
     assert client.patch("/api/settings", json={**pin, "theme": "dark"}).json()["theme"] == "dark"
     assert client.patch("/api/settings", json={**pin, "theme": "purple"}).status_code == 400
+
+
+# ---------------------------------------------------------------- scanned invitations
+
+def test_event_attachments_and_scanning_an_invite(tmp_path, monkeypatch):
+    import base64
+
+    from moonlight import event_scan
+
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+    app = create_app(db_path=str(tmp_path / "s.db"), demo=False, static_dir=tmp_path / "no-dist")
+    with TestClient(app) as client:
+        assert client.patch("/api/settings", json={"pin": "1234"}).status_code == 200
+        mia = client.post("/api/people", json={"name": "Mia", "color": "#ff0000", "role": "child"}).json()
+        img = client.post("/api/images", content=png).json()["id"]
+
+        # Without a key: 409, so the screens keep the photo and the family types the details.
+        r = client.post("/api/events/scan", json={"image": img})
+        assert r.status_code == 409 and "Settings" in r.json()["detail"]
+        assert client.put("/api/recipes-reader", json={"pin": "1234", "api_key": "sk-ant-test-abcd"}).status_code == 200
+        assert client.post("/api/events/scan", json={"image": "img_nope"}).status_code == 400
+
+        seen = {}
+
+        async def fake_ask(key, model, content, schema):
+            seen.update(key=key, images=sum(1 for b in content if b["type"] == "image"), prompt=content[-1]["text"])
+            return {"found": True, "title": "Leo's 7th birthday party", "date": "2026-11-14", "start_time": "14:00",
+                    "end_time": None, "end_date": None, "location": "Jump Zone, High St",
+                    "notes": "RSVP to Sam by 7 Nov", "for_people": ["mia"]}
+        monkeypatch.setattr(event_scan, "_ask", fake_ask)
+        d = client.post("/api/events/scan", json={"image": img, "today": "2026-10-29"}).json()
+        assert seen["key"] == "sk-ant-test-abcd" and seen["images"] == 1
+        assert "Thursday 29 October 2026" in seen["prompt"] and "Mia" in seen["prompt"]
+        assert d["title"] == "Leo's 7th birthday party" and d["all_day"] is False
+        assert (d["start"], d["end"]) == ("2026-11-14T14:00", "2026-11-14T16:00")  # two hours when no end is given
+        assert d["person_ids"] == [mia["id"]] and d["found_date"] is True
+        assert d["attachments"] == [{"id": img, "url": f"/api/images/{img}"}]
+
+        # Saving the draft keeps the photo with the event; it can be dropped later.
+        ev = client.post("/api/events", json={k: d[k] for k in ("title", "start", "end", "all_day", "location",
+                                                                "notes", "person_ids", "attachments")}).json()
+        assert ev["attachments"] == d["attachments"] and ev["notes"] == "RSVP to Sam by 7 Nov"
+        assert client.patch(f"/api/events/{ev['id']}", json={"title": "Leo's party"}).json()["attachments"] == d["attachments"]
+        listed = client.get("/api/events", params={"start": "2026-11-14", "end": "2026-11-15"}).json()
+        assert listed[0]["attachments"][0]["id"] == img
+        assert client.patch(f"/api/events/{ev['id']}", json={"attachments": ["img_nope"]}).status_code == 400
+        assert client.patch(f"/api/events/{ev['id']}", json={"attachments": [img]}).json()["attachments"][0]["id"] == img
+
+        # Pictures an event keeps aren't tidied away with unused ones.
+        from moonlight import db
+        from moonlight.routes.recipes import tidy_images
+        with db.connect() as c:
+            c.execute("UPDATE images SET created_at = '2020-01-01T00:00:00'")
+            tidy_images(c)
+            assert c.execute("SELECT 1 FROM images WHERE id = ?", (img,)).fetchone()
+        assert client.patch(f"/api/events/{ev['id']}", json={"attachments": []}).json()["attachments"] == []
+        with db.connect() as c:
+            tidy_images(c)
+            assert not c.execute("SELECT 1 FROM images WHERE id = ?", (img,)).fetchone()
+
+
+def test_invite_drafts():
+    from datetime import date
+
+    from moonlight.event_scan import draft
+
+    today = date(2026, 10, 29)
+    base = {"title": "Fair", "location": "", "notes": "", "for_people": [], "end_date": None}
+    d = draft({**base, "date": None, "start_time": None, "end_time": None}, today)
+    assert (d["start"], d["end"], d["all_day"], d["found_date"]) == ("2026-10-29T00:00", "2026-10-30T00:00", True, False)
+    d = draft({**base, "date": "2026-12-05", "start_time": "10:00", "end_time": "13:30"}, today)
+    assert (d["start"], d["end"], d["all_day"]) == ("2026-12-05T10:00", "2026-12-05T13:30", False)
+    d = draft({**base, "date": "2026-12-05", "end_date": "2026-12-06", "start_time": None, "end_time": None}, today)
+    assert (d["start"], d["end"], d["all_day"]) == ("2026-12-05T00:00", "2026-12-07T00:00", True)
+    d = draft({**base, "date": "2026-12-05", "start_time": "9pm", "end_time": "nope"}, today)
+    assert d["all_day"] is True  # unreadable times: all day, for the family to set
