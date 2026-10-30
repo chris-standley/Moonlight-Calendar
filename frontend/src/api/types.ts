@@ -58,7 +58,7 @@ export type VoiceEvent =
 export type VoiceMode = "listen" | "wake" | "text";
 /** One open line to Assist: start a run, feed it 16 kHz 16-bit mono audio, end or drop it. */
 export interface VoiceLink {
-  start(mode: VoiceMode, opts?: { text?: string; conversation_id?: string | null }): void;
+  start(mode: VoiceMode, opts?: { text?: string; conversation_id?: string | null; mic?: string }): void;
   audio(pcm: ArrayBuffer): void;
   /** The person stopped talking (Home Assistant also notices by itself). */
   stop(): void;

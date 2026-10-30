@@ -118,7 +118,7 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
     s.woke = false;
     s.wakeFailed = false;
     s.streaming = true;
-    s.link.start("wake");
+    s.link.start("wake", { mic: s.mic?.info });
     setWaking(true);
   }, [api, layout, ensureMic]);
 

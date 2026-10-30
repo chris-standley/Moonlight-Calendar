@@ -73,6 +73,8 @@ export const MIC_PROBLEM: Record<MicProblem, string> = {
 export interface Mic {
   /** Each chunk of audio while `on`; level is 0..1 (loudness, for the animation). */
   onChunk: ((pcm: ArrayBuffer, level: number) => void) | null;
+  /** How the browser opened it (its rate and processing), for the add-on's log when a wake word won't wake. */
+  info: string;
   stop(): void;
 }
 
@@ -116,8 +118,13 @@ export async function openMic(settings?: Partial<MicSettings>): Promise<Mic> {
   document.addEventListener("visibilitychange", wake);
   const timer = window.setInterval(wake, 10_000);
   if (ctx.state === "suspended") await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => setTimeout(r, 1000))]);
+  const track = stream.getAudioTracks()[0];
+  const got = (track?.getSettings?.() ?? {}) as Record<string, unknown>;
+  const info = [`context ${ctx.sampleRate} Hz`, ...Object.entries(got).filter(([k]) => k !== "deviceId" && k !== "groupId")
+    .map(([k, v]) => `${k} ${v}`)].join(", ").slice(0, 300);
   const mic: Mic = {
     onChunk: null,
+    info,
     stop() {
       clearInterval(timer);
       ctx.onstatechange = null;

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from array import array
 from pathlib import Path
 
 import httpx
@@ -493,3 +494,28 @@ def test_sample_spectrum_shows_where_the_sound_is():
     v._keep_sample(_a("h", [int(8000 * _m.sin(2 * _m.pi * 1125 * i / 16000)) for i in range(4096)]).tobytes())
     spec = dict(map(tuple, v.sample_part(0, 0)["speech_spectrum_db"]))
     assert spec[1125] == 0 and spec[3125] < -40
+
+
+def test_stretch():
+    from moonlight import voice as v
+    x = array("h", [0, 1000, 2000, 3000])
+    assert v.stretch(x.tobytes(), 1.0) == x.tobytes()
+    slow = array("h")
+    slow.frombytes(v.stretch(x.tobytes(), 2.0))
+    assert list(slow) == [0, 500, 1000, 1500, 2000, 2500, 3000]
+    fast = array("h")
+    fast.frombytes(v.stretch(x.tobytes(), 0.5))
+    assert list(fast) == [0, 2000]
+
+
+def test_replay_sample(client, ha):
+    voice._sample["pcm"] = bytearray()
+    assert client.post("/api/voice/sample/replay").status_code == 409  # nothing recorded
+    voice.record_sample(5)
+    voice._keep_sample(b"\x00\x10" * 16000)
+    got = client.post("/api/voice/sample/replay").json()
+    assert got["seconds"] == 1.0
+    assert [t["speed"] for t in got["tries"]] == [1.0, 1.088, 0.919]
+    assert all(t["woke"] == "ok_nabu" for t in got["tries"])
+    runs = [r for r in ha.runs if r["start_stage"] == "wake_word"]
+    assert len(runs) == 3 and all(r["end_stage"] == "wake_word" for r in runs)

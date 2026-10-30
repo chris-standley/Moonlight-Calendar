@@ -566,6 +566,11 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
 - `GET /api/voice/sample.json?start=&seconds=` -> `{rate, seconds, peak_dbfs_per_100ms,
   speech_spectrum_db: [[hz, dB]], start, pcm16_b64}`: up to 10 s
   of that recording as base64, for tools that can't take binary.
+- `POST /api/voice/sample/replay` -> `{seconds, tries: [{speed, woke, at_s?, error?}]}`: plays that recording to the
+  pipeline's wake word engine as recorded, then slowed (`1.088`) and sped up (`0.919`) as if the screen had taken
+  44.1 kHz for 48 kHz or the other way round. `woke` is the wake word heard, or null. 409 when nothing is recorded.
+- The `start` of a wake word run may carry `mic`, a short description of how the browser opened the microphone
+  (its sample rate and processing); the add-on logs it once per screen connection.
 Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else
 its style's); a screen with no speaker speaks them itself.
 
