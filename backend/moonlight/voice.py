@@ -27,9 +27,11 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import re
 import secrets
 import time
+from array import array
 from collections import OrderedDict
 from typing import Any, AsyncIterator
 
@@ -287,6 +289,43 @@ async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speak
             await ha_cm.__aexit__(None, None, None)
 
 
+class SoundMeter:
+    """How much sound a wake word run is getting, for the log: a screen whose microphone sends silence (or barely a
+    whisper) never wakes, and nothing else says so."""
+    EVERY = 60.0  # seconds of audio between log lines
+
+    def __init__(self, layout: str):
+        self.layout = layout
+        self.reset()
+
+    def reset(self) -> None:
+        self.samples = 0
+        self.loud = 0.0  # the loudest 80 ms, as RMS 0..1
+        self.sum = 0.0  # of each chunk's RMS, for the typical level
+
+    def add(self, pcm: bytes) -> None:
+        a = array("h")
+        a.frombytes(pcm[: len(pcm) // 2 * 2])
+        if not a:
+            return
+        rms = math.sqrt(sum(x * x for x in a) / len(a)) / 32768
+        self.samples += len(a)
+        self.sum += rms * len(a)
+        self.loud = max(self.loud, rms)
+        if self.samples >= self.EVERY * SAMPLE_RATE:
+            self.report()
+
+    def report(self, woke: str = "") -> None:
+        if not self.samples:
+            return
+        def db_(v: float) -> str:
+            return "silence" if v <= 1e-5 else f"{20 * math.log10(v):.0f} dBFS"
+        secs = self.samples / SAMPLE_RATE
+        log.info("Wake word on a %s screen: %.0f s of sound, typically %s, loudest %s%s", self.layout, secs,
+                 db_(self.sum / self.samples), db_(self.loud), f" (woke: {woke})" if woke else "")
+        self.reset()
+
+
 async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, speaker: str,
                  display: dict | None = None, layout: str = "compact") -> None:
     # The run going: its message id, HA's handler for its audio, and for a speech run (which stops at
@@ -298,9 +337,11 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
     next_id = 0
     speak = replies != "none"
     speak_on = speaker if replies == "speaker" else ""
+    meter = SoundMeter(layout)
 
     async def send_run(msg: dict) -> None:
-        run.update(id=msg["id"], handler=None, speech=msg["end_stage"] == "stt", heard="", early=False, tts=False)
+        run.update(id=msg["id"], handler=None, speech=msg["end_stage"] == "stt", heard="", early=False, tts=False,
+                   wake=msg.get("start_stage") == "wake_word")
         await ha.send(json.dumps(msg))
 
     def new_id() -> int:
@@ -361,6 +402,9 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                     run["early"] = True
                     await client.send_json({"type": "audio", "url": f"/api/voice/audio/{remember_audio(early['url'])}"})
                 continue
+            if kind == "wake_word-end":
+                meter.report(woke=((ev.get("data") or {}).get("wake_word_output") or {}).get("wake_word_id") or "?")
+                run["wake"] = False
             if kind in ("stt-end", "error", "run-end"):
                 run["handler"] = None  # no more audio wanted
             if kind == "tts-start":
@@ -402,6 +446,8 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                 return
             if m.get("bytes") is not None:
                 if run["handler"] is not None and m["bytes"]:
+                    if run.get("wake"):
+                        meter.add(m["bytes"])
                     await ha.send(bytes([run["handler"]]) + m["bytes"])
                 continue
             try:
