@@ -235,6 +235,9 @@ def translate(ev: dict) -> dict | None:
         return {"type": "waiting"}
     if kind == "wake_word-end":
         out = data.get("wake_word_output") or {}
+        if not out.get("wake_word_id"):
+            # It ended without hearing the word: the wake word engine went away (restarting, say).
+            return {"type": "error", "code": "wake-word-lost", "message": "The wake word engine stopped listening"}
         return {"type": "woke", "phrase": out.get("wake_word_phrase") or out.get("wake_word_id") or ""}
     if kind == "stt-start":
         return {"type": "listening"}

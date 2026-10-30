@@ -450,3 +450,10 @@ def test_sound_meter_logs_how_loud_a_wake_word_run_is(caplog):
     lines = [r.getMessage() for r in caplog.records if "Wake word on" in r.message]
     assert lines[0].startswith("Wake word on a compact screen: 60 s of sound") and "loudest -23 dBFS" in lines[0]
     assert "woke: ok_nabu" in lines[1]
+
+
+def test_wake_word_end_without_the_word_is_not_a_wake():
+    from moonlight.voice import translate
+    assert translate({"type": "wake_word-end", "data": {"wake_word_output": {}}})["type"] == "error"
+    woke = translate({"type": "wake_word-end", "data": {"wake_word_output": {"wake_word_id": "ok_nabu"}}})
+    assert woke == {"type": "woke", "phrase": "ok_nabu"}

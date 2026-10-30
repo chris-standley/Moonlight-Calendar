@@ -82,7 +82,9 @@ export async function openMic(): Promise<Mic> {
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      // Echo cancellation keeps the screen's own answers out, but the browser's noise suppression and gain smear
+      // the short wake word past recognition (speech-to-text copes either way), and the worklet sets the level.
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: false },
     });
   } catch (e) {
     const name = (e as DOMException)?.name;
