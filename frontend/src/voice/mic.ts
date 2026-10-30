@@ -1,12 +1,35 @@
 // The screen's microphone as 16 kHz, 16-bit mono PCM: what Home Assistant's Assist takes. An AudioWorklet does the
-// resampling off the main thread and hands over ~80 ms chunks.
+// resampling (and gain) off the main thread and hands over ~80 ms chunks.
 
 const RATE = 16000;
 const CHUNK = 1280; // samples: 80 ms
 
+// Small tablet microphones are quiet (speech peaking near -30 dBFS a few steps away), and the wake word engine
+// needs speech nearer -12. So each chunk is lifted towards that, by up to GAIN_MAX, from the loudness of recent
+// speech: it rises with the first loud chunk and falls back over ~15 s, so loud speech isn't clipped.
+const TARGET = 0.25; // RMS of the loudest recent chunk, about -12 dBFS
+const GAIN_MAX = 8; // +18 dB
+
 const WORKLET = `
 class MoonlightMic extends AudioWorkletProcessor {
-  constructor() { super(); this.step = sampleRate / ${RATE}; this.pos = 0; this.last = 0; this.buf = new Int16Array(${CHUNK}); this.n = 0; this.sum = 0; }
+  constructor() {
+    super(); this.step = sampleRate / ${RATE}; this.pos = 0; this.last = 0; this.buf = new Float32Array(${CHUNK}); this.n = 0;
+    this.loud = 0;
+  }
+  send() {
+    let sum = 0;
+    for (let i = 0; i < ${CHUNK}; i++) sum += this.buf[i] * this.buf[i];
+    const rms = Math.sqrt(sum / ${CHUNK});
+    this.loud = Math.max(rms, this.loud * 0.995);
+    const gain = Math.min(${GAIN_MAX}, ${TARGET} / Math.max(this.loud, 1e-4));
+    const out = new Int16Array(${CHUNK});
+    for (let i = 0; i < ${CHUNK}; i++) {
+      const v = Math.max(-1, Math.min(1, this.buf[i] * gain));
+      out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+    }
+    this.port.postMessage({ pcm: out.buffer, level: Math.min(1, rms * gain) }, [out.buffer]);
+    this.n = 0;
+  }
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
     if (!ch) return true;
@@ -15,13 +38,8 @@ class MoonlightMic extends AudioWorkletProcessor {
     while (this.pos < len) {
       const i = Math.floor(this.pos), f = this.pos - i;
       const a = i === 0 ? this.last : ch[i - 1], b = ch[i];
-      const v = Math.max(-1, Math.min(1, a + (b - a) * f));
-      this.buf[this.n++] = v < 0 ? v * 0x8000 : v * 0x7fff;
-      this.sum += v * v;
-      if (this.n === ${CHUNK}) {
-        this.port.postMessage({ pcm: this.buf.buffer, level: Math.sqrt(this.sum / ${CHUNK}) }, [this.buf.buffer]);
-        this.buf = new Int16Array(${CHUNK}); this.n = 0; this.sum = 0;
-      }
+      this.buf[this.n++] = a + (b - a) * f;
+      if (this.n === ${CHUNK}) this.send();
       this.pos += this.step;
     }
     this.pos -= len;
