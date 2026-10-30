@@ -320,6 +320,20 @@ def sample_wav() -> bytes:
     return out.getvalue()
 
 
+def sample_part(start: float, seconds: float) -> dict:
+    """Part of the last recording as base64 PCM, plus its loudness every 100 ms, for tools that can't take binary."""
+    import base64
+    pcm = bytes(_sample["pcm"])
+    a, b = int(max(0.0, start) * SAMPLE_RATE) * 2, int(max(0.0, start + min(seconds, 10.0)) * SAMPLE_RATE) * 2
+    loud = []
+    for i in range(0, len(pcm) - 3199, 3200):
+        x = array("h")
+        x.frombytes(pcm[i:i + 3200])
+        loud.append(round(20 * math.log10(max(abs(v) for v in x) / 32768 + 1e-6)))
+    return {"rate": SAMPLE_RATE, "seconds": len(pcm) / 2 / SAMPLE_RATE, "peak_dbfs_per_100ms": loud,
+            "start": a / 2 / SAMPLE_RATE, "pcm16_b64": base64.b64encode(pcm[a:b]).decode()}
+
+
 class SoundMeter:
     """How much sound a wake word run is getting, for the log: a screen whose microphone sends silence (or barely a
     whisper) never wakes, and nothing else says so."""

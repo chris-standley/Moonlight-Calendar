@@ -560,6 +560,8 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
 - `POST /api/voice/sample?seconds=20` records what screens listening for the wake word hear for the next `seconds`
   (at most 60; nothing is kept otherwise); `GET /api/voice/sample.wav` -> that recording (16 kHz mono WAV), to check a
   screen's microphone.
+- `GET /api/voice/sample.json?start=&seconds=` -> `{rate, seconds, peak_dbfs_per_100ms, start, pcm16_b64}`: up to 10 s
+  of that recording as base64, for tools that can't take binary.
 Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else
 its style's); a screen with no speaker speaks them itself.
 
