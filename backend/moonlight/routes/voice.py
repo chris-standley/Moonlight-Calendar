@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from .. import auth, db, media, voice
 from ..common import layout_name
@@ -32,6 +32,19 @@ async def status(layout: str = "compact"):
     if not got["pipelines"]:
         out["reason"] = "Home Assistant has no Assist pipeline yet"
     return out
+
+
+@router.post("/sample")
+async def start_sample(seconds: float = 20):
+    """Record what the screens listening for the wake word hear for the next `seconds` (at most 60)."""
+    voice.record_sample(seconds)
+    return {"recording": min(max(seconds, 1), voice.SAMPLE_MAX_SECONDS)}
+
+
+@router.get("/sample.wav")
+async def sample():
+    """The last recording made by POST /api/voice/sample (empty if none)."""
+    return Response(voice.sample_wav(), media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
 
 @router.websocket("/ws")
