@@ -45,7 +45,11 @@ log = logging.getLogger("moonlight.voice")
 KEY = "voice"
 SAMPLE_RATE = 16000
 REPLIES = ("screen", "speaker", "none")
-DEFAULT = {"pipeline": "", "wake": {"large": False, "compact": False, "phone": False}, "replies": "screen"}
+DEFAULT = {"pipeline": "", "wake": {"large": False, "compact": False, "phone": False}, "replies": "screen",
+           "mic": {"echo": True, "noise": False, "auto_gain": True, "target_db": -22, "gain_max_db": 18}}
+# How screens capture their microphone (the browser's processing, and the screen's own gain towards target_db):
+# tablets' microphones differ, and this is what to change when a wake word won't wake.
+MIC_RANGES = {"target_db": (-40, -6), "gain_max_db": (0, 40)}
 WAKE_SECONDS = 3600  # one wake word run; the screen starts another when it ends
 RUN_SECONDS = 300  # a run once it's awake (HA's own default)
 AUDIO_KEEP = 32  # spoken replies whose audio can still be fetched
@@ -62,19 +66,28 @@ class VoiceError(Exception):
 
 def saved(c) -> dict:
     val = db.get_setting(c, KEY, {}) or {}
-    out = {**DEFAULT, "wake": dict(DEFAULT["wake"])}
+    out = {**DEFAULT, "wake": dict(DEFAULT["wake"]), "mic": dict(DEFAULT["mic"])}
     if isinstance(val.get("pipeline"), str):
         out["pipeline"] = val["pipeline"]
     if isinstance(val.get("wake"), dict):
         out["wake"].update({k: v for k, v in val["wake"].items() if k in out["wake"] and isinstance(v, bool)})
     if val.get("replies") in REPLIES:
         out["replies"] = val["replies"]
+    if isinstance(val.get("mic"), dict):
+        out["mic"].update({k: v for k, v in val["mic"].items() if _mic_ok(k, v)})
     return out
+
+
+def _mic_ok(k: str, v: Any) -> bool:
+    if k in MIC_RANGES:
+        lo, hi = MIC_RANGES[k]
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and lo <= v <= hi
+    return k in DEFAULT["mic"] and isinstance(v, bool)
 
 
 def apply_settings(c, body: dict) -> bool:
     """PATCH /api/settings `voice`: {pipeline?: id or "" for HA's preferred one, wake?: {layout: bool},
-    replies?: screen | speaker | none}. Returns True if it was present."""
+    replies?: screen | speaker | none, mic?: {echo?, noise?, auto_gain?, target_db?, gain_max_db?}}. Returns True if it was present."""
     if KEY not in body:
         return False
     from .common import bad  # local import: keep this module importable on its own
@@ -92,6 +105,11 @@ def apply_settings(c, body: dict) -> bool:
             if not isinstance(v, dict) or any(x not in DEFAULT["wake"] or not isinstance(y, bool) for x, y in v.items()):
                 raise bad("voice.wake must map large/compact/phone to true or false")
             out["wake"].update(v)
+        elif k == "mic":
+            if not isinstance(v, dict) or not all(_mic_ok(x, y) for x, y in v.items()):
+                raise bad("voice.mic takes echo/noise/auto_gain (true or false), target_db (-40 to -6) and "
+                          "gain_max_db (0 to 40)")
+            out["mic"].update(v)
         elif k == "replies":
             if v not in REPLIES:
                 raise bad("voice.replies must be one of " + ", ".join(REPLIES))
@@ -331,7 +349,35 @@ def sample_part(start: float, seconds: float) -> dict:
         x.frombytes(pcm[i:i + 3200])
         loud.append(round(20 * math.log10(max(abs(v) for v in x) / 32768 + 1e-6)))
     return {"rate": SAMPLE_RATE, "seconds": len(pcm) / 2 / SAMPLE_RATE, "peak_dbfs_per_100ms": loud,
-            "start": a / 2 / SAMPLE_RATE, "pcm16_b64": base64.b64encode(pcm[a:b]).decode()}
+            "speech_spectrum_db": _spectrum(pcm), "start": a / 2 / SAMPLE_RATE,
+            "pcm16_b64": base64.b64encode(pcm[a:b]).decode()}
+
+
+def _spectrum(pcm: bytes) -> list[list[float]]:
+    """[hz, dB relative to the strongest] every 250 Hz, averaged over the recording's loud 32 ms windows (speech):
+    a microphone that loses the high frequencies, or a screen that resamples badly, shows here."""
+    x = array("h")
+    x.frombytes(pcm[: len(pcm) // 2 * 2])
+    n, hzs = 512, range(125, 8000, 250)
+    win = [0.5 - 0.5 * math.cos(2 * math.pi * i / n) for i in range(n)]
+    tw = {hz: [(math.cos(2 * math.pi * hz * i / SAMPLE_RATE), math.sin(2 * math.pi * hz * i / SAMPLE_RATE))
+               for i in range(n)] for hz in hzs}
+    power = {hz: 0.0 for hz in hzs}
+    used = 0
+    for start in range(0, len(x) - n, n):
+        frame = x[start:start + n]
+        if max(abs(v) for v in frame) < 32768 * 10 ** (-30 / 20) or used >= 40:
+            continue
+        used += 1
+        f = [frame[i] * win[i] for i in range(n)]
+        for hz in hzs:
+            re_ = sum(f[i] * tw[hz][i][0] for i in range(n))
+            im = sum(f[i] * tw[hz][i][1] for i in range(n))
+            power[hz] += re_ * re_ + im * im
+    if not used:
+        return []
+    top = max(power.values()) or 1.0
+    return [[hz, round(10 * math.log10(power[hz] / top + 1e-12), 1)] for hz in hzs]
 
 
 class SoundMeter:

@@ -41,7 +41,10 @@ implementation of the same contract, used for the published preview). Keep them 
 - `PATCH /api/settings` body: any of `family_name, week_start, temp_unit, theme, chore_approval, timezone,
   screensaver_seconds, idle_minutes, photo_details, media_players, screens, weather_entity, holidays, security, energy, voice`, plus `pin` (required) -> settings.
   `voice` (merged, see Voice): `pipeline` an Assist pipeline id or `""` (Home Assistant's preferred one), `wake:
-  {large?, compact?, phone?: bool}` (default all off), `replies`: `screen` (default) | `speaker` | `none`.
+  {large?, compact?, phone?: bool}` (default all off), `replies`: `screen` (default) | `speaker` | `none`, `mic:
+  {echo?, noise?, auto_gain?: bool, target_db?: -40..-6, gain_max_db?: 0..40}` (how screens capture the microphone:
+  the browser's echo cancellation, noise suppression and gain, then the screen's own gain towards target_db; default
+  echo and auto_gain on, noise off, -22, 18). Screens pick a change up when they reload.
   `security` (merged, see Security): `alarm_entity` an `alarm_control_panel.*` id, `""` none, null automatic;
   `cameras: {"camera.x": {show?: bool, person?: "binary_sensor.y" | "" (never) | null (automatic)} | null}`;
   `popup: {large?, compact?, phone?, tv?: bool}` (default large and compact on; `tv` is the Apple TV app, off). Broadcasts `security` and `security_alert`.
@@ -560,7 +563,8 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
 - `POST /api/voice/sample?seconds=20` records what screens listening for the wake word hear for the next `seconds`
   (at most 60; nothing is kept otherwise); `GET /api/voice/sample.wav` -> that recording (16 kHz mono WAV), to check a
   screen's microphone.
-- `GET /api/voice/sample.json?start=&seconds=` -> `{rate, seconds, peak_dbfs_per_100ms, start, pcm16_b64}`: up to 10 s
+- `GET /api/voice/sample.json?start=&seconds=` -> `{rate, seconds, peak_dbfs_per_100ms,
+  speech_spectrum_db: [[hz, dB]], start, pcm16_b64}`: up to 10 s
   of that recording as base64, for tools that can't take binary.
 Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else
 its style's); a screen with no speaker speaks them itself.

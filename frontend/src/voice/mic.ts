@@ -1,28 +1,31 @@
 // The screen's microphone as 16 kHz, 16-bit mono PCM: what Home Assistant's Assist takes. An AudioWorklet does the
 // resampling (and gain) off the main thread and hands over ~80 ms chunks.
 
+import type { MicSettings } from "../api/types";
+
 const RATE = 16000;
 const CHUNK = 1280; // samples: 80 ms
 
 // Small tablet microphones are quiet (speech peaking near -30 dBFS a few steps away). Each chunk is lifted towards
-// an ordinary speech level, by up to GAIN_MAX, from the loudness of recent speech: it rises with the first loud chunk
-// and falls back over ~15 s. The target leaves room for speech's peaks (~12 dB above its RMS): aiming higher clipped
-// every word, which the wake word engine can't make out.
-const TARGET = 0.08; // RMS of the loudest recent chunk, about -22 dBFS
-const GAIN_MAX = 8; // +18 dB
+// an ordinary speech level (target_db), by up to gain_max_db, from the loudness of recent speech: it rises with the
+// first loud chunk and falls back over ~15 s. The target leaves room for speech's peaks (~12 dB above its RMS):
+// aiming higher clipped every word, which the wake word engine can't make out.
+export const MIC_DEFAULTS: MicSettings = { echo: true, noise: false, auto_gain: true, target_db: -22, gain_max_db: 18 };
 
 const WORKLET = `
 class MoonlightMic extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super(); this.step = sampleRate / ${RATE}; this.pos = 0; this.last = 0; this.buf = new Float32Array(${CHUNK}); this.n = 0;
     this.loud = 0;
+    const o = options.processorOptions;
+    this.target = Math.pow(10, o.target_db / 20); this.gainMax = Math.pow(10, o.gain_max_db / 20);
   }
   send() {
     let sum = 0;
     for (let i = 0; i < ${CHUNK}; i++) sum += this.buf[i] * this.buf[i];
     const rms = Math.sqrt(sum / ${CHUNK});
     this.loud = Math.max(rms, this.loud * 0.995);
-    const gain = Math.min(${GAIN_MAX}, ${TARGET} / Math.max(this.loud, 1e-4));
+    const gain = Math.max(1, Math.min(this.gainMax, this.target / Math.max(this.loud, 1e-4)));
     const out = new Int16Array(${CHUNK});
     for (let i = 0; i < ${CHUNK}; i++) {
       const v = Math.max(-1, Math.min(1, this.buf[i] * gain));
@@ -77,16 +80,16 @@ export class MicError extends Error {
   constructor(public problem: MicProblem) { super(MIC_PROBLEM[problem]); }
 }
 
-export async function openMic(): Promise<Mic> {
+export async function openMic(settings?: Partial<MicSettings>): Promise<Mic> {
+  const set = { ...MIC_DEFAULTS, ...settings };
   const why = micProblem();
   if (why) throw new MicError(why);
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       // Echo cancellation keeps the screen's own answers out, and the device's own gain lifts quiet tablet
-      // microphones (by ~20 dB on a Fire tablet) before the worklet evens it out; noise suppression smears the short
-      // wake word past recognition (speech-to-text copes either way).
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+      // microphones before the worklet evens it out; noise suppression smears the short wake word.
+      audio: { channelCount: 1, echoCancellation: set.echo, noiseSuppression: set.noise, autoGainControl: set.auto_gain },
     });
   } catch (e) {
     const name = (e as DOMException)?.name;
@@ -98,7 +101,9 @@ export async function openMic(): Promise<Mic> {
   const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
   try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
   const src = ctx.createMediaStreamSource(stream);
-  const node = new AudioWorkletNode(ctx, "moonlight-mic");
+  const node = new AudioWorkletNode(ctx, "moonlight-mic", {
+    processorOptions: { target_db: set.target_db, gain_max_db: set.gain_max_db },
+  });
   // Through a silent gain to the speakers: some browsers only run a node that leads to the output.
   const mute = ctx.createGain();
   mute.gain.value = 0;

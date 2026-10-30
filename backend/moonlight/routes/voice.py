@@ -13,12 +13,13 @@ router = APIRouter(prefix="/api/voice")
 @router.get("")
 async def status(layout: str = "compact"):
     """What this style of screen can do: {available, reason?, pipelines, preferred, pipeline, wake_engine, wake,
-    replies}. `pipeline` is the one screens use (Settings, else Home Assistant's preferred one)."""
+    replies, mic}. `pipeline` is the one screens use (Settings, else Home Assistant's preferred one)."""
     layout = layout_name(layout or "compact")
     with db.connect() as c:
         conf = voice.saved(c)
     out = {"available": False, "pipelines": [], "preferred": "", "pipeline": conf["pipeline"], "wake_engine": False,
-           "wake": conf["wake"].get(layout, False), "wake_by_layout": conf["wake"], "replies": conf["replies"]}
+           "wake": conf["wake"].get(layout, False), "wake_by_layout": conf["wake"], "replies": conf["replies"],
+           "mic": conf["mic"]}
     svc = media.service()
     if svc is None:
         return {**out, "reason": "Moonlight isn't connected to Home Assistant"}

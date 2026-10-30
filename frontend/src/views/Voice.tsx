@@ -53,6 +53,8 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
   }, [api, layout]);
 
   const pipeline = status?.pipelines.find((p) => p.id === status.pipeline);
+  const micRef = useRef(status?.mic);
+  micRef.current = status?.mic;
   const canHear = !!status?.available && !!pipeline?.stt;
   const wakeWanted = canHear && !!status?.wake && !!status?.wake_engine && api.mode === "live" && micProblem() === null;
 
@@ -85,7 +87,7 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
     const s = r.current;
     if (s.mic) return true;
     try {
-      s.mic = await openMic();
+      s.mic = await openMic(micRef.current);
       s.micFailed = null;
       s.mic.onChunk = (pcm, level) => {
         if (s.streaming && !s.audio) s.link?.audio(pcm);
