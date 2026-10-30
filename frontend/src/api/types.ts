@@ -43,7 +43,10 @@ export interface VoiceStatus {
   wake_engine: boolean;
   /** Hands-free wake word is on for this style of screen. */
   wake: boolean; wake_by_layout: Record<Layout, boolean>; replies: VoiceReplies;
+  /** How screens capture the microphone (see voice/mic.ts). */
+  mic?: MicSettings;
 }
+export interface MicSettings { echo: boolean; noise: boolean; auto_gain: boolean; target_db: number; gain_max_db: number }
 /** What the voice link reports as a run goes (see backend voice.py). */
 export type VoiceEvent =
   | { type: "ready" } | { type: "waiting" } | { type: "woke"; phrase: string } | { type: "listening" } | { type: "speech_end" }

@@ -199,13 +199,18 @@ def until(ws, kind):
 
 def test_settings_defaults_and_validation(client):
     s = client.get("/api/settings").json()["voice"]
-    assert s == {"pipeline": "", "wake": {"large": False, "compact": False, "phone": False}, "replies": "screen"}
+    assert s == {"pipeline": "", "wake": {"large": False, "compact": False, "phone": False}, "replies": "screen",
+                 "mic": voice.DEFAULT["mic"]}
     r = client.patch("/api/settings", json={"pin": PIN, "voice": {"wake": {"large": True}, "replies": "speaker",
                                                                   "pipeline": "p2"}})
     assert r.status_code == 200
     assert r.json()["voice"] == {"pipeline": "p2", "wake": {"large": True, "compact": False, "phone": False},
-                                 "replies": "speaker"}
-    for bad in ({"replies": "loud"}, {"wake": {"tv": True}}, {"wake": {"large": "yes"}}, {"colour": 1}, "on"):
+                                 "replies": "speaker", "mic": voice.DEFAULT["mic"]}
+    r = client.patch("/api/settings", json={"pin": PIN, "voice": {"mic": {"echo": False, "gain_max_db": 30}}})
+    assert r.json()["voice"]["mic"] == {**voice.DEFAULT["mic"], "echo": False, "gain_max_db": 30}
+    assert client.get("/api/voice").json()["mic"]["echo"] is False
+    for bad in ({"replies": "loud"}, {"wake": {"tv": True}}, {"wake": {"large": "yes"}}, {"colour": 1}, "on",
+                {"mic": {"target_db": 0}}, {"mic": {"echo": 1}}, {"mic": {"bass": True}}):
         assert client.patch("/api/settings", json={"pin": PIN, "voice": bad}).status_code == 400
 
 
@@ -478,3 +483,13 @@ def test_sample_part():
     v._keep_sample(b"\x00\x40" * 3200)  # 0.2 s at half scale
     part = v.sample_part(0.1, 1)
     assert part["peak_dbfs_per_100ms"] == [-6, -6] and len(base64.b64decode(part["pcm16_b64"])) == 3200
+
+
+def test_sample_spectrum_shows_where_the_sound_is():
+    import math as _m
+    from array import array as _a
+    from moonlight import voice as v
+    v.record_sample(5)
+    v._keep_sample(_a("h", [int(8000 * _m.sin(2 * _m.pi * 1125 * i / 16000)) for i in range(4096)]).tobytes())
+    spec = dict(map(tuple, v.sample_part(0, 0)["speech_spectrum_db"]))
+    assert spec[1125] == 0 and spec[3125] < -40
