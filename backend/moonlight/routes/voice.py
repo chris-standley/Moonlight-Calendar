@@ -47,6 +47,12 @@ async def sample():
     return Response(voice.sample_wav(), media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
 
+@router.get("/sample.json")
+async def sample_json(start: float = 0, seconds: float = 0):
+    """Part of the last recording (at most 10 s from `start`) as base64 16-bit PCM, with its loudness every 100 ms."""
+    return voice.sample_part(start, seconds)
+
+
 @router.websocket("/ws")
 async def voice_socket(ws: WebSocket, layout: str = "compact"):
     await ws.accept()

@@ -469,3 +469,12 @@ def test_sample_records_only_when_asked():
     v._keep_sample(b"\x01\x00" * 100)
     with wave.open(io.BytesIO(v.sample_wav())) as w:
         assert (w.getframerate(), w.getnframes()) == (16000, 100)
+
+
+def test_sample_part():
+    import base64
+    from moonlight import voice as v
+    v.record_sample(5)
+    v._keep_sample(b"\x00\x40" * 3200)  # 0.2 s at half scale
+    part = v.sample_part(0.1, 1)
+    assert part["peak_dbfs_per_100ms"] == [-6, -6] and len(base64.b64decode(part["pcm16_b64"])) == 3200
