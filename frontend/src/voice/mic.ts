@@ -82,9 +82,10 @@ export async function openMic(): Promise<Mic> {
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      // Echo cancellation keeps the screen's own answers out, but the browser's noise suppression and gain smear
-      // the short wake word past recognition (speech-to-text copes either way), and the worklet sets the level.
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: false },
+      // Echo cancellation keeps the screen's own answers out, and the device's own gain lifts quiet tablet
+      // microphones (by ~20 dB on a Fire tablet) before the worklet evens it out; noise suppression smears the short
+      // wake word past recognition (speech-to-text copes either way).
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: true },
     });
   } catch (e) {
     const name = (e as DOMException)?.name;
