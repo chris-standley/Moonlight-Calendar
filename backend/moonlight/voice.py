@@ -292,6 +292,34 @@ async def relay(client, svc: MediaService, *, pipeline: str, replies: str, speak
             await ha_cm.__aexit__(None, None, None)
 
 
+# A short recording of what a wake word run hears, made only when asked for (POST /api/voice/sample), to check a
+# screen's microphone by ear or against the wake word engine. Kept in memory until the next one.
+SAMPLE_MAX_SECONDS = 60
+_sample: dict[str, Any] = {"until": 0.0, "pcm": bytearray()}
+
+
+def record_sample(seconds: float) -> None:
+    _sample.update(until=time.monotonic() + max(1.0, min(float(seconds), SAMPLE_MAX_SECONDS)), pcm=bytearray())
+
+
+def _keep_sample(pcm: bytes) -> None:
+    if time.monotonic() < _sample["until"]:
+        _sample["pcm"] += pcm
+
+
+def sample_wav() -> bytes:
+    """The last recording as a 16 kHz mono WAV."""
+    import io
+    import wave
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SAMPLE_RATE)
+        w.writeframes(bytes(_sample["pcm"]))
+    return out.getvalue()
+
+
 class SoundMeter:
     """How much sound a wake word run is getting, for the log: a screen whose microphone sends silence (or barely a
     whisper) never wakes, and nothing else says so."""
@@ -451,6 +479,7 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                 if run["handler"] is not None and m["bytes"]:
                     if run.get("wake"):
                         meter.add(m["bytes"])
+                        _keep_sample(m["bytes"])
                     await ha.send(bytes([run["handler"]]) + m["bytes"])
                 continue
             try:

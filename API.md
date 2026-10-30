@@ -557,6 +557,9 @@ Screens talk to one of Home Assistant's Assist pipelines through Moonlight, so t
     spoken with a text-to-speech run.
 - `GET /api/voice/audio/{key}` -> the spoken reply's audio, streamed from HA (only keys the relay handed out; the
   last 32 are kept).
+- `POST /api/voice/sample?seconds=20` records what screens listening for the wake word hear for the next `seconds`
+  (at most 60; nothing is kept otherwise); `GET /api/voice/sample.wav` -> that recording (16 kHz mono WAV), to check a
+  screen's microphone.
 Spoken replies on `speaker` use `media_player.play_media` with `announce: true` on the screen's speaker (its own, else
 its style's); a screen with no speaker speaks them itself.
 

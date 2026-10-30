@@ -457,3 +457,15 @@ def test_wake_word_end_without_the_word_is_not_a_wake():
     assert translate({"type": "wake_word-end", "data": {"wake_word_output": {}}})["type"] == "error"
     woke = translate({"type": "wake_word-end", "data": {"wake_word_output": {"wake_word_id": "ok_nabu"}}})
     assert woke == {"type": "woke", "phrase": "ok_nabu"}
+
+
+def test_sample_records_only_when_asked():
+    import io
+    import wave
+    from moonlight import voice as v
+    v._keep_sample(b"\x01\x00" * 100)
+    assert len(v._sample["pcm"]) == 0
+    v.record_sample(5)
+    v._keep_sample(b"\x01\x00" * 100)
+    with wave.open(io.BytesIO(v.sample_wav())) as w:
+        assert (w.getframerate(), w.getnframes()) == (16000, 100)
