@@ -4,10 +4,11 @@
 const RATE = 16000;
 const CHUNK = 1280; // samples: 80 ms
 
-// Small tablet microphones are quiet (speech peaking near -30 dBFS a few steps away), and the wake word engine
-// needs speech nearer -12. So each chunk is lifted towards that, by up to GAIN_MAX, from the loudness of recent
-// speech: it rises with the first loud chunk and falls back over ~15 s, so loud speech isn't clipped.
-const TARGET = 0.25; // RMS of the loudest recent chunk, about -12 dBFS
+// Small tablet microphones are quiet (speech peaking near -30 dBFS a few steps away). Each chunk is lifted towards
+// an ordinary speech level, by up to GAIN_MAX, from the loudness of recent speech: it rises with the first loud chunk
+// and falls back over ~15 s. The target leaves room for speech's peaks (~12 dB above its RMS): aiming higher clipped
+// every word, which the wake word engine can't make out.
+const TARGET = 0.08; // RMS of the loudest recent chunk, about -22 dBFS
 const GAIN_MAX = 8; // +18 dB
 
 const WORKLET = `

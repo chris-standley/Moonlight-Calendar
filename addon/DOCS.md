@@ -241,7 +241,7 @@ and the microphone button shows a green dot.
 
 If the wake word never wakes, look in the add-on's log: every minute a listening screen logs how loud its sound is
 ("Wake word on a compact screen: 60 s of sound, typically -55 dBFS, loudest -30 dBFS"). Silence means the microphone
-isn't sending anything; the screen lifts quiet microphones (up to +18 dB), so a loudest level still below about -20 dBFS while you speak
+isn't sending anything; the screen lifts quiet microphones (up to +18 dB), so a loudest level still below about -30 dBFS while you speak
 means it's too quiet to be heard (move closer, or use a better microphone).
 
 On the screens:
