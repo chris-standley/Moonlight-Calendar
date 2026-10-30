@@ -54,6 +54,21 @@ async def sample_json(start: float = 0, seconds: float = 0):
     return voice.sample_part(start, seconds)
 
 
+@router.post("/sample/replay")
+async def replay_sample():
+    """Play the last recording to Home Assistant's wake word engine (as recorded, and slowed or sped up as if the
+    screen had its sample rate wrong) and say which of them woke it."""
+    svc = media.service()
+    if svc is None:
+        raise HTTPException(503, "Moonlight isn't connected to Home Assistant")
+    with db.connect() as c:
+        pipeline = voice.saved(c)["pipeline"]
+    try:
+        return await voice.replay_sample(svc, pipeline)
+    except voice.VoiceError as e:
+        raise HTTPException(e.status, str(e))
+
+
 @router.websocket("/ws")
 async def voice_socket(ws: WebSocket, layout: str = "compact"):
     await ws.accept()

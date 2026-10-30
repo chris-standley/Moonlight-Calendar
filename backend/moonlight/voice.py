@@ -353,6 +353,92 @@ def sample_part(start: float, seconds: float) -> dict:
             "pcm16_b64": base64.b64encode(pcm[a:b]).decode()}
 
 
+REPLAY_SPEEDS = (1.0, 48000 / 44100, 44100 / 48000)
+
+
+def stretch(pcm: bytes, speed: float) -> bytes:
+    """`pcm` played `speed` times slower (longer and lower for speed > 1), by linear interpolation: what a screen
+    would have sent had it got its microphone's sample rate wrong."""
+    x = array("h")
+    x.frombytes(pcm[: len(pcm) // 2 * 2])
+    if speed == 1.0 or len(x) < 2:
+        return x.tobytes()
+    out = array("h", bytes(2 * (1 + int((len(x) - 1) * speed))))
+    for i in range(len(out)):
+        p = i / speed
+        j = int(p)
+        f = p - j
+        out[i] = int(x[j] + (x[min(j + 1, len(x) - 1)] - x[j]) * f)
+    return out.tobytes()
+
+
+async def replay_sample(svc: MediaService, pipeline: str, speeds: tuple[float, ...] = REPLAY_SPEEDS) -> dict:
+    """Play the last recording to Home Assistant's wake word engine, as it was and as if the screen had got its
+    sample rate wrong (44.1 kHz taken for 48 kHz and the other way round): which of them wakes it tells a
+    microphone that can't be made out from audio that is being garbled on the way."""
+    pcm = bytes(_sample["pcm"])
+    if not pcm:
+        raise VoiceError("Nothing recorded yet: POST /api/voice/sample first, then say the wake word", 409)
+    tries = []
+    async with svc.ws_connect(svc.ws_url) as ha:
+        msg = json.loads(await ha.recv())
+        if msg.get("type") != "auth_required":
+            raise VoiceError(f"unexpected greeting {msg.get('type')!r}")
+        await ha.send(json.dumps({"type": "auth", "access_token": svc.token}))
+        if json.loads(await ha.recv()).get("type") != "auth_ok":
+            raise VoiceError("Home Assistant refused Moonlight's token")
+        for n, speed in enumerate(speeds, 1):
+            audio = await asyncio.to_thread(stretch, pcm, speed)
+            tries.append({"speed": round(speed, 3), **await _replay_one(ha, n, audio, pipeline)})
+    return {"seconds": len(pcm) / 2 / SAMPLE_RATE, "tries": tries}
+
+
+async def _replay_one(ha, msg_id: int, pcm: bytes, pipeline: str) -> dict:
+    run: dict[str, Any] = {"id": msg_id, "type": "assist_pipeline/run", "start_stage": "wake_word",
+                           "end_stage": "wake_word", "input": {"sample_rate": SAMPLE_RATE, "timeout": 120}}
+    if pipeline:
+        run["pipeline"] = pipeline
+    await ha.send(json.dumps(run))
+    pcm += bytes(2 * SAMPLE_RATE * 2)  # two seconds of quiet after the last word
+    sent = False
+
+    async def events():
+        nonlocal sent
+        async for raw in ha:
+            if isinstance(raw, bytes):
+                continue
+            msg = json.loads(raw)
+            if msg.get("id") != msg_id:
+                continue
+            if msg.get("type") == "result" and not msg.get("success"):
+                return {"woke": None, "error": (msg.get("error") or {}).get("message") or "refused"}
+            ev = msg.get("event") or {}
+            kind, data = ev.get("type"), ev.get("data") or {}
+            if kind == "run-start" and not sent:
+                sent = True
+                handler = (data.get("runner_data") or {}).get("stt_binary_handler_id")
+                for i in range(0, len(pcm), CHUNK_BYTES):
+                    await ha.send(bytes([handler]) + pcm[i:i + CHUNK_BYTES])
+                    await asyncio.sleep(0.002)
+                await ha.send(bytes([handler]))
+            elif kind == "wake_word-end":
+                out = data.get("wake_word_output") or {}
+                return {"woke": out.get("wake_word_id") or None,
+                        "at_s": round((out.get("timestamp") or 0) / 1000, 1) if out.get("timestamp") else None}
+            elif kind == "error":
+                return {"woke": None, "error": data.get("code") or data.get("message") or "error"}
+            elif kind == "run-end":
+                return {"woke": None}
+        return {"woke": None, "error": "Home Assistant went away"}
+    try:
+        return await asyncio.wait_for(events(), 120)
+    except asyncio.TimeoutError:
+        return {"woke": None, "error": "no answer in 2 minutes"}
+
+
+CHUNK_BYTES = 2560  # 80 ms
+
+
 def _spectrum(pcm: bytes) -> list[list[float]]:
     """[hz, dB relative to the strongest] every 250 Hz, averaged over the recording's loud 32 ms windows (speech):
     a microphone that loses the high frequencies, or a screen that resamples badly, shows here."""
@@ -531,6 +617,7 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                 run["id"] = 0  # finished: nothing to cancel
 
     async def from_screen() -> None:
+        logged_mic = ""
         while True:
             m = await client.receive()
             if m.get("type") == "websocket.disconnect":
@@ -554,6 +641,10 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
                 run.update(id=0, handler=None)
                 await ha.send(json.dumps({"id": new_id(), "type": "unsubscribe_events", "subscription": old}))
             if kind == "start":
+                info = cmd.get("mic")
+                if cmd.get("mode") == "wake" and isinstance(info, str) and info and info != logged_mic:
+                    logged_mic = info
+                    log.info("Wake word microphone on a %s screen: %s", layout, info[:300])
                 conv = cmd.get("conversation_id")
                 run["conv"] = conv if isinstance(conv, str) and conv else None
                 try:
