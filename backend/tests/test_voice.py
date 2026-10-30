@@ -432,3 +432,21 @@ class mock_screen:
 
     def __exit__(self, *a):
         alerts._screens = self.old
+
+
+def test_sound_meter_logs_how_loud_a_wake_word_run_is(caplog):
+    import math as _m
+    from array import array as _a
+    from moonlight.voice import SAMPLE_RATE, SoundMeter
+    meter = SoundMeter("compact")
+    quiet = _a("h", [0] * 1280).tobytes()
+    tone = _a("h", [int(3276 * _m.sin(i / 3)) for i in range(1280)]).tobytes()  # about -23 dBFS
+    with caplog.at_level("INFO", logger="moonlight.voice"):
+        for _ in range(SAMPLE_RATE * 60 // 1280 - 1):
+            meter.add(quiet)
+        meter.add(tone)
+        meter.add(quiet)
+        meter.report(woke="ok_nabu")
+    lines = [r.getMessage() for r in caplog.records if "Wake word on" in r.message]
+    assert lines[0].startswith("Wake word on a compact screen: 60 s of sound") and "loudest -23 dBFS" in lines[0]
+    assert "woke: ok_nabu" in lines[1]

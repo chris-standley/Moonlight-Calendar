@@ -239,6 +239,11 @@ choose where answers are spoken: on the screen itself, on the screen's speaker (
 or not at all. With the wake word on, the screen streams its microphone to Home Assistant, which listens for the word,
 and the microphone button shows a green dot.
 
+If the wake word never wakes, look in the add-on's log: every minute a listening screen logs how loud its sound is
+("Wake word on a compact screen: 60 s of sound, typically -55 dBFS, loudest -30 dBFS"). Silence means the microphone
+isn't sending anything; a loudest level below about -35 dBFS while you speak means it's too quiet to be heard (move
+closer, or use a better microphone).
+
 On the screens:
 
 - **A microphone.** A Raspberry Pi and most monitors have none: plug in a USB speakerphone (it's the speaker for the

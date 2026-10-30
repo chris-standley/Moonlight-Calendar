@@ -77,11 +77,25 @@ export async function openMic(): Promise<Mic> {
   try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
   const src = ctx.createMediaStreamSource(stream);
   const node = new AudioWorkletNode(ctx, "moonlight-mic");
-  src.connect(node);
-  if (ctx.state === "suspended") await ctx.resume().catch(() => undefined);
+  // Through a silent gain to the speakers: some browsers only run a node that leads to the output.
+  const mute = ctx.createGain();
+  mute.gain.value = 0;
+  src.connect(node).connect(mute).connect(ctx.destination);
+  // A page that opens the microphone by itself (the wake word, after loading) may not be allowed to start audio
+  // until someone touches the screen, and a kiosk can suspend it when the screen sleeps: keep asking.
+  const wake = () => { if (ctx.state !== "running" && ctx.state !== "closed") void ctx.resume().catch(() => undefined); };
+  ctx.onstatechange = wake;
+  document.addEventListener("pointerdown", wake, true);
+  document.addEventListener("visibilitychange", wake);
+  const timer = window.setInterval(wake, 10_000);
+  if (ctx.state === "suspended") await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => setTimeout(r, 1000))]);
   const mic: Mic = {
     onChunk: null,
     stop() {
+      clearInterval(timer);
+      ctx.onstatechange = null;
+      document.removeEventListener("pointerdown", wake, true);
+      document.removeEventListener("visibilitychange", wake);
       node.port.onmessage = null;
       src.disconnect();
       stream.getTracks().forEach((t) => t.stop());
