@@ -4,6 +4,7 @@ import { useApp, useData } from "../state";
 import { Segmented } from "../components/ui";
 import { WeatherIcon } from "../components/icons";
 import { ScreensaverPanel, ScreensPanel } from "./DisplaysSettings";
+import { CountdownsSheet, useCountdowns } from "./Countdowns";
 import { CalendarsPanel } from "./CalendarsSettings";
 import { FamilyPanel } from "./FamilySettings";
 import { WeatherPicker } from "./WeatherSettings";
@@ -103,6 +104,7 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
               </span>
             </div>
           )}
+          <CountdownsRow />
           <div className="set-row"><span>Parent PIN</span>
             <span className="set-pin"><b>{settings?.pin_set ? "Set" : "Not set"}</b>
               <button className="btn ghost small" onClick={changePin}>{settings?.pin_set ? "Change" : "Set PIN"}</button></span>
@@ -127,6 +129,20 @@ export function SettingsView({ onScreensaver }: { onScreensaver: () => void }) {
           </section>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Countdowns: open the list to add Christmas, a holiday or your own day (the top bar only shows them once there's one). */
+function CountdownsRow() {
+  const list = useCountdowns();
+  const [open, setOpen] = useState(false);
+  const own = list?.filter((c) => c.kind !== "birthday").length ?? 0;
+  return (
+    <div className="set-row"><span>Countdowns</span>
+      <span className="set-pin"><b>{own ? `${own} counting down` : "None yet"}</b>
+        <button className="btn ghost small" onClick={() => setOpen(true)}>{own ? "Change" : "Add"}</button></span>
+      {open && list && <CountdownsSheet list={list} onClose={() => setOpen(false)} />}
     </div>
   );
 }
