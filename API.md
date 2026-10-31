@@ -215,7 +215,13 @@ Item = `{id, list_id, title, done, person_id|null, due: date|null, created_at, s
 - `GET /api/lists`; `POST /api/lists` `{name, emoji, color, kind}`; `PATCH /api/lists/{id}` (any of name, emoji,
   color, kind, sort) -> List; `DELETE /api/lists/{id}` (and its items)
 - `GET /api/lists/{id}/items` -> open items first (by sort), then done items (by done time desc)
-- `POST /api/lists/{id}/items` `{title, person_id?, due?}` -> Item
+- `POST /api/lists/{id}/items` `{title, person_id?, due?, barcode?}` -> Item. `barcode` (from a scan): what the
+  product was called is remembered and offered as `last` next time; 400 when it isn't a shop barcode.
+- `GET /api/products/{barcode}` -> Product `{code, found, exact|null, options: [str], image_url|null, last|null}`: a
+  shop product (EAN-13, UPC-A or EAN-8) for the shopping list, looked up in Open Food Facts (then Open Products Facts,
+  Open Beauty Facts) the first time and kept. `exact` is the product as sold ("Tesco Semi Skimmed Milk 2L"),
+  `options` plain names from most to least specific ("Semi Skimmed Milk", "Milk"). `found` false when no one knows it.
+  400 when it isn't a shop barcode.
 - `PATCH /api/items/{id}` `{title?, done?, person_id?, due?}`; `DELETE /api/items/{id}`
 - `POST /api/lists/{id}/clear-done`
 

@@ -1,9 +1,11 @@
-"""Lists and list items."""
+"""Lists and list items, and shop products found by their barcode for the shopping list."""
 from __future__ import annotations
+
+import json
 
 from fastapi import APIRouter, Body
 
-from .. import db
+from .. import db, products
 from ..common import (
     as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_date, opt_str,
     person_exists, req_str,
@@ -117,13 +119,52 @@ def _person_or_none(c, pid) -> str | None:
 
 @router.post("/lists/{list_id}/items")
 async def add_item(list_id: str, body: dict = Body(...)):
+    """`barcode`: the item came from scanning one, so what it was called is offered first next time."""
     body = body_dict(body)
+    code = None
+    if body.get("barcode") not in (None, ""):
+        code = products.gtin(str(body["barcode"]))
+        if not code:
+            raise bad("barcode must be a shop barcode (8, 12 or 13 digits)")
     with db.connect() as c:
         _list_or_404(c, list_id)
         out = insert_item(c, list_id, req_str(body, "title"), _person_or_none(c, body.get("person_id")),
                           opt_date(body.get("due"), "due"))
+        if code:
+            c.execute("INSERT INTO products(code, chosen, updated_at) VALUES(?,?,?) "
+                      "ON CONFLICT(code) DO UPDATE SET chosen = excluded.chosen, updated_at = excluded.updated_at",
+                      (code, out["title"], db.now_iso()))
     await hub.broadcast("lists")
     return out
+
+
+def product_out(code: str, r: dict | None) -> dict:
+    return {"code": code, "found": bool(r and r["exact"]), "exact": r and r["exact"],
+            "options": json.loads(r["options"]) if r else [], "image_url": r and r["image_url"],
+            "last": r and r["chosen"]}
+
+
+@router.get("/products/{code}")
+async def find_product(code: str):
+    """The product with this barcode, for adding to a shopping list: the exact product and plain names for it, looked
+    up in Open Food Facts the first time. `found` false when no one knows it (`last` may still say what the family
+    called it). 400 when it isn't a shop barcode."""
+    gtin = products.gtin(code)
+    if not gtin:
+        raise bad("That isn't a shop barcode (8, 12 or 13 digits)")
+    with db.connect() as c:
+        r = db.row(c, "SELECT * FROM products WHERE code = ?", (gtin,))
+    if r and r["exact"]:
+        return product_out(gtin, r)
+    found = await products.lookup(gtin)
+    if not found:
+        return product_out(gtin, r)
+    with db.connect() as c:
+        c.execute("INSERT INTO products(code, exact, options, image_url, updated_at) VALUES(?,?,?,?,?) "
+                  "ON CONFLICT(code) DO UPDATE SET exact = excluded.exact, options = excluded.options, "
+                  "image_url = excluded.image_url, updated_at = excluded.updated_at",
+                  (gtin, found["exact"], json.dumps(found["options"]), found["image_url"], db.now_iso()))
+        return product_out(gtin, db.row(c, "SELECT * FROM products WHERE code = ?", (gtin,)))
 
 
 @router.patch("/items/{item_id}")

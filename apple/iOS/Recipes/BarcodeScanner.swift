@@ -1,4 +1,5 @@
 import SwiftUI
+import Vision
 import VisionKit
 
 /// The camera, looking for the barcode on the back of a book. Book barcodes are EAN-13 numbers starting 978 or 979
@@ -8,11 +9,16 @@ struct BookBarcodeScanner: View {
     var onSkip: () -> Void
     var onCancel: () -> Void
 
-    static var isAvailable: Bool { DataScannerViewController.isSupported && DataScannerViewController.isAvailable }
+    static var isAvailable: Bool { BarcodeCamera.isAvailable }
+
+    /// A book's barcode: 13 digits starting 978 or 979.
+    static func isbn(_ value: String) -> String? {
+        value.count == 13 && (value.hasPrefix("978") || value.hasPrefix("979")) ? value : nil
+    }
 
     var body: some View {
         NavigationStack {
-            BarcodeCamera(onFound: onFound)
+            BarcodeCamera(symbologies: [.ean13], accept: Self.isbn, onFound: onFound)
                 .ignoresSafeArea()
                 .overlay(alignment: .bottom) {
                     VStack(spacing: 14) {
@@ -37,11 +43,16 @@ struct BookBarcodeScanner: View {
     }
 }
 
-private struct BarcodeCamera: UIViewControllerRepresentable {
+/// The live camera, reporting the first barcode of these kinds that `accept` turns into a code.
+struct BarcodeCamera: UIViewControllerRepresentable {
+    var symbologies: [VNBarcodeSymbology]
+    var accept: (String) -> String?
     var onFound: (String) -> Void
 
+    static var isAvailable: Bool { DataScannerViewController.isSupported && DataScannerViewController.isAvailable }
+
     func makeUIViewController(context: Context) -> DataScannerViewController {
-        let vc = DataScannerViewController(recognizedDataTypes: [.barcode(symbologies: [.ean13])],
+        let vc = DataScannerViewController(recognizedDataTypes: [.barcode(symbologies: symbologies)],
                                            qualityLevel: .balanced, isHighlightingEnabled: true)
         vc.delegate = context.coordinator
         return vc
@@ -56,20 +67,24 @@ private struct BarcodeCamera: UIViewControllerRepresentable {
         vc.stopScanning()
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onFound: onFound) }
+    func makeCoordinator() -> Coordinator { Coordinator(accept: accept, onFound: onFound) }
 
     @MainActor
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
+        let accept: (String) -> String?
         var onFound: (String) -> Void
         private var done = false
-        init(onFound: @escaping (String) -> Void) { self.onFound = onFound }
+        init(accept: @escaping (String) -> String?, onFound: @escaping (String) -> Void) {
+            self.accept = accept
+            self.onFound = onFound
+        }
 
         func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem],
                          allItems: [RecognizedItem]) {
             guard !done else { return }
             for item in addedItems {
-                guard case .barcode(let code) = item, let value = code.payloadStringValue,
-                      value.count == 13, value.hasPrefix("978") || value.hasPrefix("979") else { continue }
+                guard case .barcode(let code) = item, let raw = code.payloadStringValue,
+                      let value = accept(raw) else { continue }
                 done = true
                 dataScanner.stopScanning()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)

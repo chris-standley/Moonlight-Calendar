@@ -175,6 +175,15 @@ CREATE TABLE IF NOT EXISTS cookbooks (
     cover      TEXT,              -- an id in the images table
     created_at TEXT NOT NULL
 );
+-- Shop products found by their barcode (products.py) for the shopping list, and what the family last called each one.
+CREATE TABLE IF NOT EXISTS products (
+    code       TEXT PRIMARY KEY,  -- 13 digits (8 for an EAN-8)
+    exact      TEXT,              -- "Tesco Semi Skimmed Milk 2L", null when no database knew it
+    options    TEXT NOT NULL DEFAULT '[]',  -- JSON list of plain names, "Semi skimmed milk", "Milk"
+    image_url  TEXT,
+    chosen     TEXT,              -- what was last added to a list for this barcode
+    updated_at TEXT NOT NULL
+);
 """
 
 # Pictures uploaded from the screens and apps (recipe and step photos, scanned invites). Kept in the database so a backup has them.

@@ -221,8 +221,11 @@ struct APIClient: Sendable {
     func deleteList(_ id: String) async throws {
         let _: Ignored = try await send("DELETE", "/api/lists/\(id)")
     }
-    func addItem(_ listId: String, title: String) async throws {
-        let _: Ignored = try await send("POST", "/api/lists/\(listId)/items", ["title": title])
+    /// `barcode`: the item came from scanning it, so its name is offered first next time.
+    func addItem(_ listId: String, title: String, barcode: String? = nil) async throws {
+        var body: [String: Any] = ["title": title]
+        if let barcode { body["barcode"] = barcode }
+        let _: Ignored = try await send("POST", "/api/lists/\(listId)/items", body)
     }
     func deleteItem(_ id: String) async throws {
         let _: Ignored = try await send("DELETE", "/api/items/\(id)")

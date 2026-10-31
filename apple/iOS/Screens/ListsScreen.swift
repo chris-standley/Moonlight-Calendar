@@ -60,6 +60,7 @@ struct ListDetail: View {
     let list: TaskList
     @State private var items: [ListItem] = []
     @State private var draft = ""
+    @State private var scanning = false
     @FocusState private var typing: Bool
 
     var body: some View {
@@ -88,6 +89,12 @@ struct ListDetail: View {
         }
         .navigationTitle("\(list.emoji) \(list.name)")
         .toolbar {
+            if list.kind == "grocery" && ProductScanSheet.isAvailable {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { scanning = true } label: { Image(systemName: "barcode.viewfinder") }
+                        .accessibilityLabel("Scan a barcode")
+                }
+            }
             if items.contains(where: \.done) {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Clear done") {
@@ -101,6 +108,7 @@ struct ListDetail: View {
             }
         }
         .refreshable { model.bump("lists") }
+        .fullScreenCover(isPresented: $scanning) { ProductScanSheet(list: list) }
         .task(id: "\(list.id)|\(model.rev("lists"))") {
             if let v = await model.call({ try await $0.items(list.id) }) { items = v }
         }

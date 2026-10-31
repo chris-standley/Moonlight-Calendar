@@ -1,9 +1,11 @@
 import { CSSProperties, FormEvent, useEffect, useState } from "react";
-import { ApiError, Item, TaskList } from "../api/types";
+import { ApiError, Item, Product, TaskList } from "../api/types";
 import { diffDays, fmtDayMonth, relativeDay, today } from "../dates";
 import { useApp, useData } from "../state";
 import { Avatar, Empty, Sheet, tint } from "../components/ui";
-import { IconCheck, IconPlus, IconTrash } from "../components/icons";
+import { IconBarcode, IconCheck, IconPlus, IconTrash } from "../components/icons";
+import { LiveScan } from "../components/BarcodeScan";
+import { canStream, gtin, hasCamera, readPhoto } from "../recipes/barcode";
 
 export function ListsView() {
   const [lists] = useData((api) => api.lists(), ["lists"], []);
@@ -44,9 +46,17 @@ export function ListPanel({ list, compact }: { list: TaskList; compact?: boolean
   const [items] = useData((a) => a.items(list.id), ["lists"], [list.id]);
   const [text, setText] = useState("");
   const [assignee, setAssignee] = useState<string | null>(null);
+  const [camera, setCamera] = useState(false);
+  // Scanning a product's barcode: null when not, "" while looking for one, else the code found.
+  const [scan, setScan] = useState<string | null>(null);
+  const shop = list.kind === "grocery";
+  useEffect(() => { if (shop) void hasCamera().then(setCamera); }, [shop]);
   async function add(e: FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
+    // A barcode reader plugged into the screen types the number and Enter: look the product up instead.
+    const code = shop ? gtin(text) : null;
+    if (code) { setScan(code); setText(""); return; }
     await api.addItem(list.id, text.trim(), assignee);
     setText("");
   }
@@ -61,8 +71,10 @@ export function ListPanel({ list, compact }: { list: TaskList; compact?: boolean
             {people.map((p) => <Avatar key={p.id} person={p} size={1.9} dim={assignee !== p.id} onClick={() => setAssignee(assignee === p.id ? null : p.id)} />)}
           </div>
         )}
+        {shop && camera && <button className="btn ghost" type="button" onClick={() => setScan("")} aria-label="Scan a barcode"><IconBarcode size={20} />{!compact && <span className="add-scan-label"> Scan</span>}</button>}
         <button className="btn" type="submit" disabled={!text.trim()}><IconPlus size={20} />{!compact && " Add"}</button>
       </form>
+      {scan !== null && <ProductScan list={list} code={scan} onClose={() => setScan(null)} />}
       <div className="items">
         {open.length === 0 && <Empty>All clear ✨</Empty>}
         {open.map((i) => <ItemRow key={i.id} item={i} person={personById(i.person_id)} />)}
@@ -91,6 +103,105 @@ function ItemRow({ item, person }: { item: Item; person?: ReturnType<ReturnType<
       {person && <Avatar person={person} size={1.7} />}
       <button className="icon-btn subtle" onClick={() => api.deleteItem(item.id)} aria-label="Delete"><IconTrash size={18} /></button>
     </div>
+  );
+}
+
+/** Scan a product's barcode onto a shopping list, then choose what to call it: the exact product ("Tesco Semi
+ *  Skimmed Milk 2L") or the plain item ("Milk"). After adding, the camera comes back for the next one. */
+function ProductScan({ list, code: first, onClose }: { list: TaskList; code: string; onClose: () => void }) {
+  const { api, toast } = useApp();
+  const [code, setCode] = useState(first);
+  const [typed, setTyped] = useState("");
+  const [product, setProduct] = useState<Product | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [added, setAdded] = useState(0);
+  useEffect(() => {
+    if (!code) return;
+    let gone = false;
+    setProduct(null);
+    setNote(null);
+    setName("");
+    api.findProduct(code).then((p) => { if (!gone) { setProduct(p); setName(p.found ? "" : p.last ?? ""); } })
+      .catch((e) => { if (!gone) { setNote(e instanceof ApiError ? e.message : "Couldn't look that barcode up. Try again."); setCode(""); } });
+    return () => { gone = true; };
+  }, [code]);
+
+  async function add(title: string) {
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    try {
+      await api.addItem(list.id, title.trim(), null, null, code);
+      toast(`Added ${title.trim()} to ${list.name}`);
+      setAdded((n) => n + 1);
+      setProduct(null);
+      setCode("");
+    } catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't add that"); }
+    finally { setBusy(false); }
+  }
+  async function photo(f: File | undefined) {
+    if (!f) return;
+    setNote(null);
+    const c = await readPhoto(f, "shop").catch(() => null);
+    if (c) setCode(c); else setNote("Couldn't see a barcode in that photo. Get closer, keep it flat and in focus, or type the number under it.");
+  }
+  function typedCode() {
+    const c = gtin(typed);
+    if (c) { setTyped(""); setCode(c); } else setNote("That isn't a barcode number. It's the 8 or 13 digits under the lines.");
+  }
+
+  const choices = product ? [
+    ...(product.exact ? [{ title: product.exact, tag: "This product" }] : []),
+    ...product.options.map((o) => ({ title: o, tag: "Any" })),
+  ] : [];
+  if (product?.last && !choices.some((c) => c.title.toLowerCase() === product.last!.toLowerCase())) choices.unshift({ title: product.last, tag: "" });
+
+  return (
+    <Sheet title={`Scan onto ${list.name}`} onClose={onClose} footer={<>
+      {added > 0 && <small className="muted">{added} added</small>}
+      <span style={{ flex: 1 }} />
+      {code && <button className="btn ghost" onClick={() => setCode("")}>Scan another</button>}
+      <button className="btn" onClick={onClose}>Done</button>
+    </>}>
+      <div className="product-scan">
+        {!code ? <>
+          {canStream()
+            ? <LiveScan kind="shop" hint="Hold the barcode inside the box" onCode={setCode} onClose={onClose} />
+            : <label className="btn ghost import-pick"><IconBarcode size={22} /> Take a photo of the barcode
+              <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void photo(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>}
+          <div className="book-isbn">
+            <input className="input" inputMode="numeric" value={typed} onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); typedCode(); } }}
+              placeholder="Or type the number under it" aria-label="Barcode number" />
+            <button type="button" className="btn ghost" disabled={!typed.trim()} onClick={typedCode}>Find</button>
+          </div>
+        </> : !product ? <div className="muted product-looking">Looking it up…</div> : <>
+          <div className="product-found">
+            {product.image_url ? <img src={product.image_url} alt="" /> : <span className="product-blank">🛒</span>}
+            <div>
+              <b>{product.found ? "Add it as" : "Not one we know"}</b>
+              <small className="muted">{product.found ? "Tap one" : "What is it? Moonlight remembers for next time."}</small>
+            </div>
+          </div>
+          {choices.length > 0 && <div className="product-choices">
+            {choices.map((c) => (
+              <button key={c.title} className="product-choice" disabled={busy} onClick={() => void add(c.title)}>
+                <span>{c.title}</span>
+                {product.last?.toLowerCase() === c.title.toLowerCase() ? <em>Last time</em> : c.tag && <small>{c.tag}</small>}
+              </button>
+            ))}
+          </div>}
+          <form className="book-isbn" onSubmit={(e) => { e.preventDefault(); void add(name); }}>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!product.found}
+              placeholder={product.found ? "Or call it something else" : "e.g. Kitchen roll"} aria-label="Name on the list" />
+            <button type="submit" className="btn" disabled={busy || !name.trim()}><IconPlus size={18} /> Add</button>
+          </form>
+        </>}
+        {note && <div className="connect-error" role="alert">{note}</div>}
+      </div>
+    </Sheet>
   );
 }
 
