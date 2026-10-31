@@ -190,6 +190,20 @@ export interface RecipeBatch {
 }
 
 /** A cookbook found by the barcode on its back (see API.md "Scanning a cookbook"). */
+/** A shop product found by its barcode, for the shopping list (API.md "Lists"). */
+export interface Product {
+  code: string;
+  /** False when no product database knows it: `exact` is null and `options` empty. */
+  found: boolean;
+  /** The exact product: "Tesco Semi Skimmed Milk 2L". */
+  exact: string | null;
+  /** Plain names for it, most to least specific: "Semi skimmed milk", "Milk". */
+  options: string[];
+  image_url: string | null;
+  /** What was added to a list the last time this barcode was scanned. */
+  last: string | null;
+}
+
 export interface Cookbook {
   isbn: string; title: string; authors: string; publisher: string; year: number | null;
   cover: string | null; cover_url: string | null;
@@ -561,7 +575,10 @@ export interface Api {
   /** Deletes the list and all its items. */
   deleteList(id: string): Promise<void>;
   items(listId: string): Promise<Item[]>;
-  addItem(listId: string, title: string, personId?: string | null, due?: string | null): Promise<Item>;
+  /** `barcode`: the item came from scanning it, so its name is offered first next time. */
+  addItem(listId: string, title: string, personId?: string | null, due?: string | null, barcode?: string): Promise<Item>;
+  /** The shop product with this barcode, looked up online the first time. 400 when it isn't a shop barcode. */
+  findProduct(code: string): Promise<Product>;
   updateItem(id: string, patch: Partial<Pick<Item, "title" | "done" | "person_id" | "due">>): Promise<Item>;
   deleteItem(id: string): Promise<void>;
   clearDone(listId: string): Promise<void>;

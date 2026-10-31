@@ -15,7 +15,7 @@ import { demoAlerts } from "./demoAlerts";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 import { COURSES } from "../recipes/courses";
-import { isbn13 } from "../recipes/barcode";
+import { gtin, isbn13 } from "../recipes/barcode";
 
 interface Completion { chore_id: string; date: string; at: string }
 /** A recipe as the add-on stores it: ingredient lines and steps; the rest is worked out when read (recipeOut). */
@@ -51,6 +51,15 @@ interface State {
   accounts?: (Account & { password: string })[];
   calendars?: SyncCalendar[];
 }
+
+// Barcodes the preview knows, as the add-on would find them in Open Food Facts. Others come back not found.
+const DEMO_PRODUCTS: Record<string, [string, string[]]> = {
+  "5000436589877": ["Tesco Semi Skimmed Milk 2L", ["Semi skimmed milk", "Milk"]],
+  "5000328657950": ["Warburtons Medium Sliced White Bread 800g", ["Medium sliced white bread", "White bread", "Bread"]],
+  "5000159459228": ["Walkers Ready Salted Crisps 6 x 25g", ["Ready salted crisps", "Crisps"]],
+};
+/** What each barcode was last added as, for "Last time" in the scan. */
+const scannedAs: Record<string, string> = {};
 
 const KEY = "moonlight-demo-v1";
 let n = 0;
@@ -624,8 +633,11 @@ export function demoApi(): Api {
       const done = its.filter((i) => i.done).sort((a, b) => (b.done_at ?? "").localeCompare(a.done_at ?? ""));
       return clone([...open, ...done]).map(({ done_at, ...i }) => i);
     },
-    async addItem(lid, title, person_id = null, due = null) {
+    async addItem(lid, title, person_id = null, due = null, barcode) {
       find(st.lists, lid);
+      const code = barcode ? gtin(barcode) : null;
+      if (barcode && !code) throw new ApiError(400, "barcode must be a shop barcode (8, 12 or 13 digits)");
+      if (code) scannedAs[code] = title;
       const minSort = Math.min(0, ...st.items.filter((i) => i.list_id === lid).map((i) => i.sort));
       const it = { id: uid("it"), list_id: lid, title, done: false, person_id, due, created_at: nowDT(), sort: minSort - 1, done_at: null };
       st.items.push(it); emit("lists");
@@ -704,6 +716,12 @@ export function demoApi(): Api {
     recipeReader: async () => ({ configured: false, model: "claude-opus-5-5", key_hint: null }),
     recipeBatches: async () => [],
     async scanCookbook() { throw new ApiError(409, "Scanning a cookbook needs Claude: add an Anthropic API key in Settings › Recipes."); },
+    async findProduct(code) {
+      const c = gtin(code);
+      if (!c) throw new ApiError(400, "That isn't a shop barcode (8, 12 or 13 digits)");
+      const p = DEMO_PRODUCTS[c];
+      return { code: c, found: !!p, exact: p?.[0] ?? null, options: p?.[1] ?? [], image_url: null, last: scannedAs[c] ?? null };
+    },
     async findCookbook(isbn) {
       if (!isbn13(isbn)) throw new ApiError(400, "That isn't a book's barcode (an ISBN starts 978 or 979)");
       throw new ApiError(422, "This preview can't look books up. On your Moonlight, the barcode finds the book's title, author and cover.");

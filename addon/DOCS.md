@@ -287,6 +287,20 @@ Read with Claude there for handwriting or fancy lettering. Elsewhere Claude read
 key in Settings > Recipes: one short request per scan. Without a key the photo is still kept and you type the details.
 Pictures stay on Moonlight, also for events in an iCloud calendar.
 
+## Shopping list barcodes
+
+On a shopping list, **Scan** (the barcode button beside Add) opens the camera. Hold a product's barcode in the box and
+Moonlight looks it up in [Open Food Facts](https://world.openfoodfacts.org) (then Open Products Facts and Open Beauty
+Facts for household things and toiletries), then offers it two ways: the exact product, like "Tesco Semi Skimmed Milk
+2L", or plain names for it, like "Semi skimmed milk" and "Milk". Tap one to add it, and the camera comes back for the next
+product. The one you picked is marked **Last time** when you scan that barcode again. A product no one knows asks what it
+is, and remembers your answer.
+
+Live camera needs a secure address, as for cookbook barcodes below (https or Home Assistant); on plain http the button
+takes a photo of the barcode instead. A screen with no camera has no Scan button, but a USB or Bluetooth barcode reader
+connected to it types the number into the Add box, and that opens the same choice. The iPhone and iPad app has the same
+scan in the list's toolbar.
+
 ## Recipes
 
 The Recipes section holds the family's recipes: picture, rating, servings and times, ingredients and steps (with step
