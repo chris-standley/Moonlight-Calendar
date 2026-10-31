@@ -195,7 +195,7 @@ struct LogoMark: View {
 
 /// One countdown as a pill: emoji, the days to go in big numbers, and what it's to. `scale` 1 = phone size.
 struct CountdownPill: View {
-    let countdown: Countdown
+    let countdown: FamilyCountdown
     var scale: CGFloat = 1
 
     var body: some View {

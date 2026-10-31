@@ -108,7 +108,7 @@ struct APIClient: Sendable {
         try await get("/api/events", ["start": start, "end": end])
     }
     func weather() async throws -> Weather { try await get("/api/weather") }
-    func countdowns(_ today: String) async throws -> [Countdown] { try await get("/api/countdowns", ["today": today]) }
+    func countdowns(_ today: String) async throws -> [FamilyCountdown] { try await get("/api/countdowns", ["today": today]) }
     func deleteCountdown(_ id: String) async throws {
         let _: Ignored = try await send("DELETE", "/api/countdowns/\(id)")
     }

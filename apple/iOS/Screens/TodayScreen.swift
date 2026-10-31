@@ -9,7 +9,7 @@ struct TodayScreen: View {
     @State private var points: [Balance] = []
     @State private var lists: [TaskList] = []
     @State private var grocery: [ListItem] = []
-    @State private var countdowns: [Countdown] = []
+    @State private var countdowns: [FamilyCountdown] = []
     @State private var open: Occurrence?
     @State private var adding: Adding?
     @State private var scanned: EventDraft?

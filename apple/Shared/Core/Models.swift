@@ -17,7 +17,7 @@ struct Person: Codable, Identifiable, Hashable {
 
 /// "55 days to Christmas", from GET /api/countdowns (soonest first, counted from today). `kind`: custom, event (follows
 /// a calendar event), special (a well-known day or public holiday) or birthday.
-struct Countdown: Codable, Identifiable, Hashable {
+struct FamilyCountdown: Codable, Identifiable, Hashable {
     let id: String
     let kind: String
     let title: String

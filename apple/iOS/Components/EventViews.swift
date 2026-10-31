@@ -109,7 +109,7 @@ struct EventDetailSheet: View {
     @State private var confirmDelete = false
     @State private var error: String?
     /// This event's countdown, if it has one (nil until loaded).
-    @State private var countdown: Countdown?
+    @State private var countdown: FamilyCountdown?
     @State private var countdownsLoaded = false
 
     var body: some View {
@@ -202,7 +202,7 @@ struct EventDetailSheet: View {
             if let c = countdown {
                 try await model.api?.deleteCountdown(c.id)
             } else {
-                try await model.api?.countDown(toEvent: event.id, emoji: Countdown.emoji(for: event.title))
+                try await model.api?.countDown(toEvent: event.id, emoji: FamilyCountdown.emoji(for: event.title))
             }
             model.bump("countdowns")
         } catch {

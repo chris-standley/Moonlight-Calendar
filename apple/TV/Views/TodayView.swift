@@ -12,7 +12,7 @@ struct TodayView: View {
     @State private var meals: [Meal] = []
     @State private var chores: [ChoreDay] = []
     @State private var points: [Balance] = []
-    @State private var countdowns: [Countdown] = []
+    @State private var countdowns: [FamilyCountdown] = []
     @State private var open: Occurrence?
 
     var body: some View {
