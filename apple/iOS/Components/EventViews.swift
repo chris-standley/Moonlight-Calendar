@@ -108,6 +108,9 @@ struct EventDetailSheet: View {
     @State private var editing = false
     @State private var confirmDelete = false
     @State private var error: String?
+    /// This event's countdown, if it has one (nil until loaded).
+    @State private var countdown: Countdown?
+    @State private var countdownsLoaded = false
 
     var body: some View {
         NavigationStack {
@@ -140,6 +143,19 @@ struct EventDetailSheet: View {
                 if let pictures = event.attachments, !pictures.isEmpty {
                     Section("Pictures") { EventPictures(pictures: pictures) }
                 }
+                if event.busy == nil && countdownsLoaded {
+                    Section {
+                        Button {
+                            Task { await toggleCountdown() }
+                        } label: {
+                            Label(countdown == nil ? "Count down to this" : "Counting down · \(countdown!.daysLabel)",
+                                  systemImage: countdown == nil ? "hourglass" : "checkmark.circle.fill")
+                        }
+                    } footer: {
+                        Text(countdown == nil ? "Shows the days to go on the wall screens and on Today."
+                             : "Tap to stop counting down.")
+                    }
+                }
                 if event.editable {
                     Section {
                         Button("Edit event") { editing = true }
@@ -155,6 +171,7 @@ struct EventDetailSheet: View {
             .navigationTitle("Event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .task(id: model.rev("countdowns", "events")) { await loadCountdown() }
             .sheet(isPresented: $editing) { EventEditor(event: event) { dismiss() } }
             .confirmationDialog("Delete \(event.title)?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
@@ -169,6 +186,27 @@ struct EventDetailSheet: View {
             } message: {
                 if event.recurring == true { Text("This deletes every repeat.") }
             }
+        }
+    }
+
+    private func loadCountdown() async {
+        let today = model.dates.today
+        if let list = await model.call({ try await $0.countdowns(today) }) {
+            countdown = list.first { $0.event_id == event.id }
+            countdownsLoaded = true
+        }
+    }
+
+    private func toggleCountdown() async {
+        do {
+            if let c = countdown {
+                try await model.api?.deleteCountdown(c.id)
+            } else {
+                try await model.api?.countDown(toEvent: event.id, emoji: Countdown.emoji(for: event.title))
+            }
+            model.bump("countdowns")
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, CalEvent, EventDraft, EventIn, Freq, Occurrence, UploadedImage, pickCalendar } from "../api/types";
 import { addDays, dayCode, fmtFull, fmtTime, today } from "../dates";
 import { useApp, useData } from "../state";
+import { CountdownForm, EventCountdownButton } from "./Countdowns";
 import { IconCloud } from "./CalendarsSettings";
 import { evTitle } from "./CalendarView";
 import { Avatar, DayPicker, HolidaySwitch, PersonPicker, Segmented, Sheet } from "../components/ui";
@@ -21,6 +22,7 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
   const title = evTitle(occ, people);
   const who = occ.person_ids.map((id) => people.find((p) => p.id === id)).filter(Boolean);
   const lastDay = occ.all_day ? addDays(occ.end.slice(0, 10), -1) : occ.end.slice(0, 10);
+  const [counting, setCounting] = useState(false);
   async function del() {
     const pin = await askPin(`Delete “${occ.title}”${occ.recurring ? " and all its repeats" : ""}?`);
     if (!pin) return;
@@ -33,10 +35,12 @@ export function EventDetail({ occ, onClose, onEdit }: { occ: Occurrence; onClose
       if (e instanceof ApiError && e.status === 409) onClose();
     }
   }
+  if (counting) return <CountdownForm event={occ} onClose={() => setCounting(false)} />;
   return (
     <Sheet title={title} onClose={onClose} footer={<>
       {!readOnly && <button className="btn ghost danger" onClick={del}><IconTrash size={20} /> Delete</button>}
       <span style={{ flex: 1 }} />
+      {!occ.busy && <EventCountdownButton occ={occ} onAdd={() => setCounting(true)} />}
       {!readOnly && <button className="btn" onClick={onEdit}>Edit</button>}
     </>}>
       <div className="detail">

@@ -376,6 +376,11 @@ def init_db() -> None:
         c.executescript(IMAGES_SCHEMA)
         c.executescript(BATCH_SCHEMA)
         c.executescript(TAPESTRY_SCHEMA)
+        from .countdowns import SCHEMA as COUNTDOWNS_SCHEMA
+
+        c.executescript(COUNTDOWNS_SCHEMA)
+        if "birthday" not in {r[1] for r in c.execute("PRAGMA table_info(people)")}:
+            c.execute("ALTER TABLE people ADD COLUMN birthday TEXT")  # see countdowns.py
         have = {r[1] for r in c.execute("PRAGMA table_info(recipe_batches)")}
         for col, decl in (("cheaper", "INTEGER NOT NULL DEFAULT 0"), ("anthropic_id", "TEXT"),
                           ("book", "TEXT NOT NULL DEFAULT ''")):

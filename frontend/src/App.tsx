@@ -12,6 +12,7 @@ import { RewardsView } from "./views/RewardsView";
 import { MealsView } from "./views/MealsView";
 import { ListsView } from "./views/ListsView";
 import { TodayView } from "./views/TodayView";
+import { CountdownChips } from "./views/Countdowns";
 import { Screensaver } from "./views/Screensaver";
 import { SettingsView } from "./views/SettingsView";
 import { SyncBanner } from "./views/SyncBanner";
@@ -295,6 +296,7 @@ function TopBar({ familyName, music, nursery }: { familyName: string; music: boo
       <div className="tb-time">{time}</div>
       <div className="tb-date">{portrait ? `${fmtDow(today())} ${fmtDayMonth(today())}` : fmtFull(today())}</div>
       {wx && <div className="tb-wx"><WeatherIcon condition={wx.condition} size={34} /> {wx.temp}°</div>}
+      <CountdownChips />
       {music && <NowPlayingPill />}
       {nursery && <NurseryButton feed={nursery} />}
       <VoiceButton />

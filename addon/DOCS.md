@@ -287,6 +287,22 @@ Read with Claude there for handwriting or fancy lettering. Elsewhere Claude read
 key in Settings > Recipes: one short request per scan. Without a key the photo is still kept and you type the details.
 Pictures stay on Moonlight, also for events in an iCloud calendar.
 
+## Countdowns
+
+The top bar counts down to what's coming: "9 days to Half term", "23 days to Mia's birthday". Large screens show the
+soonest three, compact screens and phones two; the screensaver shows the next two, and the iPhone, iPad and Apple TV
+show them on Today. Tap one for the whole list.
+
+- **Add countdown** > **Special days**: Christmas, Christmas Eve, New Year's Eve, Halloween, Easter, Mother's Day,
+  Father's Day, Valentine's Day (plus Bonfire Night and Pancake Day in the UK, Thanksgiving in the US) and your public
+  holidays. Easter and Mother's Day move each year, so their dates are worked out each time.
+- **Your own**: a title, an emoji, a date and who it's for, once or every year (an anniversary).
+- **An event**: open it on the calendar and tap **Count down** (on the iPhone, **Count down to this**). The countdown
+  follows the event if it moves, also for events in iCloud calendars.
+- **Birthdays**: set them in Settings > Family and they count down by themselves, with how old they'll be.
+
+Tap a countdown in the list to change or remove it.
+
 ## Shopping list barcodes
 
 On a shopping list, **Scan** (the barcode button beside Add) opens the camera. Hold a product's barcode in the box and

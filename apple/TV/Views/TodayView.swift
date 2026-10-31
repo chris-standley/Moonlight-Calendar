@@ -12,12 +12,20 @@ struct TodayView: View {
     @State private var meals: [Meal] = []
     @State private var chores: [ChoreDay] = []
     @State private var points: [Balance] = []
+    @State private var countdowns: [Countdown] = []
     @State private var open: Occurrence?
 
     var body: some View {
         let d = model.dates
         let today = d.today
         Screen {
+          VStack(alignment: .leading, spacing: 24) {
+            if !countdowns.isEmpty {
+                // The soonest few countdowns ("55 days to Christmas"); not focusable, there's nothing to do with them here.
+                HStack(spacing: 18) {
+                    ForEach(countdowns.prefix(4)) { CountdownPill(countdown: $0, scale: 1.6) }
+                }
+            }
             HStack(alignment: .top, spacing: 36) {
                 // Each column is a focus section, so left and right move between them even when nothing lines up.
                 agenda(today: today)
@@ -33,12 +41,14 @@ struct TodayView: View {
                     .frame(width: 560)
                     .focusSection()
             }
+          }
         }
-        .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points"))") {
+        .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points", "countdowns", "people"))") {
             if let v = await model.call({ try await $0.events(today, d.addDays(today, 2)) }) { events = v }
             if let v = await model.call({ try await $0.meals(today, d.addDays(today, 7)) }) { meals = v }
             if let v = await model.call({ try await $0.chores(today) }) { chores = v }
             if let v = await model.call({ try await $0.points() }) { points = v }
+            if let v = await model.call({ try await $0.countdowns(today) }) { countdowns = v }
         }
         .sheet(item: $open) { EventDetail(event: $0) }
     }

@@ -9,8 +9,49 @@ struct Person: Codable, Identifiable, Hashable {
     let color: String
     let role: String
     let sort: Int
+    /// "2018-11-23", or "11-23" without the year; set on the screens in Settings > Family.
+    var birthday: String? = nil
 
     var isChild: Bool { role == "child" }
+}
+
+/// "55 days to Christmas", from GET /api/countdowns (soonest first, counted from today). `kind`: custom, event (follows
+/// a calendar event), special (a well-known day or public holiday) or birthday.
+struct Countdown: Codable, Identifiable, Hashable {
+    let id: String
+    let kind: String
+    let title: String
+    let emoji: String
+    let date: String
+    let days: Int
+    let person_ids: [String]
+    let yearly: Bool
+    let special: String?
+    let event_id: String?
+    /// Birthdays with a known year: how old they'll be.
+    let turns: Int?
+
+    var symbol: String { emoji.isEmpty ? "⏳" : emoji }
+    /// "55 days", "Tomorrow", "Today"
+    var daysLabel: String { days <= 0 ? "Today" : days == 1 ? "Tomorrow" : "\(days) days" }
+    /// A guess at an emoji for an event's countdown, from its title (the same rules as the screens).
+    static func emoji(for title: String) -> String {
+        let t = title.lowercased()
+        let rules: [([String], String)] = [
+            (["birthday", "bday"], "🎂"), (["christmas", "xmas"], "🎄"), (["halloween"], "🎃"), (["easter"], "🐣"),
+            (["wedding", "anniversary"], "💍"),
+            (["holiday", "vacation", "beach", "villa", "camping", "cornwall", "spain", "france", "disney"], "🏖️"),
+            (["flight", "fly", "airport", "trip", "travel"], "✈️"), (["half term", "school", "term"], "🏫"),
+            (["party", "celebrat"], "🎉"), (["concert", "gig", "show", "theatre", "musical"], "🎭"),
+            (["football", "match", "game"], "⚽"), (["baby", "due date"], "👶"), (["graduat"], "🎓"),
+        ]
+        return rules.first { rule in rule.0.contains { word in t.contains(word) } }?.1 ?? "🎉"
+    }
+
+    /// "55 days to Christmas", "Christmas is tomorrow", "Christmas is today!"
+    var sentence: String {
+        days <= 0 ? "\(title) is today!" : days == 1 ? "\(title) is tomorrow" : "\(days) days to \(title)"
+    }
 }
 
 struct Settings: Codable {

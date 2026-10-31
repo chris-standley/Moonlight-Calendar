@@ -9,6 +9,7 @@ from .. import __version__, db
 from ..common import as_date, as_datetime
 from .calendar import list_events, list_people
 from .chores import chores_for_day, points
+from .countdowns import list_countdowns
 from .lists import get_items, get_lists
 from .meals import list_meals
 
@@ -67,4 +68,5 @@ def summary(date: str | None = None, now: str | None = None):  # noqa: A002 - qu
         "dinner": dinners[0] if dinners else None,
         "next_event": _event_out(nxt) if nxt else None,
         "lists": lists,
+        "countdowns": list_countdowns(now_dt.date())[:10],
     }

@@ -192,3 +192,31 @@ struct LogoMark: View {
         .accessibilityHidden(true)
     }
 }
+
+/// One countdown as a pill: emoji, the days to go in big numbers, and what it's to. `scale` 1 = phone size.
+struct CountdownPill: View {
+    let countdown: Countdown
+    var scale: CGFloat = 1
+
+    var body: some View {
+        let c = countdown
+        let soon = c.days <= 1
+        HStack(spacing: 8 * scale) {
+            Text(c.symbol).font(.system(size: 24 * scale))
+            if !soon {
+                Text("\(c.days)").font(Theme.font(26 * scale, .black)).foregroundStyle(Theme.accent).monospacedDigit()
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(soon ? (c.days <= 0 ? "TODAY!" : "TOMORROW") : "DAYS TO")
+                    .font(Theme.font(10 * scale, .heavy)).kerning(0.5)
+                    .foregroundStyle(soon ? Theme.accent : Theme.muted)
+                Text(c.title).font(Theme.font(15 * scale, .heavy)).foregroundStyle(Theme.text).lineLimit(1)
+            }
+        }
+        .padding(.leading, 10 * scale).padding(.trailing, 14 * scale).padding(.vertical, 6 * scale)
+        .background(soon ? Theme.accent.opacity(0.12) : Theme.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(soon ? Theme.accent : Theme.surface2, lineWidth: 1.5))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(c.sentence)
+    }
+}

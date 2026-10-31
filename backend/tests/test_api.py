@@ -431,7 +431,7 @@ def test_people_validation_and_edit(client):
     r = client.patch(f"/api/people/{p['id']}", json={"name": " Sam Smith ", "color": "#a1b2c3", "role": "child"})
     assert r.status_code == 200
     assert r.json() == {"id": p["id"], "name": "Sam Smith", "initials": "SS", "color": "#A1B2C3", "role": "child",
-                        "sort": p["sort"]}
+                        "sort": p["sort"], "birthday": None}
     assert client.patch(f"/api/people/{p['id']}", json={"color": "blue"}).status_code == 400
     assert client.patch(f"/api/people/{p['id']}", json={"name": ""}).status_code == 400
     assert client.patch(f"/api/people/{p['id']}", json={"role": "pet"}).status_code == 400

@@ -11,8 +11,8 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Body, HTTPException
 
 from .. import (
-    caldav_sync, db, energy, event_scan, ha_client, home_security, media, public_holidays, recipe_import, security,
-    seed, voice,
+    caldav_sync, countdowns, db, energy, event_scan, ha_client, home_security, media, public_holidays, recipe_import,
+    security, seed, voice,
 )
 from ..common import (
     as_datetime, as_int, bad, body_dict, choice, hub, next_sort, not_found, opt_str,
@@ -207,8 +207,15 @@ def initials(name: str) -> str:
 def person_out(r: dict) -> dict:
     return {
         "id": r["id"], "name": r["name"], "initials": initials(r["name"]),
-        "color": r["color"], "role": r["role"], "sort": r["sort"],
+        "color": r["color"], "role": r["role"], "sort": r["sort"], "birthday": r.get("birthday"),
     }
+
+
+def person_birthday(body: dict) -> str | None:
+    try:
+        return countdowns.normalize_birthday(body.get("birthday"))
+    except ValueError:
+        raise bad("birthday must be a date like 2018-11-23, or 11-23 without the year")
 
 
 @router.get("/people")
@@ -223,13 +230,14 @@ async def create_person(body: dict = Body(...)):
     name = person_name(body)
     color = person_color(body)
     role = choice(body.get("role", "child"), "role", ROLES)
+    birthday = person_birthday(body)
     with db.connect() as c:
         pid = db.new_id("p")
         sort = as_int(body["sort"], "sort") if "sort" in body else next_sort(c, "people")
-        c.execute("INSERT INTO people(id, name, color, role, sort) VALUES(?,?,?,?,?)",
-                  (pid, name, color, role, sort))
+        c.execute("INSERT INTO people(id, name, color, role, sort, birthday) VALUES(?,?,?,?,?,?)",
+                  (pid, name, color, role, sort, birthday))
         out = person_out(db.row(c, "SELECT * FROM people WHERE id = ?", (pid,)))
-    await hub.broadcast("people", "points")
+    await hub.broadcast("people", "points", *(("countdowns",) if birthday else ()))
     return out
 
 
@@ -248,10 +256,12 @@ async def update_person(person_id: str, body: dict = Body(...)):
             r["role"] = choice(body["role"], "role", ROLES)
         if "sort" in body:
             r["sort"] = as_int(body["sort"], "sort")
-        c.execute("UPDATE people SET name=?, color=?, role=?, sort=? WHERE id=?",
-                  (r["name"], r["color"], r["role"], r["sort"], person_id))
+        if "birthday" in body:
+            r["birthday"] = person_birthday(body)
+        c.execute("UPDATE people SET name=?, color=?, role=?, sort=?, birthday=? WHERE id=?",
+                  (r["name"], r["color"], r["role"], r["sort"], r.get("birthday"), person_id))
         out = person_out(r)
-    await hub.broadcast("people")
+    await hub.broadcast("people", "countdowns")
     return out
 
 
@@ -281,7 +291,7 @@ async def delete_person(person_id: str, body: dict | None = Body(None)):
                 ids.remove(person_id)
                 c.execute("UPDATE calendars SET person_ids = ? WHERE id = ?", (json.dumps(ids), cal["id"]))
     # "accounts": calendars' person mappings changed too (Settings > Calendars refetches on it).
-    await hub.broadcast("people", "events", "chores", "points", "rewards", "lists", "accounts")
+    await hub.broadcast("people", "events", "chores", "points", "rewards", "lists", "accounts", "countdowns")
     return {"ok": True}
 
 
@@ -326,6 +336,26 @@ def event_out(r: dict, known: set[str] | None = None) -> dict:
 
 def _load_event(c, event_id: str) -> dict | None:
     return db.row(c, EVENT_SELECT + " WHERE e.id = ?", (event_id,))
+
+
+def next_occurrence(c, event_id: str, today: date, years: int = 2) -> date | None:
+    """The day of an event's next occurrence that hasn't ended before `today` (for countdowns), or None if it's gone
+    or has no more within `years`."""
+    r = _load_event(c, event_id)
+    if not r:
+        return None
+    ev = event_out(r)
+    lo = datetime.combine(today, time(0))
+    if not ev["repeat"] and not r.get("custom_repeat"):
+        start = datetime.fromisoformat(ev["start"])
+        return start.date() if datetime.fromisoformat(ev["end"]) > lo or start >= lo else None
+    hi = datetime.combine(date(today.year + years, today.month, min(today.day, 28)), time(0))
+    if r.get("custom_repeat") and r.get("raw_ics"):
+        occ = caldav_sync.expand_custom(ev, r["raw_ics"], f"{r['id']}:{r['etag']}", lo, hi)
+    else:
+        occ = expand_event(ev, lo, hi, public_holidays.checker(c))
+    starts = sorted(o["start"] for o in occ)
+    return datetime.fromisoformat(starts[0]).date() if starts else None
 
 
 def _sync_error(e: Exception) -> HTTPException:

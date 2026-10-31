@@ -108,6 +108,14 @@ struct APIClient: Sendable {
         try await get("/api/events", ["start": start, "end": end])
     }
     func weather() async throws -> Weather { try await get("/api/weather") }
+    func countdowns(_ today: String) async throws -> [Countdown] { try await get("/api/countdowns", ["today": today]) }
+    func deleteCountdown(_ id: String) async throws {
+        let _: Ignored = try await send("DELETE", "/api/countdowns/\(id)")
+    }
+    /// Count down to a calendar event (title, emoji and people default from it).
+    func countDown(toEvent eventId: String, emoji: String) async throws {
+        let _: Ignored = try await send("POST", "/api/countdowns", ["event_id": eventId, "emoji": emoji])
+    }
     func chores(_ date: String) async throws -> [ChoreDay] { try await get("/api/chores", ["date": date]) }
     func setChore(_ id: String, date: String, done: Bool) async throws {
         if done {

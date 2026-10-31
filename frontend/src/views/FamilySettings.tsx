@@ -86,6 +86,7 @@ function PersonSheet({ person, onClose }: { person?: Person; onClose: () => void
   const [name, setName] = useState(person?.name ?? "");
   const [color, setColor] = useState(person?.color ?? PERSON_COLORS.find((c) => !used.has(c)) ?? PERSON_COLORS[0]);
   const [role, setRole] = useState<Role>(person?.role ?? (people.some((p) => p.role === "adult") ? "child" : "adult"));
+  const [birthday, setBirthday] = useState(person?.birthday ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ chores: number; stars: number } | null>(null);
@@ -99,10 +100,10 @@ function PersonSheet({ person, onClose }: { person?: Person; onClose: () => void
     setBusy(true); setError(null);
     try {
       if (person) {
-        await api.updatePerson(person.id, { name: name.trim(), color, role });
+        await api.updatePerson(person.id, { name: name.trim(), color, role, birthday: birthday || null });
         toast("Saved");
       } else {
-        const p = await api.createPerson({ name: name.trim(), color, role });
+        const p = await api.createPerson({ name: name.trim(), color, role, birthday: birthday || null });
         toast(`${p.name} added`);
       }
       onClose();
@@ -185,6 +186,15 @@ function PersonSheet({ person, onClose }: { person?: Person; onClose: () => void
           <Segmented value={role} onChange={setRole} options={[{ value: "adult", label: "Adult" }, { value: "child", label: "Child" }]} />
           <p className="muted connect-note">
             {role === "child" ? "Children earn stars for chores and appear on the Rewards screen." : "Adults have chores and events but don't collect stars."}
+          </p>
+          <label className="field-label" htmlFor="person-birthday">Birthday</label>
+          <div className="bday-row">
+            <input id="person-birthday" className="input" type="date" value={birthday.length === 10 ? birthday : ""}
+              onChange={(e) => setBirthday(e.target.value)} />
+            {birthday && <button type="button" className="btn ghost small" onClick={() => setBirthday("")}>Clear</button>}
+          </div>
+          <p className="muted connect-note">
+            {birthday.length === 5 ? `Set without the year (${birthday}). ` : ""}Optional. Their birthday then counts down on the screens 🎂
           </p>
           {error && <div className="connect-error" role="alert">{error}</div>}
           <button type="submit" hidden />
