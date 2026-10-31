@@ -127,3 +127,10 @@ def test_countdown_follows_its_event(client):
     client.request("DELETE", f"/api/events/{ev['id']}", json={})
     half = next(o for o in listed(client) if o["title"] == "Half term")
     assert half["date"] == "2027-02-15"
+
+
+def test_screensaver_countdowns_setting(client):
+    assert client.get("/api/settings").json()["screensaver_countdowns"] is False  # off to start with (OLED burn-in)
+    r = client.patch("/api/settings", json={"pin": "1234", "screensaver_countdowns": True})
+    assert r.status_code == 200 and r.json()["screensaver_countdowns"] is True
+    assert client.patch("/api/settings", json={"pin": "1234", "screensaver_countdowns": "yes"}).status_code == 400

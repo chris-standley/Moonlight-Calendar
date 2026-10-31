@@ -97,7 +97,7 @@ async def patch_settings(body: dict = Body(...)):
             if not isinstance(body["chore_approval"], bool):
                 raise bad("chore_approval must be a boolean")
             db.set_setting(c, "chore_approval", body["chore_approval"])
-        immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes, photo_details
+        immich_routes.apply_settings(c, body)  # screensaver_seconds, idle_minutes, photo_details, screensaver_countdowns
         media_changed = media.apply_settings(c, body)  # media_players
         displays_routes.apply_settings(c, body)  # screens
         security_changed = home_security.apply_settings(c, body)  # security

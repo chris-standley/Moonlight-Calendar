@@ -290,7 +290,8 @@ Pictures stay on Moonlight, also for events in an iCloud calendar.
 ## Countdowns
 
 The top bar counts down to what's coming: "9 days to Half term", "23 days to Mia's birthday". Large screens show the
-soonest three, compact screens and phones two; the screensaver shows the next two, and the iPhone, iPad and Apple TV
+soonest three, compact screens and phones two; the screensaver can show the next two (Settings > Photo
+screensaver > Countdowns on the screensaver, off to start with since still text can burn in on OLED screens), and the iPhone, iPad and Apple TV
 show them on Today. Tap one for the whole list.
 
 - **Add countdown** > **Special days**: Christmas, Christmas Eve, New Year's Eve, Halloween, Easter, Mother's Day,

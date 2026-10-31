@@ -324,7 +324,8 @@ last_cooked: date|null, created_at, updated_at, course: str|null, book: str ("" 
 - `GET /api/holidays/countries` -> `[{code, name, subdivs: [{code, name}]}]` sorted by name, for the Settings picker.
 
 ## Countdowns
-"55 days to Christmas" on the screens' top bar, the screensaver and the apps' Today. Broadcast topic `countdowns` (also
+"55 days to Christmas" on the screens' top bar, the screensaver (Settings `screensaver_countdowns`, default false) and
+the apps' Today. Broadcast topic `countdowns` (also
 refetch on `events` and `people`: an event's countdown follows the event, birthdays come from people).
 - `GET /api/countdowns?today=YYYY-MM-DD` (default the add-on's date) -> `[Countdown]` soonest first. One-off days that
   have gone are left out; on the day itself `days` is 0.

@@ -33,6 +33,8 @@ export interface Settings {
   screensaver_seconds?: number;
   /** Show when and where each screensaver photo was taken (default true). */
   photo_details?: boolean;
+  /** Show the next two countdowns on the screensaver (default false: still text can burn in on OLED screens). */
+  screensaver_countdowns?: boolean;
   idle_minutes?: Partial<Record<Layout, number>>;
   timezone?: string;
   /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */

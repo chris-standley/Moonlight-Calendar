@@ -127,7 +127,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
       </div>
       <div className="ss-right">
         {music && <ScreensaverNowPlaying onOpen={() => { go("music"); onWake(); }} />}
-        <ScreensaverCountdowns />
+        {settings?.screensaver_countdowns && <ScreensaverCountdowns />}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
     </div>
