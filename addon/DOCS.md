@@ -294,6 +294,8 @@ soonest three, compact screens and phones two; the screensaver can show the next
 screensaver > Countdowns on the screensaver, off to start with since still text can burn in on OLED screens), and the iPhone, iPad and Apple TV
 show them on Today. Tap one for the whole list.
 
+Add the first one in Settings > **Countdowns** (once there are some, tapping one in the top bar opens the list too).
+
 - **Add countdown** > **Special days**: Christmas, Christmas Eve, New Year's Eve, Halloween, Easter, Mother's Day,
   Father's Day, Valentine's Day (plus Bonfire Night and Pancake Day in the UK, Thanksgiving in the US) and your public
   holidays. Easter and Mother's Day move each year, so their dates are worked out each time.
