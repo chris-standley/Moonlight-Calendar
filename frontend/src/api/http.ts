@@ -3,7 +3,7 @@ import { authStatus, getToken, notifyUnpaired } from "./pairing";
 
 const PING_MS = 25_000;
 const ALL_TOPICS: Topic[] = ["people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos",
-  "displays", "accounts", "media", "security", "security_alert", "nursery", "alerts", "energy"];
+  "displays", "accounts", "media", "security", "security_alert", "nursery", "alerts", "energy", "countdowns"];
 
 /** Talks to the Moonlight add-on. `base` is "" when served by the add-on itself (works under HA ingress too). */
 export function httpApi(base = ""): Api {
@@ -150,6 +150,11 @@ export function httpApi(base = ""): Api {
     createPerson: (p) => req("POST", "/api/people", p),
     updatePerson: (id, patch) => req("PATCH", `/api/people/${id}`, patch),
     deletePerson: async (id, pin) => { await req("DELETE", `/api/people/${id}`, { pin }); },
+    countdowns: (today) => get("/api/countdowns" + q({ today })),
+    countdownSuggestions: (today) => get("/api/countdowns/suggestions" + q({ today })),
+    createCountdown: (c) => req("POST", "/api/countdowns", c),
+    updateCountdown: (id, patch) => req("PATCH", `/api/countdowns/${id}`, patch),
+    deleteCountdown: async (id) => { await req("DELETE", `/api/countdowns/${id}`); },
     events: async (start, end) => (await get<Occurrence[]>("/api/events" + q({ start, end }))).map(evPics),
     createEvent: async (e) => evPics(await req<CalEvent>("POST", "/api/events", e)),
     updateEvent: async (id, e) => evPics(await req<CalEvent>("PATCH", `/api/events/${id}`, e)),

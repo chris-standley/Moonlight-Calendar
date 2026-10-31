@@ -1,7 +1,25 @@
 export type Role = "adult" | "child";
-export interface Person { id: string; name: string; initials: string; color: string; role: Role; sort: number }
+export interface Person { id: string; name: string; initials: string; color: string; role: Role; sort: number;
+  /** "2018-11-23", or "11-23" without the year; their birthday then counts down by itself. */
+  birthday?: string | null }
 /** Name (max 40 chars) and colour (#RRGGBB) are required; sort defaults to after everyone else. */
-export interface PersonIn { name: string; color: string; role: Role; sort?: number }
+export interface PersonIn { name: string; color: string; role: Role; sort?: number; birthday?: string | null }
+
+/** custom: the family's own date; special: a well-known day or public holiday (date worked out each year); event: follows
+ *  a calendar event; birthday: from a person's birthday (not stored, can't be edited here). */
+export type CountdownKind = "custom" | "event" | "special" | "birthday";
+export interface Countdown {
+  id: string; kind: CountdownKind; title: string; emoji: string;
+  /** The next time it comes round (YYYY-MM-DD), and whole days from the screen's today (0 = today). */
+  date: string; days: number;
+  person_ids: string[]; yearly: boolean;
+  /** "christmas", "easter", ... or "holiday:<public holiday name>". */
+  special: string | null; event_id: string | null;
+  /** Birthdays with a known year: how old they'll be. */
+  turns: number | null;
+}
+export interface CountdownIn { title?: string; emoji?: string; date?: string; yearly?: boolean; person_ids?: string[]; special?: string | null; event_id?: string | null }
+export interface CountdownSuggestion { special: string; title: string; emoji: string; date: string; days: number; taken: boolean }
 
 export interface Settings {
   family_name: string;
@@ -15,6 +33,8 @@ export interface Settings {
   screensaver_seconds?: number;
   /** Show when and where each screensaver photo was taken (default true). */
   photo_details?: boolean;
+  /** Show the next two countdowns on the screensaver (default false: still text can burn in on OLED screens). */
+  screensaver_countdowns?: boolean;
   idle_minutes?: Partial<Record<Layout, number>>;
   timezone?: string;
   /** Speaker (HA media_player entity) per screen layout; "" = no Now playing card on that screen. */
@@ -291,7 +311,7 @@ export interface NurseryUpdate {
   children: { name: string; person_id: string | null; color: string | null }[];
   photos: NurseryPhoto[]; comments: { author: string; date: string | null; text: string }[]; added_at: string;
 }
-export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery" | "alerts" | "energy";
+export type Topic = "people" | "events" | "chores" | "points" | "rewards" | "lists" | "meals" | "recipes" | "settings" | "photos" | "displays" | "accounts" | "media" | "security" | "security_alert" | "nursery" | "alerts" | "energy" | "countdowns";
 
 // Security (see API.md "Security"): the alarm, Alarmo's sensors and the cameras, from Home Assistant.
 /** Where a camera that sees a person pops up: each screen style, and the Apple TV app on its own. */
@@ -548,6 +568,13 @@ export interface Api {
   updatePerson(id: string, patch: Partial<PersonIn>): Promise<Person>;
   /** Needs the PIN. Deletes their chores, star history and personal rewards; takes them off events, items and calendars. */
   deletePerson(id: string, pin: string): Promise<void>;
+  /** Soonest first; `today` is the screen's own date. Past one-off days are left out. */
+  countdowns(today: string): Promise<Countdown[]>;
+  /** Christmas, Easter, Halloween, Mother's Day ... and the household's public holidays in the next year. */
+  countdownSuggestions(today: string): Promise<CountdownSuggestion[]>;
+  createCountdown(c: CountdownIn): Promise<Countdown>;
+  updateCountdown(id: string, patch: CountdownIn): Promise<Countdown>;
+  deleteCountdown(id: string): Promise<void>;
   events(start: string, end: string): Promise<Occurrence[]>;
   createEvent(e: EventIn): Promise<CalEvent>;
   updateEvent(id: string, e: Partial<EventIn>): Promise<CalEvent>;

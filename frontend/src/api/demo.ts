@@ -12,6 +12,7 @@ import { demoSecurity } from "./demoSecurity";
 import { applyEnergyPatch, demoEnergy } from "./demoEnergy";
 import { DEFAULT_VOICE, demoVoice } from "./demoVoice";
 import { demoAlerts } from "./demoAlerts";
+import { CountdownRow, demoCountdowns, SPECIAL_DAYS } from "./demoCountdowns";
 import { addDays, dayCode, diffDays, iso, isoDT, parse, today, weekStart } from "../dates";
 import { metricNote, parseIngredient, parseText, stepTimers, stepUses } from "../recipes/recipeText";
 import { COURSES } from "../recipes/courses";
@@ -50,6 +51,7 @@ interface State {
   // Simulated iCloud (optional so older saved demo states still load).
   accounts?: (Account & { password: string })[];
   calendars?: SyncCalendar[];
+  countdowns?: CountdownRow[];
 }
 
 // Barcodes the preview knows, as the add-on would find them in Open Food Facts. Others come back not found.
@@ -91,6 +93,11 @@ function personFields(p: Partial<PersonIn>, partial: boolean): Partial<PersonIn>
     out.role = role;
   }
   if (p.sort !== undefined) out.sort = Math.trunc(Number(p.sort));
+  if (p.birthday !== undefined) {
+    const b = (p.birthday ?? "").trim().replace(/^--/, "");
+    if (b && !/^(\d{4}-)?(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(b)) throw new ApiError(400, "birthday must be a date like 2018-11-23, or 11-23 without the year");
+    out.birthday = b || null;
+  }
   return out;
 }
 const nowDT = () => isoDT(new Date());
@@ -132,7 +139,18 @@ function buildSeed(): State {
   return {
     seededOn: t,
     settings: { ...S.settings },
-    people: S.people.map((p: any) => ({ ...p, initials: initials(p.name) })),
+    people: S.people.map(({ birthday_in_days, age, ...p }: any) => {
+      // Same as the add-on's seed: a birthday so many days away, turning `age` (no year without one).
+      const b = birthday_in_days == null ? null : addDays(t, birthday_in_days);
+      return { ...p, initials: initials(p.name), birthday: b && (age != null ? `${Number(b.slice(0, 4)) - age}${b.slice(4)}` : b.slice(5)) };
+    }),
+    countdowns: (S.countdowns ?? []).map((c: any): CountdownRow => {
+      const ev = c.event ? S.events.find((e: any) => e.id === c.event) : null;
+      const special = c.special ? SPECIAL_DAYS[c.special] : null;
+      return { id: c.id, special: c.special ?? null, event_id: c.event ?? null, person_ids: c.person_ids ?? [],
+        title: c.title ?? special?.[0] ?? ev?.title ?? "", emoji: c.emoji ?? special?.[1] ?? "",
+        date: ev ? addDays(mon, ev.day) : addDays(t, c.in_days ?? 0), yearly: !!(c.special || c.yearly) };
+    }),
     events: [...events, ...busyBlocks(WORK_CAL, mon)], chores, completions, ledger,
     rewards: S.rewards, lists, items, meals,
     recipes: S.recipes.map((r: any) => ({ url: null, minutes: null, ...r,
@@ -495,7 +513,7 @@ export function demoApi(): Api {
     async createPerson(p) {
       const f = personFields(p, false) as PersonIn;
       const sort = f.sort ?? Math.max(-1, ...st.people.map((x) => x.sort)) + 1;
-      const person: Person = { id: uid("p"), name: f.name, color: f.color, role: f.role, sort, initials: initials(f.name) };
+      const person: Person = { id: uid("p"), name: f.name, color: f.color, role: f.role, sort, initials: initials(f.name), birthday: f.birthday ?? null };
       st.people.push(person);
       emit("people", "points");
       return clone(person);
@@ -504,7 +522,7 @@ export function demoApi(): Api {
       const person = find(st.people, id);
       Object.assign(person, personFields(patch, true));
       person.initials = initials(person.name);
-      emit("people");
+      emit("people", "countdowns");
       return clone(person);
     },
     async deletePerson(id, pin) {
@@ -522,6 +540,16 @@ export function demoApi(): Api {
       for (const c of cals()) c.person_ids = c.person_ids.filter((x) => x !== id);
       emit("people", "events", "chores", "points", "rewards", "lists", "accounts");
     },
+    ...(() => {
+      const cd = demoCountdowns(() => (st.countdowns ??= []), () => st.people, () => holidayRegion.country,
+        (start, end) => (holidayRegion.country ? Object.entries(BANK_HOLIDAYS).filter(([d]) => d >= start && d <= end).map(([date, name]) => ({ date, name })) : []),
+        (id, t) => {
+          const e = st.events.find((x) => x.id === id);
+          return e ? expand(e, t, addDays(t, 730)).map((o) => o.start.slice(0, 10)).sort()[0] ?? null : null;
+        }, () => emit("countdowns"));
+      return { ...cd, createCountdown: (c: Parameters<typeof cd.createCountdown>[0]) =>
+        cd.createCountdown(c.event_id && !c.title ? { ...c, title: st.events.find((e) => e.id === c.event_id)?.title ?? "Event" } : c) };
+    })(),
     async events(start, end) {
       return st.events.filter((e) => !e.calendar_id || calOf(e.calendar_id)?.visible !== false)
         .map(decorate).filter((e) => e.busy !== "free").flatMap((e) => expand(e, start, end))

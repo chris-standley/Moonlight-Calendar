@@ -26,6 +26,10 @@ iPhone, a phone that unfolds, iPad Split View and Slide Over, Stage Manager wind
 
 Text uses the system's text styles in the rounded design, so Dynamic Type works.
 
+Today starts with the countdowns ("23 days to Mia's birthday") in a row that scrolls sideways; hold one to stop
+counting down. An event's details have **Count down to this**. Special days, your own dates and birthdays are added on
+a wall screen.
+
 Once Tapestry is connected (Settings › Nursery on a wall screen), Today has a nursery button at the top left with
 the number of new updates; it opens the updates with their photos.
 
@@ -103,7 +107,7 @@ Assistant's address: Home Assistant's login page opens in a sign-in sheet and th
 
 | Tab | What it shows | What you can do |
 |---|---|---|
-| Today | Coming up today and tomorrow, meals, each child's chore progress and stars, Now playing | Open an event; play/pause/skip on the speaker |
+| Today | The soonest countdowns, coming up today and tomorrow, meals, each child's chore progress and stars, Now playing | Open an event; play/pause/skip on the speaker |
 | Calendar | Week grid (weather, dinner per day) or a two-week schedule | Today / previous / next, show or hide each person |
 | Chores | A column per person, chores by time of day, streaks | Select a chore to tick it off or undo it |
 | Rewards | Each child's stars, rewards with progress, recent stars | Redeem a reward (parent PIN on a number pad) |

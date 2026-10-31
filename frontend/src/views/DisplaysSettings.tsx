@@ -431,6 +431,11 @@ export function ScreensaverPanel({ onScreensaver }: { onScreensaver: () => void 
           onChange={(v) => save({ photo_details: v === "show" }, "Change photo details")}
           options={[{ value: "show", label: "Show" }, { value: "hide", label: "Hide" }]} />
       </div>
+      <div className="set-col"><span>Countdowns on the screensaver</span>
+        <Segmented value={settings?.screensaver_countdowns ? "show" : "hide"}
+          onChange={(v) => save({ screensaver_countdowns: v === "show" }, "Change screensaver countdowns")}
+          options={[{ value: "show", label: "Show" }, { value: "hide", label: "Hide" }]} />
+      </div>
       {cfg?.configured && <HiddenPhotos />}
       <p className="muted connect-note">Places use your Home Assistant zones (like Home) when a photo was taken inside one, otherwise the town.</p>
       <p className="muted connect-note">When each screen starts the screensaver is set per screen under Screens.</p>

@@ -305,6 +305,7 @@ DEFAULT_SETTINGS = {
     # Photo screensaver (photos come from Immich, see immich.py): seconds per photo, idle minutes per layout (0 = never).
     "screensaver_seconds": 10,
     "photo_details": True,  # when and where each photo was taken, small at the top right
+    "screensaver_countdowns": False,  # the next two countdowns on the screensaver (off: static text can burn in on OLED)
     "idle_minutes": {"large": 5, "compact": 3, "phone": 0},
     # Per style of screen: which sections the menu shows (Settings is always there) and which one it opens on.
     # Used where there is no paired screen (the Home Assistant app and sidebar) and to start a new screen's setup.
@@ -376,6 +377,11 @@ def init_db() -> None:
         c.executescript(IMAGES_SCHEMA)
         c.executescript(BATCH_SCHEMA)
         c.executescript(TAPESTRY_SCHEMA)
+        from .countdowns import SCHEMA as COUNTDOWNS_SCHEMA
+
+        c.executescript(COUNTDOWNS_SCHEMA)
+        if "birthday" not in {r[1] for r in c.execute("PRAGMA table_info(people)")}:
+            c.execute("ALTER TABLE people ADD COLUMN birthday TEXT")  # see countdowns.py
         have = {r[1] for r in c.execute("PRAGMA table_info(recipe_batches)")}
         for col, decl in (("cheaper", "INTEGER NOT NULL DEFAULT 0"), ("anthropic_id", "TEXT"),
                           ("book", "TEXT NOT NULL DEFAULT ''")):

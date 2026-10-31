@@ -7,6 +7,7 @@ import { IconCamera, IconDrop, IconEyeOff, IconPhotos, WeatherIcon } from "../co
 import { ScreensaverNowPlaying, useMedia } from "./NowPlaying";
 import { alertTitle, useSaverCamera } from "./SecurityAlerts";
 import { CameraVideo } from "./SecurityView";
+import { ScreensaverCountdowns } from "./Countdowns";
 
 // Fallback "photos": painted scenes, shown when Immich isn't set up, nothing is chosen or Immich can't be reached.
 const SCENES = [
@@ -126,6 +127,7 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
       </div>
       <div className="ss-right">
         {music && <ScreensaverNowPlaying onOpen={() => { go("music"); onWake(); }} />}
+        {settings?.screensaver_countdowns && <ScreensaverCountdowns />}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
     </div>

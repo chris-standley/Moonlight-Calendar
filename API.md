@@ -64,10 +64,11 @@ implementation of the same contract, used for the published preview). Keep them 
 
 ## People
 - `GET /api/people` -> `[Person]` sorted by `sort`
-  Person = `{id, name, initials, color, role: "adult"|"child", sort}`
-- `POST /api/people` `{name, color, role?, sort?}` -> Person. `name` 1-40 chars (trimmed); `color` `#RRGGBB` (`#RGB` is
+  Person = `{id, name, initials, color, role: "adult"|"child", sort, birthday}`; `birthday` `"2018-11-23"`, `"11-23"`
+  without the year, or null (see Countdowns)
+- `POST /api/people` `{name, color, role?, sort?, birthday?}` -> Person. `birthday` also takes `--11-23`; empty clears it. `name` 1-40 chars (trimmed); `color` `#RRGGBB` (`#RGB` is
   expanded; stored upper-case); `role` defaults to `"child"`; `sort` defaults to after everyone else. No PIN.
-- `PATCH /api/people/{id}` any of `{name, color, role, sort}` (same rules) -> Person. No PIN. Reorder by sending each
+- `PATCH /api/people/{id}` any of `{name, color, role, sort, birthday}` (same rules) -> Person. No PIN. Reorder by sending each
   person's new `sort`.
 - `DELETE /api/people/{id}` `{pin}` -> `{ok: true}`; 403 wrong PIN, 404 unknown. Deletes their chores (and completions),
   their whole points ledger and rewards with their `person_id`; removes them from events' and calendars' `person_ids`
@@ -321,6 +322,28 @@ last_cooked: date|null, created_at, updated_at, course: str|null, book: str ("" 
 - `GET /api/holidays?start=YYYY-MM-DD&end=YYYY-MM-DD[&country=GB&subdiv=SCT]` (end inclusive, at most ~2 years) ->
   `[{date, name}]` sorted by date, for Settings `holidays` or the `country`/`subdiv` given (a preview before saving).
 - `GET /api/holidays/countries` -> `[{code, name, subdivs: [{code, name}]}]` sorted by name, for the Settings picker.
+
+## Countdowns
+"55 days to Christmas" on the screens' top bar, the screensaver (Settings `screensaver_countdowns`, default false) and
+the apps' Today. Broadcast topic `countdowns` (also
+refetch on `events` and `people`: an event's countdown follows the event, birthdays come from people).
+- `GET /api/countdowns?today=YYYY-MM-DD` (default the add-on's date) -> `[Countdown]` soonest first. One-off days that
+  have gone are left out; on the day itself `days` is 0.
+  Countdown = `{id, kind: "custom"|"event"|"special"|"birthday", title, emoji, date, days, person_ids, yearly, special,
+  event_id, turns}`. `date` is the next time it comes round. `custom`: the family's own date, once or `yearly`.
+  `special`: a well-known day (`christmas`, `christmas_eve`, `new_years_eve`, `halloween`, `bonfire_night` (GB),
+  `valentines`, `pancake_day` (GB, IE), `st_patricks` (IE, GB, US), `easter`, `mothers_day` (Mothering Sunday in GB and
+  IE), `fathers_day`, `thanksgiving` (US)) or `holiday:<public holiday name>` for the household's region, worked out
+  each year. `event`: the event's next occurrence (it keeps its last date if the event is deleted). `birthday`: id
+  `birthday:<person id>`, from people's `birthday`, `turns` = how old they'll be when the year is known; not stored, so
+  not editable here.
+- `GET /api/countdowns/suggestions?today=` -> `[{special, title, emoji, date, days, taken}]`: the well-known days for the
+  region's country and its public holidays in the next year (not those on the same day as a well-known one), soonest
+  first. `taken` = already counted down to.
+- `POST /api/countdowns` `{title, emoji?, date, yearly?, person_ids?}` | `{special, ...}` (title and emoji default to the
+  day's own) | `{event_id, ...}` (title defaults to the event's) -> Countdown. Title 1-60 chars. No PIN.
+- `PATCH /api/countdowns/{id}` any of those -> Countdown (`date` and `yearly` are ignored for special days).
+- `DELETE /api/countdowns/{id}` -> `{ok: true}`; 404 unknown.
 
 ## Music (now playing on a Home Assistant speaker)
 The speaker is a Home Assistant `media_player` entity, typically one created by the Music Assistant integration (e.g. a
@@ -582,7 +605,7 @@ its style's); a screen with no speaker speaks them itself.
 
 ## Summary (for the Home Assistant integration)
 - `GET /api/summary?date=YYYY-MM-DD&now=YYYY-MM-DDTHH:MM` (both optional; default today / now) ->
-  `{version, family_name, date, now, people: [PersonSummary], dinner: Meal|null, next_event: EventSummary|null, lists: [List + {items: [Item]}]}`
+  `{version, family_name, date, now, people: [PersonSummary], dinner: Meal|null, next_event: EventSummary|null, lists: [List + {items: [Item]}], countdowns: [Countdown]}` (the soonest 10)
   PersonSummary = Person + `{balance, chores: [{id, title, emoji, points, time_of_day, completed, streak}], chores_total,
   chores_done, chores_left, all_done, event: EventSummary|null}` where `chores` are those due on `date` and `event` is the
   person's current or next occurrence (not yet ended, next 31 days).

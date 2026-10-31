@@ -146,7 +146,7 @@ final class AppModel {
                 delay = min(delay * 2, 60)
                 await self.repickServer()
                 // Catch up on anything missed while disconnected.
-                for topic in ["people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos", "media", "security", "security_alert", "nursery", "alerts", "energy"] {
+                for topic in ["people", "events", "chores", "points", "rewards", "lists", "meals", "recipes", "settings", "photos", "media", "security", "security_alert", "nursery", "alerts", "energy", "countdowns"] {
                     self.bump(topic)
                 }
                 await self.loadBasics()

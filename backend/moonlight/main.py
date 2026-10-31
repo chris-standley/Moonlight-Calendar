@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__, alerts, auth, caldav_sync, db, energy, ha_discovery, home_security, media, recipe_batch, security, tapestry
 from . import immich as immich_source
 from .common import hub, log
-from .routes import accounts, alerts as alert_routes, calendar, chores, displays, ha_login, immich, lists, meals, nursery, recipes
+from .routes import accounts, alerts as alert_routes, calendar, chores, countdowns, displays, ha_login, immich, lists, meals, nursery, recipes
 from .routes import energy as energy_routes
 from .routes import home_security as security_routes
 from .routes import media as media_routes
@@ -98,7 +98,7 @@ def create_app(
         return JSONResponse({"detail": f"Something went wrong ({exc.__class__.__name__}). The add-on log has the "
                                        "details."}, status_code=500)
 
-    for module in (calendar, chores, lists, meals, recipes, displays, ha_login, immich, accounts, nursery):
+    for module in (calendar, chores, countdowns, lists, meals, recipes, displays, ha_login, immich, accounts, nursery):
         app.include_router(module.router)
     app.include_router(summary_routes.router)
     app.include_router(media_routes.router)

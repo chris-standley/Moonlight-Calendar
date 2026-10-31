@@ -9,6 +9,7 @@ struct TodayScreen: View {
     @State private var points: [Balance] = []
     @State private var lists: [TaskList] = []
     @State private var grocery: [ListItem] = []
+    @State private var countdowns: [FamilyCountdown] = []
     @State private var open: Occurrence?
     @State private var adding: Adding?
     @State private var scanned: EventDraft?
@@ -29,6 +30,7 @@ struct TodayScreen: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         summaryLine
+                        countdownStrip
                         agenda(today: today)
                         choresCard
                         mealsCard(today: today)
@@ -47,6 +49,7 @@ struct TodayScreen: View {
                        [AnyView(mealsCard(today: today)), AnyView(groceryCard)]]
                 VStack(alignment: .leading, spacing: 0) {
                     summaryLine.padding([.horizontal, .top], 16)
+                    countdownStrip.padding(.horizontal, 16).padding(.top, 10)
                     HStack(alignment: .top, spacing: 16) {
                         ForEach(groups.indices, id: \.self) { c in
                             ScrollView {
@@ -77,7 +80,7 @@ struct TodayScreen: View {
                 .accessibilityLabel("Add")
             }
         }
-        .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points", "lists"))") { await load(today) }
+        .task(id: "\(today)|\(model.rev("events", "meals", "chores", "points", "lists", "countdowns", "people"))") { await load(today) }
         .sheet(item: $open) { EventDetailSheet(event: $0) }
         .sheet(item: $scanned) { EventEditor(draft: $0) }
         .sheet(item: $adding, onDismiss: {
@@ -108,6 +111,7 @@ struct TodayScreen: View {
         if let v = await model.call({ try await $0.meals(today, d.addDays(today, 7)) }) { meals = v }
         if let v = await model.call({ try await $0.chores(today) }) { chores = v }
         if let v = await model.call({ try await $0.points() }) { points = v }
+        if let v = await model.call({ try await $0.countdowns(today) }) { countdowns = v }
         if let v = await model.call({ try await $0.lists() }) {
             lists = v
             if let g = v.first(where: { $0.kind == "grocery" }), let items = await model.call({ try await $0.items(g.id) }) {
@@ -125,6 +129,33 @@ struct TodayScreen: View {
                     Text("\(w.current.temp)°").font(Theme.text(.headline, .heavy)).foregroundStyle(Theme.text)
                 }
             }
+        }
+    }
+
+    /// The countdowns, soonest first, scrolling sideways. Hold one to stop counting down (not birthdays: those come
+    /// from Settings > Family on the screens).
+    @ViewBuilder private var countdownStrip: some View {
+        if !countdowns.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(countdowns) { c in
+                        CountdownPill(countdown: c)
+                            .contextMenu {
+                                Text("\(model.dates.longDate(model.dates.date(c.date)))\(c.turns.map { " · turns \($0)" } ?? "")")
+                                if c.kind != "birthday" {
+                                    Button("Stop counting down", systemImage: "trash", role: .destructive) {
+                                        Task {
+                                            _ = await model.call { try await $0.deleteCountdown(c.id) }
+                                            model.bump("countdowns")
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
         }
     }
 

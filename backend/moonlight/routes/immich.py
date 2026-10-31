@@ -21,6 +21,10 @@ PREVIEW_CACHE = "private, max-age=86400"  # a day: an asset edited in Immich get
 
 def apply_settings(c, body: dict) -> None:
     """Called from PATCH /api/settings for the screensaver keys."""
+    if "screensaver_countdowns" in body:
+        if not isinstance(body["screensaver_countdowns"], bool):
+            raise bad("screensaver_countdowns must be a boolean")
+        db.set_setting(c, "screensaver_countdowns", body["screensaver_countdowns"])
     if "photo_details" in body:
         if not isinstance(body["photo_details"], bool):
             raise bad("photo_details must be a boolean")

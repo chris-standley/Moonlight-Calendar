@@ -37,8 +37,14 @@ def seed(data: dict, today: date | None = None) -> None:
             db.set_pin(c, str(s["pin"]))
 
         for i, p in enumerate(data.get("people", [])):
-            c.execute("INSERT INTO people(id, name, color, role, sort) VALUES(?,?,?,?,?)",
-                      (p["id"], p["name"], p["color"], p.get("role", "child"), p.get("sort", i)))
+            birthday = None
+            if "birthday_in_days" in p:  # with `age`: how old they turn that day
+                b = today + timedelta(days=p["birthday_in_days"])
+                birthday = (b.replace(year=b.year - p["age"]) if "age" in p else b).isoformat()
+                if "age" not in p:
+                    birthday = birthday[5:]
+            c.execute("INSERT INTO people(id, name, color, role, sort, birthday) VALUES(?,?,?,?,?,?)",
+                      (p["id"], p["name"], p["color"], p.get("role", "child"), p.get("sort", i), birthday))
 
         for e in data.get("events", []):
             d = wd(e.get("day", 0))
@@ -54,6 +60,25 @@ def seed(data: dict, today: date | None = None) -> None:
                       (e["id"], e["title"], json.dumps(e.get("person_ids", [])), start, end,
                        int(bool(e.get("all_day"))), e.get("location") or "", e.get("notes") or "",
                        json.dumps(rep) if rep else None))
+
+        for cd in data.get("countdowns", []):  # {special} | {event, title?} | {title, emoji, in_days, yearly}
+            special, event_id = cd.get("special"), cd.get("event")
+            if special:
+                from . import public_holidays
+                from .countdowns import next_special, special_title
+
+                title, emoji = special_title(special)
+                d = next_special(special, today, public_holidays.region(c)) or today
+            elif event_id:
+                ev = next(e for e in data.get("events", []) if e["id"] == event_id)
+                title, emoji, d = ev["title"], "", wd(ev.get("day", 0))
+            else:
+                title, emoji, d = cd["title"], "", today + timedelta(days=cd.get("in_days", 0))
+            c.execute("INSERT INTO countdowns(id, title, emoji, date, yearly, special, event_id, person_ids, created_at) "
+                      "VALUES(?,?,?,?,?,?,?,?,?)",
+                      (cd["id"], cd.get("title", title), cd.get("emoji", emoji), d.isoformat(),
+                       int(bool(special or cd.get("yearly"))), special, event_id,
+                       json.dumps(cd.get("person_ids", [])), now.isoformat()))
 
         chores = {}
         for i, ch in enumerate(data.get("chores", [])):
@@ -138,6 +163,7 @@ def _sample_ids(data: dict) -> dict[str, list[str]]:
         "lists": [lst["id"] for lst in lists],
         "recipes": [r["id"] for r in data.get("recipes", [])],
         "meals": [f"m_{i}" for i in range(len(data.get("meals", [])))],
+        "countdowns": [cd["id"] for cd in data.get("countdowns", [])],
     }
 
 
@@ -182,7 +208,7 @@ def remove_sample(c, data: dict) -> int:
         c.execute(f"DELETE FROM completions WHERE chore_id IN ({_marks(chores)})", chores)
     if ids["recipes"]:
         c.execute(f"UPDATE meals SET recipe_id = NULL WHERE recipe_id IN ({_marks(ids['recipes'])})", ids["recipes"])
-    for table in ("people", "events", "chores", "rewards", "items", "recipes", "meals"):
+    for table in ("people", "events", "chores", "rewards", "items", "recipes", "meals", "countdowns"):
         if ids[table]:
             c.execute(f"DELETE FROM {table} WHERE id IN ({_marks(ids[table])})", ids[table])
     for list_id in ids["lists"]:
