@@ -555,6 +555,10 @@ export function demoApi(): Api {
         .map(decorate).filter((e) => e.busy !== "free").flatMap((e) => expand(e, start, end))
         .sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
     },
+    async screensaverEvents(start, end) {
+      return st.events.filter((e) => calOf(e.calendar_id)?.screensaver_now).map(decorate).flatMap((e) => expand(e, start, end))
+        .sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
+    },
     async createEvent(e) {
       const ev: CalEvent = { location: "", notes: "", repeat: null, ...e, calendar_id: targetCalendar(e), id: uid("ev") };
       st.events.push(ev); emit("events"); return decorate(clone(ev));

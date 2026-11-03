@@ -139,6 +139,30 @@ def test_list_add_and_show_ha_calendars(client, ha):
     assert not [c for c in client.get("/api/calendars").json() if c["account_id"] == bins["id"]]
 
 
+def test_screensaver_shows_chosen_calendars_events(client, ha):
+    """A calendar set to show on the screensaver hands its events to /api/events/screensaver, even when hidden."""
+    for entity in ("calendar.bins", "calendar.energy"):
+        client.post("/api/accounts", json={"kind": "ha", "entity_id": entity, "person_ids": [], "pin": PIN})
+    cals = {c["name"]: c for c in client.get("/api/calendars").json()}
+    energy = cals["Energy sessions"]
+    assert energy["screensaver_now"] is False
+    saver = "/api/events/screensaver?start=2026-10-18&end=2026-10-19"
+    assert client.get(saver).json() == []
+
+    r = client.patch(f"/api/calendars/{energy['id']}", json={"screensaver_now": True, "visible": False})
+    assert r.status_code == 200 and r.json()["screensaver_now"] is True
+    assert client.patch(f"/api/calendars/{energy['id']}", json={"screensaver_now": "yes"}).status_code == 400
+    [fe] = client.get(saver).json()
+    assert (fe["title"], fe["start"], fe["end"], fe["calendar_id"]) == (
+        "Free electricity", "2026-10-18T12:00", "2026-10-18T14:00", energy["id"])
+    # Hidden from the calendar itself, and other calendars' events stay off the screensaver.
+    assert not [e for e in client.get("/api/events?start=2026-10-18&end=2026-10-19").json()
+                if e["calendar_id"] == energy["id"]]
+    assert client.get("/api/events/screensaver?start=2026-10-13&end=2026-10-14").json() == []
+    assert client.get("/api/events/screensaver?start=2026-10-19&end=2026-10-18").json() == []
+    assert client.get("/api/events/screensaver?start=x&end=y").status_code == 400
+
+
 def test_ha_calendar_errors(client, ha, monkeypatch):
     add = {"kind": "ha", "person_ids": [], "pin": PIN}
     assert client.post("/api/accounts", json={**add, "entity_id": "sensor.x"}).status_code == 400

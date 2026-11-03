@@ -1724,7 +1724,8 @@ label.btn.disabled { opacity: 0.6; pointer-events: none; }
 .layout-compact.portrait .ss-right { left: 1.6rem; right: 1.6rem; top: 4.4rem; bottom: auto; align-items: stretch; max-width: none; }
 .layout-compact.portrait .ss-np { left: 0; right: 0; top: 0; bottom: auto; width: auto; max-width: none; }
 .layout-compact.portrait .ss-right .ss-next { align-self: flex-start; }
-.layout-compact.portrait .ss-right:has(.ss-np) .ss-next { margin-top: 8rem; }
+.layout-compact.portrait .ss-right:has(.ss-np) > .ss-now,
+.layout-compact.portrait .ss-right:has(.ss-np):not(:has(.ss-now)) > .ss-next { margin-top: 8rem; }
 /* More: the tabs that aren't in the bottom bar */
 .more-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 0.6rem; }
 .more-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 1rem 0.4rem 0.8rem; border-radius: var(--radius); background: var(--surface-2); color: var(--text-2); font-weight: 800; }
@@ -1837,6 +1838,11 @@ label.btn.disabled { opacity: 0.6; pointer-events: none; }
 .bday-row { display: flex; gap: 0.6rem; align-items: center; }
 .bday-row .input { flex: 1; }
 
+.ss-now { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+.ss-now .ss-next { display: flex; align-items: center; gap: 0.35rem; }
+.ss-now .ss-next b { margin: 0 0.1rem; }
+.ss-now i { width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: none; margin-right: 0.3rem; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7); }
+.layout-phone .ss-now, .layout-compact.portrait .ss-now { align-items: flex-start; }
 .ss-cds { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
 .ss-cd { font-size: 1.3rem; font-weight: 600; padding: 0.5rem 1rem; border-radius: 1rem; background: rgba(0, 0, 0, 0.3); text-shadow: 0 0.1rem 1rem rgba(0, 0, 0, 0.35); }
 .ss-cd span { font-size: 1.5rem; margin-right: 0.2rem; }

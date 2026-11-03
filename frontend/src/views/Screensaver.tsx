@@ -57,6 +57,9 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
   const [weather] = useData((api) => api.weather(), ["settings"], []);
   const nowS = isoDT(now);
   const next = (events ?? []).find((e) => !e.all_day && e.start > nowS);
+  // Events happening now in the calendars set to show on the screensaver (a saving session, say).
+  const [chosen] = useData((api) => api.screensaverEvents(t, addDays(t, 1)), ["events", "accounts"], [t]);
+  const ongoing = (chosen ?? []).filter((e) => e.all_day ? e.start.slice(0, 10) <= t && e.end.slice(0, 10) > t : e.start <= nowS && e.end > nowS).slice(0, 3);
   const { np } = useMedia();
   const music = !!np?.show;
   const day = weather?.daily.find((d) => d.date === t);
@@ -128,6 +131,11 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
       <div className="ss-right">
         {music && <ScreensaverNowPlaying onOpen={() => { go("music"); onWake(); }} />}
         {settings?.screensaver_countdowns && <ScreensaverCountdowns />}
+        {ongoing.length > 0 && <div className="ss-now">{ongoing.map((e) => (
+          <div key={e.occurrence_id} className="ss-next">
+            <i style={{ background: e.color ?? "#fff" }} />Now: <b>{e.title}</b>{!e.all_day && <> until {fmtTime(e.end)}</>}
+          </div>
+        ))}</div>}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
     </div>
