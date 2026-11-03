@@ -1837,6 +1837,17 @@ label.btn.disabled { opacity: 0.6; pointer-events: none; }
 .bday-row { display: flex; gap: 0.6rem; align-items: center; }
 .bday-row .input { flex: 1; }
 
+.ss-nowcard { width: 30rem; max-width: 46vw; padding: 1rem 1.3rem 1.1rem; border-radius: 1.3rem; color: #fff; text-shadow: 0 0.1rem 0.6rem rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--c) 72%, #000 28%); box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.18); animation: fade 0.8s; }
+.ss-now-label { display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.95; }
+.ss-now-dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #fff; animation: ss-pulse 2s ease-in-out infinite; }
+@keyframes ss-pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+@media (prefers-reduced-motion: reduce) { .ss-now-dot { animation: none; } }
+.ss-now-title { margin-top: 0.25rem; font-size: 2.3rem; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+.ss-now-when { margin-top: 0.2rem; font-size: 1.3rem; font-weight: 600; opacity: 0.92; }
+.ss-now-bar { margin-top: 0.8rem; height: 0.5rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.28); overflow: hidden; }
+.ss-now-bar span { display: block; height: 100%; border-radius: inherit; background: #fff; }
+.layout-phone .ss-nowcard, .layout-compact.portrait .ss-nowcard { width: auto; max-width: none; }
 .ss-cds { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
 .ss-cd { font-size: 1.3rem; font-weight: 600; padding: 0.5rem 1rem; border-radius: 1rem; background: rgba(0, 0, 0, 0.3); text-shadow: 0 0.1rem 1rem rgba(0, 0, 0, 0.35); }
 .ss-cd span { font-size: 1.5rem; margin-right: 0.2rem; }

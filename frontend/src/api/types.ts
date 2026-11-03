@@ -504,6 +504,8 @@ export interface SyncCalendar {
   source_name?: string;
   /** Shown as "Chris – busy" blocks: the household's choice, else automatic (every summary is Busy/Free/...). */
   busy_blocks?: boolean; busy_blocks_auto?: boolean; busy_blocks_set?: boolean;
+  /** Its events show on the screensaver while they're on (an energy saving session, say). */
+  screensaver_now?: boolean;
 }
 /** A published ICS link (webcal:// or https://); read-only, polled every 15 minutes. */
 export interface FeedIn { url: string; label?: string; person_ids: string[]; color?: string; pin: string }
@@ -576,6 +578,8 @@ export interface Api {
   updateCountdown(id: string, patch: CountdownIn): Promise<Countdown>;
   deleteCountdown(id: string): Promise<void>;
   events(start: string, end: string): Promise<Occurrence[]>;
+  /** Events in the calendars set to show on the screensaver while they're on, also when the calendar is hidden. */
+  screensaverEvents(start: string, end: string): Promise<Occurrence[]>;
   createEvent(e: EventIn): Promise<CalEvent>;
   updateEvent(id: string, e: Partial<EventIn>): Promise<CalEvent>;
   deleteEvent(id: string): Promise<void>;
@@ -701,7 +705,7 @@ export interface Api {
   updateFeed(id: string, patch: { url?: string; label?: string; pin: string }): Promise<Account>;
   calendars(): Promise<SyncCalendar[]>;
   /** busy_blocks: null = automatic. */
-  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color">> & { busy_blocks?: boolean | null; name?: string | null }): Promise<SyncCalendar>;
+  updateCalendar(id: string, patch: Partial<Pick<SyncCalendar, "person_ids" | "visible" | "color" | "screensaver_now">> & { busy_blocks?: boolean | null; name?: string | null }): Promise<SyncCalendar>;
   // Music (see API.md "Music"): the speaker set for a screen layout, through Home Assistant / Music Assistant.
   nowPlaying(layout: Layout): Promise<NowPlaying>;
   mediaCommand(layout: Layout, action: MediaAction, value?: number | boolean | string): Promise<NowPlaying>;

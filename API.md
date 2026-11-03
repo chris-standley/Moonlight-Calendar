@@ -113,7 +113,8 @@ account whose login is rejected gets `status: "auth_failed"` and is not retried 
 Account = `{id, kind: "icloud"|"caldav"|"ics", label, username, server_url, status: "ok"|"auth_failed"|"error",
 last_error: str|null, last_sync: datetime|null, calendar_count}`. The password is never returned.
 Calendar = `{id, account_id, name, source_name, color, person_ids: [id], visible: bool, read_only: bool,
-busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks: see Calendar links).
+busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool, screensaver_now: bool}` (busy blocks: see Calendar
+links; `screensaver_now`: its events show on the screensaver while they're happening).
 `name` is the household's own name for it when one was set, else `source_name` (the server's name).
 - `GET /api/accounts` -> `[Account]`
 - `POST /api/accounts` `{kind, username, password, server_url (caldav only), label?, pin}` -> Account.
@@ -126,9 +127,12 @@ busy_blocks: bool, busy_blocks_auto: bool, busy_blocks_set: bool}` (busy blocks:
   is deleted in iCloud).
 - `POST /api/accounts/{id}/sync` -> Account (after syncing now; check `status`).
 - `GET /api/calendars` -> `[Calendar]`; `PATCH /api/calendars/{id}` `{name?, person_ids?, visible?, color?,
-  busy_blocks?: true|false|null}` -> Calendar (`null` = automatic; `name` "" or `null` = the server's name
+  busy_blocks?: true|false|null, screensaver_now?: bool}` -> Calendar (`null` = automatic; `name` "" or `null` = the server's name
   again). The name survives syncs.
   Hidden calendars keep syncing but their events are left out of `GET /api/events`.
+- `GET /api/events/screensaver?start=YYYY-MM-DD&end=YYYY-MM-DD` -> `[Occurrence]` like `GET /api/events`, but only
+  from calendars with `screensaver_now` (hidden ones too). Screens show those happening now (up to three) as cards
+  in the calendar's colour on the screensaver: title, times, time left and a progress bar.
 - `GET /api/sync/status` -> `{running, interval_seconds, needs_reconnect: bool,
   accounts: [{id, label, kind, status, last_sync, last_error}]}`
 

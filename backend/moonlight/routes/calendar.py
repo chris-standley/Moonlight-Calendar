@@ -442,13 +442,15 @@ def _save_event(c, ev: dict, insert: bool) -> None:
                   "repeat=? WHERE id=?", args)
 
 
-@router.get("/events")
-def list_events(start: str, end: str):
+def _window(start: str, end: str) -> tuple[datetime, datetime]:
     try:
-        rs = datetime.combine(date.fromisoformat(start), time(0))
-        re_ = datetime.combine(date.fromisoformat(end), time(0))
+        return datetime.combine(date.fromisoformat(start), time(0)), datetime.combine(date.fromisoformat(end), time(0))
     except ValueError:
         raise bad("start and end must be YYYY-MM-DD")
+
+
+def _occurrences(rs: datetime, re_: datetime, calendars: str) -> list[dict]:
+    """Every occurrence between rs and re_ of the events that `calendars` (SQL on cal) lets through."""
     if re_ <= rs:
         return []
     rs_s, re_s = rs.strftime("%Y-%m-%dT%H:%M"), re_.strftime("%Y-%m-%dT%H:%M")
@@ -456,7 +458,7 @@ def list_events(start: str, end: str):
         # Repeating series are expanded in Python; one-offs are pre-filtered in SQL.
         candidates = db.rows(
             c,
-            EVENT_SELECT + ' WHERE (e.calendar_id IS NULL OR cal.visible = 1) AND (e.repeat IS NOT NULL '
+            EVENT_SELECT + f' WHERE ({calendars}) AND (e.repeat IS NOT NULL '
             'OR e.custom_repeat = 1 OR (e.start < ? AND (e."end" > ? OR e.start >= ?)))',
             (re_s, rs_s, rs_s),
         )
@@ -471,6 +473,20 @@ def list_events(start: str, end: str):
     out = [o for o in out if o.get("busy") != "free"]  # free time on a busy-blocks calendar isn't shown
     out.sort(key=lambda o: (o["start"], not o["all_day"], o["end"], o["title"]))
     return out
+
+
+@router.get("/events")
+def list_events(start: str, end: str):
+    rs, re_ = _window(start, end)
+    return _occurrences(rs, re_, "e.calendar_id IS NULL OR cal.visible = 1")
+
+
+@router.get("/events/screensaver")
+def screensaver_events(start: str, end: str):
+    """Events between start and end in the calendars set to show on the screensaver while they're on (an energy
+    saving session, say), also when the calendar itself is hidden. Screens pick the ones happening now."""
+    rs, re_ = _window(start, end)
+    return _occurrences(rs, re_, "cal.screensaver_now = 1")
 
 
 @router.get("/events/{event_id}")

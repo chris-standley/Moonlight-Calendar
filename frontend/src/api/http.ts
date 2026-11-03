@@ -156,6 +156,7 @@ export function httpApi(base = ""): Api {
     updateCountdown: (id, patch) => req("PATCH", `/api/countdowns/${id}`, patch),
     deleteCountdown: async (id) => { await req("DELETE", `/api/countdowns/${id}`); },
     events: async (start, end) => (await get<Occurrence[]>("/api/events" + q({ start, end }))).map(evPics),
+    screensaverEvents: async (start, end) => (await get<Occurrence[]>("/api/events/screensaver" + q({ start, end }))).map(evPics),
     createEvent: async (e) => evPics(await req<CalEvent>("POST", "/api/events", e)),
     updateEvent: async (id, e) => evPics(await req<CalEvent>("PATCH", `/api/events/${id}`, e)),
     scanEvent: async (image, today) => evPics(await req<EventDraft>("POST", "/api/events/scan", { image, today })),

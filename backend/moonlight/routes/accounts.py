@@ -35,6 +35,7 @@ def calendar_out(r: dict) -> dict:
         "person_ids": json.loads(r["person_ids"]), "visible": bool(r["visible"]), "read_only": bool(r["read_only"]),
         "busy_blocks": bool(r["busy_blocks"] if r.get("busy_blocks") is not None else r.get("busy_auto")),
         "busy_blocks_auto": bool(r.get("busy_auto")), "busy_blocks_set": r.get("busy_blocks") is not None,
+        "screensaver_now": bool(r.get("screensaver_now")),
     }
 
 
@@ -310,9 +311,14 @@ async def update_calendar(calendar_id: str, body: dict = Body(...)):
             if body["busy_blocks"] is not None and not isinstance(body["busy_blocks"], bool):
                 raise bad("busy_blocks must be true, false or null")
             r["busy_blocks"] = None if body["busy_blocks"] is None else int(body["busy_blocks"])
-        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ?, display_name = ? "
-                  "WHERE id = ?", (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"),
-                                   r.get("display_name"), calendar_id))
+        if "screensaver_now" in body:
+            if not isinstance(body["screensaver_now"], bool):
+                raise bad("screensaver_now must be a boolean")
+            r["screensaver_now"] = int(body["screensaver_now"])
+        c.execute("UPDATE calendars SET person_ids = ?, visible = ?, color = ?, busy_blocks = ?, display_name = ?, "
+                  "screensaver_now = ? WHERE id = ?", (r["person_ids"], r["visible"], r["color"], r.get("busy_blocks"),
+                                                       r.get("display_name"), int(r.get("screensaver_now") or 0),
+                                                       calendar_id))
         if "name" in body:  # a link or Home Assistant calendar is its account: keep the two names the same
             c.execute("UPDATE accounts SET label = ? WHERE id = ? AND kind IN ('ics', 'ha')",
                       (r.get("display_name") or r["name"], r["account_id"]))

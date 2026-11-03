@@ -139,6 +139,7 @@ export function CalendarsPanel() {
                   <button className="cal-name" onClick={() => setEditing(c)}>
                     <b>{c.name}</b>
                     {c.busy_blocks ? <span className="tag">Busy times</span> : c.read_only && <span className="tag">Read-only</span>}
+                    {c.screensaver_now && <span className="tag">On screensaver</span>}
                   </button>
                   <button className="cal-who" onClick={() => setEditing(c)}>
                     {who.length ? who.map((p) => <Avatar key={p!.id} person={p!} size={1.7} />) : <span className="muted">Choose people</span>}
@@ -230,6 +231,7 @@ function CalendarSheet({ cal, feed, onClose }: { cal: SyncCalendar; feed?: boole
   const [who, setWho] = useState(cal.person_ids);
   const [color, setColor] = useState(cal.color);
   const [visible, setVisible] = useState(cal.visible);
+  const [saver, setSaver] = useState(!!cal.screensaver_now);
   const [name, setName] = useState(cal.name);
   const source = cal.source_name ?? cal.name;
   // null = automatic (on when every event is just "Busy" / "Free" ...).
@@ -237,7 +239,7 @@ function CalendarSheet({ cal, feed, onClose }: { cal: SyncCalendar; feed?: boole
   const busyOn = busy ?? !!cal.busy_blocks_auto;
   const colors = PALETTE.includes(cal.color) ? PALETTE : [cal.color, ...PALETTE.slice(0, -1)];
   async function save() {
-    try { await api.updateCalendar(cal.id, { name: name.trim() === source ? null : name, person_ids: who, color, visible, ...(feed ? { busy_blocks: busy } : {}) }); onClose(); }
+    try { await api.updateCalendar(cal.id, { name: name.trim() === source ? null : name, person_ids: who, color, visible, screensaver_now: saver, ...(feed ? { busy_blocks: busy } : {}) }); onClose(); }
     catch (e) { toast(e instanceof ApiError ? e.message : "Couldn't save"); }
   }
   return (
@@ -262,6 +264,13 @@ function CalendarSheet({ cal, feed, onClose }: { cal: SyncCalendar; feed?: boole
         <div className="set-row"><span>Show on Moonlight</span>
           <button className={"toggle" + (visible ? " on" : "")} onClick={() => setVisible(!visible)} aria-pressed={visible}><span /></button>
         </div>
+        <div className="set-row"><span>Show on the screensaver while on</span>
+          <button className={"toggle" + (saver ? " on" : "")} onClick={() => setSaver(!saver)} aria-pressed={saver}><span /></button>
+        </div>
+        <p className="muted connect-note">
+          {saver ? `While one of its events is happening, the screensaver shows it with when it ends${visible ? "" : ", even though the calendar itself is hidden"}.`
+            : "For calendars like energy saving sessions: show an event on the screensaver for as long as it's on."}
+        </p>
         {feed && (<>
           <div className="set-row"><span>Show as busy blocks</span>
             <button className={"toggle" + (busyOn ? " on" : "")} onClick={() => setBusy(!busyOn)} aria-pressed={busyOn}><span /></button>
