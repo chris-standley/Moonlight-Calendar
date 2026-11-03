@@ -131,8 +131,8 @@ links; `screensaver_now`: its events show on the screensaver while they're happe
   again). The name survives syncs.
   Hidden calendars keep syncing but their events are left out of `GET /api/events`.
 - `GET /api/events/screensaver?start=YYYY-MM-DD&end=YYYY-MM-DD` -> `[Occurrence]` like `GET /api/events`, but only
-  from calendars with `screensaver_now` (hidden ones too). Screens show those happening now ("Now: Saving session
-  until 6:30pm", up to three) on the screensaver.
+  from calendars with `screensaver_now` (hidden ones too). Screens show those happening now (up to three) as cards
+  in the calendar's colour on the screensaver: title, times, time left and a progress bar.
 - `GET /api/sync/status` -> `{running, interval_seconds, needs_reconnect: bool,
   accounts: [{id, label, kind, status, last_sync, last_error}]}`
 

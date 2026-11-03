@@ -1,5 +1,5 @@
 import { CSSProperties, MutableRefObject, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { PhotoAlbum, SlidePhoto } from "../api/types";
+import { Occurrence, PhotoAlbum, SlidePhoto } from "../api/types";
 import { addDays, fmtFull, fmtTime, isoDT, parse, today } from "../dates";
 import { useApp, useData, useNow } from "../state";
 import { ApiError } from "../api/types";
@@ -129,15 +129,33 @@ export function Screensaver({ onWake }: { onWake: () => void }) {
         <div className="ss-date">{fmtFull(t)}</div>
       </div>
       <div className="ss-right">
+        {ongoing.map((e) => <NowCard key={e.occurrence_id} e={e} now={now} />)}
         {music && <ScreensaverNowPlaying onOpen={() => { go("music"); onWake(); }} />}
         {settings?.screensaver_countdowns && <ScreensaverCountdowns />}
-        {ongoing.length > 0 && <div className="ss-now">{ongoing.map((e) => (
-          <div key={e.occurrence_id} className="ss-next">
-            <i style={{ background: e.color ?? "#fff" }} />Now: <b>{e.title}</b>{!e.all_day && <> until {fmtTime(e.end)}</>}
-          </div>
-        ))}</div>}
         {next && <div className="ss-next">Next: <b>{next.title}</b> at {fmtTime(next.start)}</div>}
       </div>
+    </div>
+  );
+}
+
+/** "Minutes left" in words: "25 min left", "1 hr 10 min left". */
+export function timeLeft(ms: number): string {
+  const min = Math.max(1, Math.ceil(ms / 60_000));
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${h ? `${h} hr${m ? " " : ""}` : ""}${m ? `${m} min` : ""} left`;
+}
+
+/** An event happening now in a calendar set to show on the screensaver (a saving session, say): a card in the
+ * calendar's colour with its name large, when it ends, the time left and a bar filling up as it goes. */
+function NowCard({ e, now }: { e: Occurrence; now: Date }) {
+  const start = parse(e.start).getTime(), end = parse(e.end).getTime();
+  const done = Math.min(1, Math.max(0, (now.getTime() - start) / Math.max(1, end - start)));
+  return (
+    <div className="ss-nowcard" style={{ "--c": e.color ?? "#5B6CF0" } as CSSProperties}>
+      <div className="ss-now-label"><span className="ss-now-dot" />Now{!e.all_day && <> · {timeLeft(end - now.getTime())}</>}</div>
+      <div className="ss-now-title">{e.title}</div>
+      <div className="ss-now-when">{e.all_day ? "All day" : `${fmtTime(e.start)} – ${fmtTime(e.end)}`}</div>
+      {!e.all_day && <div className="ss-now-bar"><span style={{ width: `${done * 100}%` }} /></div>}
     </div>
   );
 }
