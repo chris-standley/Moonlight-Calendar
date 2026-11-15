@@ -12,7 +12,7 @@ interface Turn { you?: string; reply?: string; failed?: boolean }
 
 const CONVERSATION_MS = 5 * 60_000; // a follow-up within this long carries on the same conversation
 const LISTEN_MAX_MS = 15_000; // stop listening even if Home Assistant hasn't heard the end yet
-const CLOSE_AFTER_MS = 12_000; // the sheet goes once the answer has been on screen this long, untouched
+const CLOSE_AFTER_MS = 12_000; // the sheet goes once the answer has been on screen this long (longer for long ones), untouched
 const RETRY_MS = 5_000;
 
 const FAILED: Record<string, string> = {
@@ -63,6 +63,7 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
     link: null as VoiceLink | null, mic: null as Mic | null, micFailed: null as string | null, streaming: false,
     mode: null as VoiceMode | null, audio: null as HTMLAudioElement | null, conv: { id: null as string | null, at: 0 },
     again: false, shown: false, wake: false, done: false, woke: false, wakeFailed: false, listenTimer: 0, closeTimer: 0, retryTimer: 0,
+    readFor: CLOSE_AFTER_MS,
   });
   r.current.shown = shown;
   r.current.wake = wakeWanted;
@@ -72,7 +73,7 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
 
   const scheduleClose = useCallback(() => {
     clearTimeout(r.current.closeTimer);
-    r.current.closeTimer = window.setTimeout(() => setShown(false), CLOSE_AFTER_MS);
+    r.current.closeTimer = window.setTimeout(() => setShown(false), r.current.readFor);
   }, []);
 
   const stopListening = () => {
@@ -166,6 +167,8 @@ export function VoiceProvider({ api, layout, children }: { api: Api; layout: Lay
         break;
       case "reply":
         setTurn({ reply: e.text || "Done." });
+        // A long answer is shown more than it's said: leave time to read it.
+        s.readFor = Math.min(60_000, Math.max(CLOSE_AFTER_MS, (e.text || "").split(/\s+/).length * 400));
         s.conv = { id: e.conversation_id, at: Date.now() };
         s.again = e.continue;
         break;

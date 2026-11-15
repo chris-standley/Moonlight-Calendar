@@ -239,6 +239,8 @@ choose where answers are spoken: on the screen itself, on the screen's speaker (
 or not at all. With the wake word on, the screen streams its microphone to Home Assistant, which listens for the word,
 and the microphone button shows a green dot.
 
+When the wake word wakes it by mistake, it usually then hears a word or so from the room or the TV ("you"): anything under two words after the wake word, unless it's one of Moonlight's own commands such as "stop", isn't sent to the assistant, and the screen just shows "Sorry, I didn't catch that."
+
 If the wake word never wakes, look in the add-on's log: every minute a listening screen logs how loud its sound is
 ("Wake word on a compact screen: 60 s of sound, typically -55 dBFS, loudest -30 dBFS"). Silence means the microphone
 isn't sending anything; the screen lifts quiet microphones (up to +18 dB), so a loudest level still below about -30 dBFS while you speak

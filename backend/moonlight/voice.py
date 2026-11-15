@@ -50,6 +50,8 @@ DEFAULT = {"pipeline": "", "wake": {"large": False, "compact": False, "phone": F
 # How screens capture their microphone (the browser's processing, and the screen's own gain towards target_db):
 # tablets' microphones differ, and this is what to change when a wake word won't wake.
 MIC_RANGES = {"target_db": (-40, -6), "gain_max_db": (0, 40)}
+WAKE_MIN_WORDS = 2  # after the wake word, fewer words than this isn't a request (see _relay)
+WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?")
 WAKE_SECONDS = 3600  # one wake word run; the screen starts another when it ends
 RUN_SECONDS = 300  # a run once it's awake (HA's own default)
 AUDIO_KEEP = 32  # spoken replies whose audio can still be fetched
@@ -518,7 +520,7 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
 
     async def send_run(msg: dict) -> None:
         run.update(id=msg["id"], handler=None, speech=msg["end_stage"] == "stt", heard="", early=False, tts=False,
-                   wake=msg.get("start_stage") == "wake_word")
+                   wake=msg.get("start_stage") == "wake_word", from_wake=msg.get("start_stage") == "wake_word")
         await ha.send(json.dumps(msg))
 
     def new_id() -> int:
@@ -601,12 +603,20 @@ async def _relay(client, ha, svc: MediaService, *, pipeline: str, replies: str, 
             if kind == "run-end" and run["speech"]:
                 heard = run["heard"]
                 run["id"] = 0
-                if heard and not await answer(heard):
+                if not heard:
+                    await client.send_json({"type": "done"})
+                elif await answer(heard):
+                    pass
+                elif run["from_wake"] and len(WORD.findall(heard)) < WAKE_MIN_WORDS:
+                    # Most likely the wake word heard by mistake (a "you" or "thanks" from the TV): not worth
+                    # the agent's long "here's what I can do", so shown, not said.
+                    await client.send_json({"type": "reply", "text": "Sorry, I didn't catch that.", "kind": "error",
+                                            "continue": False, "conversation_id": run["conv"]})
+                    await client.send_json({"type": "done"})
+                else:
                     # On to the conversation agent with the words, as one conversation.
                     await send_run(run_message(new_id(), {"mode": "text", "text": heard, "conversation_id": run["conv"]},
                                                pipeline, speak))
-                elif not heard:
-                    await client.send_json({"type": "done"})
                 continue
             out = translate(ev)
             if out is not None:
