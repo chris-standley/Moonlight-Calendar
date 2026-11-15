@@ -519,3 +519,18 @@ def test_replay_sample(client, ha):
     assert all(t["woke"] == "ok_nabu" for t in got["tries"])
     runs = [r for r in ha.runs if r["start_stage"] == "wake_word"]
     assert len(runs) == 3 and all(r["end_stage"] == "wake_word" for r in runs)
+
+
+@pytest.mark.parametrize("heard, asked", [("You.", False), ("Thank you.", True), ("What time is it?", True)])
+def test_a_word_or_so_after_the_wake_word_isnt_asked(client, ha, heard, asked):
+    ha.heard = heard
+    with client.websocket_connect("/api/voice/ws?layout=compact") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "mode": "wake"})
+        until(ws, "listening")
+        ws.send_bytes(b"\x00" * 640)
+        ws.send_json({"type": "stop"})
+        got = until(ws, "done")
+    assert len(ha.runs) == (2 if asked else 1)  # the agent's run, or none
+    if not asked:
+        assert got[-2]["text"] == "Sorry, I didn't catch that." and not any(m["type"] == "audio" for m in got)
